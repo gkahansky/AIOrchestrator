@@ -8,9 +8,11 @@ google-auth>=2.29.0
 google-auth-httplib2>=0.2.0
 google-auth-oauthlib>=1.2.0
 
+# ─── Sprint 2 ────────────────────────────────────────────────────────────────
+anthropic>=0.40.0
+
 # ─── Sprint 3+ ───────────────────────────────────────────────────────────────
 # Uncomment when needed:
-# anthropic>=0.25.0
 # langchain>=0.2.0
 # langgraph>=0.1.0
 # langsmith>=0.1.0

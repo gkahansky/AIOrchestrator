@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python scripts/create_mockup.py output/test/dalle3-dbb74e92.png --slug monstera-01)",
+      "Bash(python scripts/create_mockup.py \"minimalist botanical monstera leaf line art, black ink on white background\" --slug monstera-01 --out ./output/test/mockups)"
+    ]
+  }
+}

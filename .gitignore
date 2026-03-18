@@ -5,8 +5,10 @@
 
 # Google credentials
 google_credentials.json
+oauth_client_secret.json
 drive_folder_ids.txt
 service_account.json
+*.json.key
 
 # Python
 __pycache__/

@@ -9,6 +9,7 @@ Variants (from CLAUDE.md spec):
     wide_4k   — 3840 × 2160 px  (16:9)
 
 Both PNG and JPG are produced for each variant.
+The full artwork is always visible — padded with white to reach exact dimensions.
 Etsy minimum: 2000px on shortest side — all variants exceed this.
 
 Input:
@@ -44,12 +45,14 @@ def resize_to_variants(
     source_path: str | Path,
     output_dir: str | Path,
     quality_jpg: int = 92,
+    pad_color: tuple = (255, 255, 255),
 ) -> dict:
     """
     Resize source_path to all 4 variants and save as PNG + JPG.
 
-    The image is cropped to fill the target aspect ratio (centre-crop),
-    then resampled with LANCZOS for maximum quality.
+    The full artwork is always visible — scaled to fit within the target
+    dimensions and padded with white (or pad_color) to reach exact size.
+    No cropping occurs.
     """
     source_path = Path(source_path)
     output_dir = Path(output_dir)
@@ -64,7 +67,7 @@ def resize_to_variants(
     result = {"source_path": str(source_path)}
 
     for variant_name, (target_w, target_h) in VARIANTS.items():
-        resized = _fill_crop(source_img, target_w, target_h)
+        resized = _fit_with_pad(source_img, target_w, target_h, pad_color)
 
         png_path = output_dir / f"{stem}-{variant_name}.png"
         jpg_path = output_dir / f"{stem}-{variant_name}.jpg"
@@ -82,29 +85,26 @@ def resize_to_variants(
     return result
 
 
-def _fill_crop(img: Image.Image, target_w: int, target_h: int) -> Image.Image:
+def _fit_with_pad(
+    img: Image.Image,
+    target_w: int,
+    target_h: int,
+    pad_color: tuple = (255, 255, 255),
+) -> Image.Image:
     """
-    Scale the image to fill target dimensions with a centre-crop (no padding).
+    Scale the image to fit entirely within the target dimensions (no cropping),
+    then centre it on a pad_color background to reach exact target size.
     Upscales if the source is smaller than the target.
     """
     src_w, src_h = img.size
-    target_ratio = target_w / target_h
-    src_ratio = src_w / src_h
-
-    if src_ratio > target_ratio:
-        # Source is wider — scale by height, then crop width
-        scale = target_h / src_h
-        new_w = int(src_w * scale)
-        new_h = target_h
-    else:
-        # Source is taller — scale by width, then crop height
-        scale = target_w / src_w
-        new_w = target_w
-        new_h = int(src_h * scale)
+    scale = min(target_w / src_w, target_h / src_h)
+    new_w = int(src_w * scale)
+    new_h = int(src_h * scale)
 
     scaled = img.resize((new_w, new_h), Image.LANCZOS)
 
-    # Centre-crop to exact target size
-    left = (new_w - target_w) // 2
-    top = (new_h - target_h) // 2
-    return scaled.crop((left, top, left + target_w, top + target_h))
+    canvas = Image.new("RGB", (target_w, target_h), pad_color)
+    paste_x = (target_w - new_w) // 2
+    paste_y = (target_h - new_h) // 2
+    canvas.paste(scaled, (paste_x, paste_y))
+    return canvas

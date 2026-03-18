@@ -1,0 +1,157 @@
+{
+  "image-generation": {
+    "capability": "image-generation",
+    "tools": [
+      {
+        "id": "dalle3",
+        "tier": "standard",
+        "cost_per_call": 0.04,
+        "module": "aiplatform.skills.media.generate_image",
+        "function": "generate_via_dalle3",
+        "active": true,
+        "note": "Active primary tool while Gemini billing is pending"
+      },
+      {
+        "id": "gemini-imagen",
+        "tier": "premium",
+        "cost_per_call": 0.03,
+        "module": "aiplatform.skills.media.generate_image",
+        "function": "generate_via_gemini",
+        "active": false,
+        "note": "Pending Google billing approval — flip active to true when ready, then promote to standard tier"
+      }
+    ]
+  },
+  "image-resize": {
+    "capability": "image-resize",
+    "tools": [
+      {
+        "id": "pillow",
+        "tier": "standard",
+        "cost_per_call": 0.00,
+        "module": "aiplatform.skills.media.resize_image",
+        "function": "resize_to_variants",
+        "active": true
+      }
+    ]
+  },
+  "mockup-creation": {
+    "capability": "mockup-creation",
+    "tools": [
+      {
+        "id": "placeit",
+        "tier": "premium",
+        "cost_per_call": 0.00,
+        "module": "aiplatform.skills.media.create_mockup",
+        "function": "create_mockup",
+        "active": false,
+        "note": "Sprint 3 — Placeit API integration pending"
+      },
+      {
+        "id": "pillow-template",
+        "tier": "fallback",
+        "cost_per_call": 0.00,
+        "module": "aiplatform.skills.media.create_mockup",
+        "function": "create_mockup_pillow",
+        "active": false,
+        "note": "Sprint 3 — custom Pillow templates"
+      }
+    ]
+  },
+  "web-search": {
+    "capability": "web-search",
+    "tools": [
+      {
+        "id": "serpapi",
+        "tier": "standard",
+        "cost_per_call": 0.01,
+        "module": "aiplatform.skills.research.web_search",
+        "function": "web_search",
+        "active": false,
+        "note": "Sprint 2"
+      }
+    ]
+  },
+  "drive-write": {
+    "capability": "drive-write",
+    "tools": [
+      {
+        "id": "google-drive",
+        "tier": "standard",
+        "cost_per_call": 0.00,
+        "module": "aiplatform.skills.storage.drive_write",
+        "function": "drive_write",
+        "active": true
+      }
+    ]
+  },
+  "drive-read": {
+    "capability": "drive-read",
+    "tools": [
+      {
+        "id": "google-drive",
+        "tier": "standard",
+        "cost_per_call": 0.00,
+        "module": "aiplatform.skills.storage.drive_read",
+        "function": "drive_read",
+        "active": true
+      }
+    ]
+  },
+  "zip-creation": {
+    "capability": "zip-creation",
+    "tools": [
+      {
+        "id": "python-zipfile",
+        "tier": "standard",
+        "cost_per_call": 0.00,
+        "module": "aiplatform.skills.packaging.create_zip",
+        "function": "create_zip",
+        "active": false,
+        "note": "Sprint 3"
+      }
+    ]
+  },
+  "pdf-generation": {
+    "capability": "pdf-generation",
+    "tools": [
+      {
+        "id": "weasyprint",
+        "tier": "standard",
+        "cost_per_call": 0.00,
+        "module": "aiplatform.skills.packaging.generate_pdf",
+        "function": "generate_pdf",
+        "active": false,
+        "note": "Sprint 3"
+      }
+    ]
+  },
+  "send-email": {
+    "capability": "send-email",
+    "tools": [
+      {
+        "id": "gmail",
+        "tier": "standard",
+        "cost_per_call": 0.00,
+        "module": "aiplatform.skills.comms.send_email",
+        "function": "send_email",
+        "active": false,
+        "note": "Sprint 3"
+      }
+    ]
+  },
+  "send-slack": {
+    "capability": "send-slack",
+    "tools": [
+      {
+        "id": "slack-api",
+        "tier": "standard",
+        "cost_per_call": 0.00,
+        "module": "aiplatform.skills.comms.send_slack",
+        "function": "send_slack",
+        "active": false,
+        "note": "Sprint 3"
+      }
+    ]
+  }
+}

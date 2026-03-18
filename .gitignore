@@ -1,0 +1,47 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Google credentials
+google_credentials.json
+drive_folder_ids.txt
+service_account.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs & output
+*.log
+logs/
+output/
+tmp/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# LangSmith / tracing
+langsmith_traces/

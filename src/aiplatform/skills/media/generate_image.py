@@ -88,6 +88,14 @@ def generate_via_dalle3(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Force a clean flat digital image — no staging, frames, or mockups
+    _CLEAN_IMAGE_SUFFIX = (
+        " Flat digital artwork only. Pure white background. "
+        "No frame, no border, no wall, no mockup, no shadow, no room, "
+        "no staging, no photo-realistic scene. The image IS the artwork itself."
+    )
+    full_prompt = prompt + _CLEAN_IMAGE_SUFFIX
+
     # Submit generation request
     resp = requests.post(
         "https://api.openai.com/v1/images/generations",
@@ -97,7 +105,7 @@ def generate_via_dalle3(
         },
         json={
             "model": "dall-e-3",
-            "prompt": prompt,
+            "prompt": full_prompt,
             "n": 1,
             "size": size,
             "quality": "hd",

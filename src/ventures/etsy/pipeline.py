@@ -341,12 +341,35 @@ def run_phase_3(
     total_cost += mockups.get("cost", 0.0)
     print(f"  Mockup cost: ${mockups.get('cost', 0):.4f}  |  Total: ${total_cost:.4f}")
 
+    # Save metadata.json alongside the images — single source of truth for this listing
+    metadata = {
+        "subject_id":      slug,
+        "title":           subject.get("title_draft", ""),
+        "description":     subject.get("description", ""),
+        "etsy_tags":       subject.get("etsy_tags", subject.get("target_keywords", [])),
+        "price_usd":       subject.get("price_usd", config.DEFAULT_PRICE_USD),
+        "quality_tier":    subject.get("quality_tier", "standard"),
+        "style_notes":     subject.get("style_notes", ""),
+        "image_prompt":    subject.get("image_prompt", ""),
+        "revised_prompt":  img_result.get("prompt", ""),
+        "tool_used":       img_result.get("tool_used", ""),
+        "total_cost_usd":  round(total_cost, 4),
+        "status":          "generated",
+        "raw_image":       raw_path,
+        "variants":        variants,
+        "mockups":         {k: v for k, v in mockups.items() if k != "cost"},
+    }
+    metadata_path = base_dir / "metadata.json"
+    metadata_path.write_text(json.dumps(metadata, indent=2))
+    print(f"  Metadata  : {metadata_path}")
+
     result = {
         "subject_id":      slug,
         "slug":            slug,
         "raw_image":       raw_path,
         "variants":        variants,
         "mockups":         mockups,
+        "metadata_path":   str(metadata_path),
         "drive_folder_id": None,
         "total_cost":      total_cost,
     }
@@ -364,6 +387,7 @@ def run_phase_3(
         for mp in (mockups.get("living_room"), mockups.get("office"), mockups.get("bedroom")):
             if mp and Path(mp).exists():
                 drive_write(mp, fid)
+        drive_write(str(metadata_path), fid)
         result["drive_folder_id"] = fid
 
     return result

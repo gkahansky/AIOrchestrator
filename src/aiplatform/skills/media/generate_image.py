@@ -29,7 +29,9 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
 import requests
+from PIL import Image
 
 
 # ─── Public entry point ──────────────────────────────────────────────────────
@@ -90,9 +92,10 @@ def generate_via_dalle3(
 
     # Force a clean flat digital image — no staging, frames, or mockups
     _CLEAN_IMAGE_SUFFIX = (
-        " Flat digital artwork only. Pure white background. "
-        "No frame, no border, no wall, no mockup, no shadow, no room, "
-        "no staging, no photo-realistic scene. The image IS the artwork itself."
+        " Flat 2D digital line art only. Background must be pure white #FFFFFF, solid colour, "
+        "no texture, no gradient, no off-white, no cream, no grey. "
+        "No frame, no border, no wall, no mockup, no shadow, no room, no staging. "
+        "The image IS the artwork itself on a pure white background."
     )
     full_prompt = prompt + _CLEAN_IMAGE_SUFFIX
 
@@ -123,6 +126,10 @@ def generate_via_dalle3(
     stem = filename or f"dalle3-{uuid.uuid4().hex[:8]}"
     local_path = output_dir / f"{stem}.png"
     _download_file(image_url, local_path)
+
+    # Post-process: replace near-white pixels with pure #FFFFFF
+    # DALL-E 3 often produces cream/off-white backgrounds even when told not to.
+    _whiten_background(local_path, threshold=230)
 
     w, h = _parse_size(size)
     return {
@@ -156,6 +163,20 @@ def generate_via_gemini(
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
+
+def _whiten_background(img_path: Path, threshold: int = 230) -> None:
+    """
+    Replace near-white pixels with pure #FFFFFF.
+    DALL-E 3 frequently produces cream/off-white backgrounds.
+    Pixels where R, G, and B are all >= threshold are set to 255, 255, 255.
+    threshold=230 catches cream, eggshell, and light grey while preserving line art.
+    """
+    img = Image.open(img_path).convert("RGB")
+    arr = np.array(img, dtype=np.uint8)
+    mask = np.all(arr >= threshold, axis=2)
+    arr[mask] = [255, 255, 255]
+    Image.fromarray(arr).save(img_path, format="PNG", optimize=True)
+
 
 def _download_file(url: str, dest: Path, timeout: int = 60) -> None:
     resp = requests.get(url, timeout=timeout, stream=True)

@@ -93,7 +93,7 @@ def main():
     print()
     print(f"  Checks   :")
     for k, v in result["checks_passed"].items():
-        icon = "✓" if v else "✗"
+        icon = "[OK]" if v else "[!!]"
         print(f"    {icon}  {k}")
     if result.get("drive_zip_id"):
         print(f"  Drive ZIP ID : {result['drive_zip_id']}")

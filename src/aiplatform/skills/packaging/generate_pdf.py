@@ -20,6 +20,27 @@ from pathlib import Path
 from fpdf import FPDF
 
 
+# Helvetica (built-in) is latin-1 only. Map common Unicode chars to safe ASCII.
+_UNICODE_MAP = str.maketrans({
+    "\u2014": "--",   # em dash
+    "\u2013": "-",    # en dash
+    "\u2018": "'",    # left single quote
+    "\u2019": "'",    # right single quote
+    "\u201c": '"',    # left double quote
+    "\u201d": '"',    # right double quote
+    "\u2026": "...",  # ellipsis
+    "\u00a0": " ",    # non-breaking space
+    "\u2122": "(TM)", # trademark
+    "\u00ae": "(R)",  # registered
+    "\u00a9": "(C)",  # copyright
+})
+
+
+def _s(text: str) -> str:
+    """Sanitize text to latin-1 safe for fpdf Helvetica."""
+    return text.translate(_UNICODE_MAP).encode("latin-1", errors="replace").decode("latin-1")
+
+
 _TITLE_MAX_CHARS  = 140
 _REQUIRED_TAGS    = 13
 _ZIP_MAX_BYTES    = 20 * 1024 * 1024
@@ -87,13 +108,13 @@ def generate_pdf(listing_data: dict, output_path: str) -> dict:
     pdf.cell(0, 8, "Etsy Listing Review Sheet", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 10)
     pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 5, f"Slug: {slug}    Date: {run_date}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 5, _s(f"Slug: {slug}    Date: {run_date}"), new_x="LMARGIN", new_y="NEXT")
     pdf.set_text_color(0, 0, 0)
     pdf.ln(4)
 
     # Status banner
     banner_color = (220, 255, 220) if all_pass else (255, 220, 220)
-    banner_text  = "ALL CHECKS PASSED — Ready for review" if all_pass else "CHECKS FAILED — See issues below"
+    banner_text  = "ALL CHECKS PASSED - Ready for review" if all_pass else "CHECKS FAILED - See issues below"
     pdf.set_fill_color(*banner_color)
     pdf.set_font("Helvetica", "B", 11)
     pdf.cell(0, 8, banner_text, fill=True, new_x="LMARGIN", new_y="NEXT", align="C")
@@ -170,10 +191,10 @@ def generate_pdf(listing_data: dict, output_path: str) -> dict:
 
     # Decision section
     _section(pdf, "Reviewer Decision")
-    for choice in ["Approve", "Reject", "Edit — Regenerate image", "Edit — Fix metadata"]:
+    for choice in ["Approve", "Reject", "Edit - Regenerate image", "Edit - Fix metadata"]:
         pdf.set_font("Helvetica", "", 11)
-        pdf.cell(8, 7, "☐", new_x="RIGHT", new_y="TOP")
-        pdf.cell(0, 7, f"  {choice}", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(8, 7, "[ ]", new_x="RIGHT", new_y="TOP")
+        pdf.cell(0, 7, _s(f"  {choice}"), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(3)
     pdf.set_font("Helvetica", "", 10)
     pdf.cell(0, 5, "Notes:", new_x="LMARGIN", new_y="NEXT")
@@ -196,27 +217,28 @@ def generate_pdf(listing_data: dict, output_path: str) -> dict:
 def _section(pdf: FPDF, title: str) -> None:
     pdf.set_font("Helvetica", "B", 11)
     pdf.set_fill_color(240, 240, 245)
-    pdf.cell(0, 6, f"  {title}", fill=True, new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 6, _s(f"  {title}"), fill=True, new_x="LMARGIN", new_y="NEXT")
     pdf.ln(1)
 
 
 def _kv(pdf: FPDF, key: str, value: str, multiline: bool = False) -> None:
     pdf.set_font("Helvetica", "B", 9)
-    pdf.cell(38, 5, f"{key}:", new_x="RIGHT", new_y="TOP")
+    pdf.cell(38, 5, _s(f"{key}:"), new_x="RIGHT", new_y="TOP")
     pdf.set_font("Helvetica", "", 9)
+    value = _s(value)
     if multiline and len(value) > 80:
         pdf.multi_cell(0, 5, value, new_x="LMARGIN", new_y="NEXT")
     else:
-        pdf.cell(0, 5, value[:120] + ("…" if len(value) > 120 else ""), new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 5, value[:120] + ("..." if len(value) > 120 else ""), new_x="LMARGIN", new_y="NEXT")
 
 
 def _check_row(pdf: FPDF, label: str, passed: bool, detail: str = "") -> None:
-    icon  = "✓" if passed else "✗"
+    icon  = "[OK]" if passed else "[!!]"
     color = (0, 140, 0) if passed else (200, 0, 0)
-    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_font("Helvetica", "B", 9)
     pdf.set_text_color(*color)
-    pdf.cell(8, 5, icon, new_x="RIGHT", new_y="TOP")
+    pdf.cell(12, 5, icon, new_x="RIGHT", new_y="TOP")
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Helvetica", "", 9)
-    suffix = f"  ({detail})" if detail else ""
-    pdf.cell(0, 5, f"  {label}{suffix}", new_x="LMARGIN", new_y="NEXT")
+    suffix = f"  ({_s(detail)})" if detail else ""
+    pdf.cell(0, 5, _s(f"  {label}") + suffix, new_x="LMARGIN", new_y="NEXT")

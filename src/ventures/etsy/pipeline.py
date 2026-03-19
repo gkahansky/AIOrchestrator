@@ -230,10 +230,18 @@ def _generate_subjects_with_claude(theme: str) -> list[dict]:
 Each subject must be a JSON object with exactly these fields:
 - subject_id: lowercase hyphenated slug, e.g. "{theme.split()[0].lower()}-01"
 - title_draft: SEO-optimised Etsy listing title, max 140 chars, lead with primary keyword
+- description: Full Etsy listing description, max 2000 chars. No section labels or headings.
+    Write it as three blocks of plain text separated by a blank line:
+    Block 1 (2-3 sentences): Describe the artwork — what it depicts, artistic style, mood,
+    colour palette, and what makes it special. Weave in SEO keywords naturally.
+    Block 2 (copy this exactly, replacing only the em-dashes with hyphens):
+    "WHAT YOU GET:\n- 8 print-ready files in 4 sizes, each as PNG + JPG:\n  Square 3000 x 3000 px (1:1) | Portrait 2400 x 3600 px (2:3) | Landscape 3600 x 2400 px (3:2) | Widescreen 3840 x 2160 px (16:9)\n- Instant digital download - no waiting, no shipping\n- Print at home or at any local or online print shop\n- High resolution - crisp and sharp at all standard frame sizes"
+    Block 3 (1-2 sentences): Who it is perfect for (gift ideas, room types, interior styles).
+    End with a gentle call to action.
 - image_prompt: detailed DALL-E 3 image generation prompt (no aspect ratio flags)
 - style_notes: one sentence of art direction (style, colour palette, mood)
 - etsy_tags: array of exactly 13 Etsy SEO tags (max 20 chars each, Etsy requirement)
-- price_usd: recommended price — one of 4.99, 5.99, or 7.99
+- price_usd: 4.99 for standard quality, 7.99 for premium quality
 - quality_tier: "standard" or "premium"
 - status: "pending"
 
@@ -241,7 +249,7 @@ Return a JSON array of 20 objects. No other text."""
 
     message = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=8192,
+        max_tokens=16000,
         messages=[{"role": "user", "content": prompt}],
         system=system,
     )

@@ -1,7 +1,13 @@
 # Venture A — Etsy Digital Image Shop
 ## Claude Code Context File — Etsy Venture
 
-**Read the root `/CLAUDE.md` first for platform architecture rules.**
+> ⏸️ **STATUS: ON HOLD**
+> Blocked on one external approval:
+> - **Etsy API key** — application submitted, awaiting approval
+>
+> Gemini Imagen 4 is live and tested. Resume Sprint 1 once Etsy API key is confirmed.
+
+**Read the root `/CLAUDE_root.md` first for platform architecture rules.**
 **This file contains only what is specific to the Etsy venture.**
 
 ---
@@ -17,7 +23,7 @@ You are the assistant for the Etsy venture only.
 
 ## What This Venture Is
 
-An automated Etsy shop selling AI-generated digital wall art. The pipeline takes a theme (e.g. "botanical line art"), researches demand, generates product images, packages them for sale, and gets them listed on Etsy — with two deliberate human checkpoints before anything goes live.
+An automated Etsy shop selling AI-generated digital wall art. The pipeline takes a theme (e.g. "minimalist botanical line art"), researches demand, generates product images, packages them for sale, and gets them listed on Etsy — with two deliberate human checkpoints before anything goes live.
 
 **This is Venture A.** It is also the proving ground for the platform — every skill written here must be venture-agnostic so Venture B can reuse it without modification.
 
@@ -28,9 +34,8 @@ An automated Etsy shop selling AI-generated digital wall art. The pipeline takes
 | Layer | Tool | Notes |
 |---|---|---|
 | Marketplace | Etsy Open API v3 | Listings, images, files, ads |
-| Image generation | DALL-E 3 (active) | Primary tool; Gemini Imagen 3 pending billing |
-| Mockups | DALL-E 2 outpainting | 3 room scenes per listing; artwork is preserved pixel-perfect |
-| Review PDFs | fpdf2 | review-sheet.pdf per listing (WeasyPrint avoided — Windows GTK3 dep) |
+| Mockups | Gemini Imagen 4 Fast (primary) / Pillow composite (fallback) | 3 photorealistic room scenes per listing via `create_mockup.py` |
+| Review PDFs | WeasyPrint (Python) | review-sheet.pdf per listing |
 | Promotion | Pinterest API v5 | Pins per listing |
 | Social scheduling | Buffer API | Instagram + Facebook queue |
 
@@ -43,19 +48,19 @@ Drive folder IDs are stored in `.env` after first run of `scripts/setup_drive_fo
 
 ```
 /EtsyShop/
-  01-research/          # themes-{date}.csv + themes-{date}.json
+  01-research/          # trend-report-{date}.json, themes-{date}.csv
   02-subjects/
     {theme-slug}/       # subjects-{theme}.json — 20 subjects per theme
   03-images/
     {listing-slug}/
-      {slug}-raw.png        # DALL-E 3 output (background-whitened)
-      variants/             # 8 files: 4 sizes × PNG + JPG
-      mockups/              # 3 DALL-E 2 outpainted room scenes
-      metadata.json         # Single source of truth for this listing
+      raw/              # Original full-res image output
+      sized/            # Resized exports: square, portrait, landscape, 4K
+      mockups/          # Framed print, canvas wrap, poster flat lay
+      metadata.json     # Title, description, tags, price, prompts, SEO
   04-packages/
     {listing-slug}/
-      delivery.zip          # Buyer download (≤ 20 MB)
-      review-sheet.pdf      # Human review sheet (fpdf2)
+      delivery.zip      # Buyer download file — all sized variants
+      review-sheet.pdf  # Human review sheet with thumbnails + checklist
   05-review/
     pending/            # Listings awaiting human sign-off
     approved/           # Approved — triggers Phase 6
@@ -70,105 +75,170 @@ Drive folder IDs are stored in `.env` after first run of `scripts/setup_drive_fo
 
 ## The 7-Phase Pipeline
 
-### Phase 1 — Theme Research  ✓ Sprint 2 complete
-**Script:** `scripts/run_phase1.py`
-**Output:** `themes-{date}.csv` + `themes-{date}.json` in `/01-research/`
-**Skills:** `research/web_search.py`, `research/trend_analysis.py`, `research/competitor_scan.py`, `storage/drive_write.py`
+### Phase 1 — Idea & Theme Generation
+**Agent:** Research
+**Human gate:** No
+**Output:** Ranked list of 20–50 themes with demand score, competition level, price benchmark
+**Storage:** `/01-research/` — `themes-{date}.csv` + `themes-{date}.json`
+**Skills used:** `research/web_search.py`, `research/trend_analysis.py`, `research/competitor_scan.py`, `storage/drive_write.py`
 
-Scoring model (demand 40% / competition 35% / monetisation 25%). Themes ≥ 60 proceed to Phase 2.
-Demand score blends avg and peak interest: `avg * 0.35 + peak * 0.65`.
+Scoring model:
+- Demand (40%): Google Trends 90-day growth + Etsy monthly search count
+- Competition (35%): Inverse of listing count and top-seller review density
+- Monetisation (25%): Average sale price × estimated conversion rate
+
+Themes scoring ≥ 60 proceed to Phase 2.
 
 ---
 
-### Phase 2 — Subject List Generation  ✓ Sprint 2 complete
-**Script:** `scripts/run_phase2.py`
-**Output:** `subjects-{theme}.json` in `/02-subjects/{theme-slug}/`
-**Skills:** Claude API (claude-sonnet-4-6), `storage/drive_write.py`
+### Phase 2 — Subject List Generation
+**Agent:** Research + Comms
+**Human gate:** No
+**Output:** 20 image subjects per theme — the work queue for Phase 3
+**Storage:** `/02-subjects/{theme-slug}/subjects-{theme}.json`
+**Skills used:** `research/trend_analysis.py`, `comms/send_email.py`, `storage/drive_write.py`
 
-Each subject JSON object contains:
-- `subject_id` — lowercase hyphenated slug (e.g. `botanical-01`)
-- `title_draft` — SEO-first Etsy title (≤ 140 chars)
-- `description` — Full Etsy listing description: artwork description + WHAT YOU GET section + closing CTA
-- `image_prompt` — detailed DALL-E 3 prompt (no aspect ratio flags — added by skill)
-- `style_notes` — one sentence of art direction
-- `etsy_tags` — array of exactly 13 tags (max 20 chars each)
-- `price_usd` — 4.99 (standard) or 7.99 (premium)
-- `quality_tier` — "standard" or "premium"
+Each subject contains:
+- `subject_id` — unique slug (e.g. `botanical-monstera-01`)
+- `title_draft` — SEO-first Etsy title (140 char max)
+- `image_prompt` — full image generation prompt string including aspect ratio and style flags
+- `style_notes` — art direction for mockups and sizing
+- `target_keywords` — top 5 SEO keywords
+- `price_usd` — recommended listing price
+- `quality_tier` — Standard or Premium (controls Tool Router in Phase 3)
 - `status` — state machine field (see Subject Status below)
 
 ---
 
-### Phase 3 — Image Generation  ✓ Sprint 3 complete
-**Script:** `scripts/run_phase3.py`
-**Output:** raw PNG + 8 variant files + 3 mockup JPGs + `metadata.json` in `/03-images/{slug}/`
-**Skills:** `media/generate_image.py`, `media/resize_image.py`, `media/create_mockup.py`, `storage/drive_write.py`
+### Phase 3 — Image Generation
+**Agent:** Executor + Tool Router
+**Human gate:** No
+**Output:** Raw images + 4 sized variants + 3 mockups per subject
+**Storage:** `/03-images/{listing-slug}/`
+**Skills used:** `media/generate_image.py`, `media/resize_image.py`, `media/create_mockup.py`, `storage/drive_write.py`
 
-Image generation notes:
-- DALL-E 3 prompt suffix enforces pure white background (#FFFFFF, no texture, no gradient)
-- After download, `_whiten_background()` post-processes with numpy: pixels ≥ 230 on all channels → pure white. This is the reliable safety net since DALL-E 3 often produces cream/off-white.
-- Mockups use DALL-E 2 outpainting: artwork placed on canvas with opaque mask → DALL-E 2 generates the room around it. Artwork pixels are never modified.
+Tool Router config (current):
+- Standard tier → Gemini Imagen 4 (`imagen-4.0-generate-001`, active — primary)
+- Fallback → DALL-E 3 (active — used if Gemini unavailable)
 
-Variant sizes (Pillow fit-with-pad — full artwork always visible, never cropped):
+Required image sizes (Pillow resizes from raw output):
 
-| Variant | Dimensions | Format |
-|---|---|---|
-| Square | 3000 × 3000 px | PNG + JPG |
-| Portrait | 2400 × 3600 px | PNG + JPG |
-| Landscape | 3600 × 2400 px | PNG + JPG |
-| 4K wide | 3840 × 2160 px | PNG + JPG |
+| Variant | Dimensions | Aspect ratio | Format |
+|---|---|---|---|
+| Square | 3000 × 3000 px | 1:1 | PNG + JPG |
+| Portrait | 2400 × 3600 px | 2:3 | PNG + JPG |
+| Landscape | 3600 × 2400 px | 3:2 | PNG + JPG |
+| 4K wide | 3840 × 2160 px | 16:9 | PNG + JPG |
 
-Mockup scenes: `living_room`, `office`, `bedroom` (DALL-E 2 outpainting, $0.02/image).
+Etsy minimum: 2000px on shortest side. All variants meet this.
 
-`metadata.json` is written alongside the images — it is the single source of truth for that listing (title, description, tags, price, prompt, tool used, cost, paths to all files).
+Mockups (3 per listing — Gemini Imagen 4 Fast generates complete room scenes):
+1. Product shot — framed print on clean neutral wall (main listing image, slot 1)
+2. Living room — Scandinavian lifestyle scene with sofa, natural light (slot 2)
+3. Flat lay — overhead desk scene with minimal props (slot 3)
 
----
-
-### Phase 4 — Packaging  ✓ Sprint 3 complete
-**Script:** `scripts/run_phase4.py`
-**Output:** `delivery.zip` + `review-sheet.pdf` in `/04-packages/{slug}/`
-**Skills:** `packaging/create_zip.py`, `packaging/generate_pdf.py`, `storage/drive_write.py`
-
-ZIP compression fallback: standard deflate → PNG 8-bit quantise → replace PNGs with JPEGs.
-ZIP must be ≤ 20 MB (Etsy hard limit).
-
-Review PDF auto-checks (must all pass before human review):
-- Title ≤ 140 chars
-- Tag count = 13
-- ZIP ≤ 20 MB
-- 3 mockups present
-- Raw image on disk
+All 3 scenes generated via `media/create_mockup.py` → `create_mockup_gemini()`.
+Pillow composite fallback active if Gemini is unavailable.
 
 ---
 
-### Phase 5 — Human Review ★ HUMAN GATE  Sprint 4
-**Skills:** `packaging/send_email.py`, `storage/drive_write.py`
+### Phase 4 — Packaging
+**Agent:** Executor + Code gen
+**Human gate:** No
+**Output:** `delivery.zip` (buyer download) + `review-sheet.pdf` (human review)
+**Storage:** `/04-packages/{listing-slug}/`
+**Skills used:** `packaging/create_zip.py`, `packaging/generate_pdf.py`, `storage/drive_write.py`
 
-Gmail SMTP notification with PDF attachment. Requires `GMAIL_SENDER`, `GMAIL_APP_PASSWORD`, `REVIEW_EMAIL_TO` env vars.
+delivery.zip structure:
+```
+README.txt
+square/image-3000x3000.png + .jpg
+portrait/image-2400x3600.png + .jpg
+landscape/image-3600x2400.png + .jpg
+4k/image-3840x2160.png + .jpg
+```
 
-Human actions: Approve / Reject / Edit+Regenerate.
+ZIP must be ≤ 20MB (Etsy hard limit). Compression fallback order: PNG 16-bit → PNG 8-bit → JPEG 92%.
+
+review-sheet.pdf sections: header, 3 mockup thumbnails + 1 raw, metadata block, auto-checks (resolution, tag count = 13, title ≤ 140 chars, ZIP ≤ 20MB, 3 mockups), Drive links, decision field (Approve / Reject / Edit / Regenerate).
 
 ---
 
-### Phase 6 — Store Upload ★ HUMAN GATE  Sprint 4
-**Constraint: agent NEVER sets state=active. Human publishes manually in Etsy dashboard.**
+### Phase 5 — Human Review ★ HUMAN GATE
+**Agent:** Comms (sends notification only — takes no other action)
+**Human gate:** YES — approve / reject / edit / regenerate
+**Output:** Approved listing queue
+**Storage:** `/05-review/pending/` → `/05-review/approved/` or `/05-review/rejected/`
+**Skills used:** `comms/send_email.py`, `comms/send_slack.py`, `storage/drive_write.py`
+
+Comms agent sends:
+- Email: "Etsy review batch ready — {N} listings pending your approval"
+- Direct Drive links to each review-sheet.pdf
+- Optional Slack notification to `#etsy-review`
+
+Human actions:
+- **Approve** → listing moves to `/05-review/approved/`, Phase 6 begins
+- **Approve with edit** → Comms applies edits to metadata.json, re-packages, Phase 6 begins
+- **Reject** → moved to `/05-review/rejected/`, logged for next cycle
+- **Regenerate** → Executor re-runs Phase 3 with amended prompt, loops back through 4 and 5
+
+Executor polls `/05-review/` every 30 minutes for status changes.
 
 ---
 
-### Phase 7 — Promotion  Sprint 5
-Pinterest pin + Etsy Ads ($1–2/day) + Buffer social queue.
+### Phase 6 — Store Upload & Final Publish ★ HUMAN GATE
+**Agent:** Executor (creates Etsy drafts only — NEVER sets state=active)
+**Human gate:** YES — human clicks Publish in Etsy dashboard
+**Output:** Etsy draft listings (human publishes manually)
+**Storage:** `/06-audit/drafts/` → `/06-audit/published/`
+**Skills used:** `storage/drive_read.py`, `comms/send_email.py`, `finance/log_cost.py`
+
+Executor API sequence (agent stops before publish):
+1. `POST /v3/application/shops/{shop_id}/listings` — draft (state=draft)
+2. `POST /v3/application/listings/{listing_id}/images` ×3 — attach mockups
+3. `POST /v3/application/listings/{listing_id}/files` — attach delivery.zip
+4. `PUT /v3/application/listings/{listing_id}/taxonomy_node` — set category
+5. **AGENT STOPS HERE** — writes draft URL to `/06-audit/drafts/{slug}.json`, emails human
+
+**The agent must never call the publish endpoint. This is a hard constraint.**
+
+After human publishes: Executor polls Etsy GET listings every 15 min, detects newly active listings, writes to `/06-audit/published/listing-ids.csv`, triggers Phase 7.
+
+---
+
+### Phase 7 — Promotion
+**Agent:** Comms + Executor
+**Human gate:** No
+**Output:** Pinterest pins, Etsy Ads activated, social posts queued
+**Storage:** `/07-promo/`
+**Skills used:** `comms/create_pin.py`, `comms/schedule_social.py`, `finance/log_cost.py`
+
+| Channel | Action | Tool | Cost |
+|---|---|---|---|
+| Pinterest | Pin per listing: mockup 1 (portrait), title, 150-char description, 5 hashtags, Etsy link | Pinterest API v5 | $0 |
+| Etsy Ads | Auto-bid at $1–$2/day for 30 days | Etsy Ads API | $30–$60/listing/mo |
+| Instagram | Caption + 30 hashtags + Etsy link, queued in Buffer | Buffer API | $0 |
+| Facebook | Reused Instagram caption, shortened hashtags | Buffer API | $0 |
+
+Etsy Ads 30-day ROAS review (Finance agent):
+- ROAS < 2×: pause ads
+- ROAS 2–4×: maintain budget
+- ROAS > 4×: increase to $3–$5/day
 
 ---
 
 ## Subject Status State Machine
 
+The `status` field in `subjects.json` is the lightweight state machine that tracks each subject through the pipeline. The pipeline reads and writes this field — it never assumes phase completion without checking status.
+
 ```
 pending
   → generating      (Phase 3 starts)
-  → generated       (Phase 3 complete — raw + sized + mockups + metadata.json saved)
-  → packaged        (Phase 4 complete — ZIP + review PDF created)
+  → generated       (Phase 3 complete — raw + sized + mockups saved)
+  → packaged        (Phase 4 complete — ZIP + review sheet created)
   → review_pending  (Phase 5 notification sent)
   → approved        (human approved)
-  → rejected        (human rejected — terminal for this cycle)
+  → rejected        (human rejected — terminal state for this cycle)
   → draft_live      (Phase 6 — Etsy draft created)
   → published       (human clicked Publish — Phase 7 triggered)
 ```
@@ -177,77 +247,72 @@ pending
 
 ## Sprint Roadmap
 
-| Sprint | Goal | Status |
-|---|---|---|
-| Sprint 1 — Foundations | Drive bootstrap, DALL-E 3 image gen, Pillow resize | **Complete** |
-| Sprint 2 — Research + subjects | Phase 1 theme scoring (SerpAPI), Phase 2 subject gen (Claude) | **Complete** |
-| Sprint 3 — Pipeline through packaging | Phase 3 (image+resize+mockups), Phase 4 (ZIP+PDF), metadata.json | **Complete** |
-| Sprint 4 — Human review + Etsy drafts | Phase 5 email notify, Phase 6 Etsy draft upload (never publish), orchestrator loop | **Active** |
-| Sprint 5 — Promotion | Pinterest, Etsy Ads, Buffer social | Planned |
-| Sprint 6 — LangGraph | Replace scripts with graph, Tool Router budget/health, Redis, LangSmith | Planned |
+| Sprint | Duration | Goal | Status |
+|---|---|---|---|
+| **Sprint 1 — Foundations** | 1–2 weeks | Scripts only: Drive folder bootstrap + DALL-E 3 image gen + Pillow resize. No agents. Manual trigger. | **Active** |
+| **Sprint 2 — Research + subject list** | 2 weeks | Research agent: Etsy API trend queries + SerpAPI Google Trends. Output themes CSV + subjects.json. | Planned |
+| **Sprint 3 — Full pipeline through packaging** | 2–3 weeks | Executor processes subjects.json: image generation → Pillow resize → Placeit mockups → delivery.zip → review-sheet.pdf. Comms agent Gmail notification. | Planned |
+| **Sprint 4 — Human review gate + Etsy drafts** | 1–2 weeks | Phase 5 review form. Phase 6 Etsy upload (draft only, stops before publish). | Planned |
+| **Sprint 5 — Promotion** | 1–2 weeks | Pinterest API pins. Etsy Ads auto-enrol. Buffer for Instagram/Facebook. Finance agent 30-day ROAS review. | Planned |
+| **Sprint 6 — LangGraph + Tool Router** | 2 weeks | Replace scripts with LangGraph graph. Add Tool Router. Add Gemini Imagen. Redis pub/sub. LangSmith observability. | Planned |
 
 ---
 
 ## Current Status
 
-**Active sprint: Sprint 4**
+**Status: ON HOLD — waiting for Etsy API key**
 
-Sprint 3 deliverables complete:
-- [x] `create_zip.py` — delivery ZIP with compression fallback
-- [x] `generate_pdf.py` — review-sheet PDF via fpdf2
-- [x] `send_email.py` — Gmail SMTP notification
-- [x] `run_phase_3`, `run_phase_4` in pipeline.py
-- [x] `scripts/run_phase3.py`, `scripts/run_phase4.py`
-- [x] `metadata.json` written alongside images (single source of truth)
-- [x] Background whitening post-processing (`_whiten_background`)
-- [x] Description field in Phase 2 subjects (artwork + WHAT YOU GET + CTA)
-- [x] Pricing: standard=4.99, premium=7.99 (no middle tier)
+Gemini Imagen 4 is live and tested (artwork generation + 3-scene photorealistic mockups).
+When Etsy API key is confirmed, active sprint will be Sprint 1.
 
-Sprint 4 next actions:
-- [ ] `scripts/run_pipeline.py` — orchestrator loop (Phase 3 → 4 for all 20 subjects, status checkpointing, resumable)
-- [ ] Phase 5 email notification implementation
-- [ ] Phase 6 Etsy draft upload (state=draft only, never active)
+- [x] Repo initialised with `.gitignore` and `.env.example`
+- [x] Python environment set up with required packages
+- [x] Drive folder bootstrap script written: `scripts/setup_drive_folders.py`
+- [ ] Drive bootstrap script tested and confirmed
+- [ ] Image generation script (DALL-E 3): `scripts/generate_image.py`
+- [ ] Pillow resize script: `scripts/resize_image.py`
+- [ ] End-to-end test: one prompt → raw image → 4 sized variants → saved to Drive
+
+**Next action:** Test `scripts/setup_drive_folders.py` and confirm all 7 top-level folders + subfolders exist in Drive with correct permissions.
 
 ---
 
 ## Environment Variables
 
-Key variables (full list in `.env.example`):
+See `.env.example` for the full list. Key variables for Sprint 1:
 
 ```
-OPENAI_API_KEY=              # DALL-E 3 + DALL-E 2 (image gen + mockups)
-ANTHROPIC_API_KEY=           # Claude API (Phase 2 subject generation)
-SERPAPI_API_KEY=             # Google Trends + Etsy competitor data (Phase 1)
+OPENAI_API_KEY=                  # DALL-E 3 image generation
 GOOGLE_CREDENTIALS_PATH=./google_credentials.json
-GOOGLE_DRIVE_ROOT_FOLDER_ID= # Set after running setup_drive_folders.py
-GMAIL_SENDER=                # Phase 5 email (Sprint 4)
-GMAIL_APP_PASSWORD=          # Gmail App Password (Sprint 4)
-REVIEW_EMAIL_TO=             # Reviewer email address(es) (Sprint 4)
-ETSY_API_KEY=                # Sprint 4
-ETSY_API_SECRET=             # Sprint 4
-ETSY_SHOP_ID=                # Sprint 4
+GOOGLE_DRIVE_ROOT_FOLDER_ID=     # Set after running setup_drive_folders.py
 ```
+
+Drive folder IDs are generated by `setup_drive_folders.py` and saved to `drive_folder_ids.txt` — copy them into `.env` after first run.
+
+For later sprints: Etsy OAuth tokens, SerpAPI, Pinterest API, Buffer API, Placeit API. Full list in `.env.example`.
 
 ---
 
 ## Etsy-Specific Constraints
 
-- **Never set Etsy listing state to `active`** — agent always creates drafts. Human publishes manually.
-- **delivery.zip must be ≤ 20 MB** — Etsy hard limit. Checked in Phase 4.
-- **Etsy requires exactly 13 tags per listing** — auto-checked in review PDF.
-- **Etsy title must be ≤ 140 characters** — auto-checked in review PDF.
-- **Background must be pure white #FFFFFF** — enforced via prompt + numpy post-processing in `generate_via_dalle3()`.
-- **Google Drive service account** must have Editor access to `/EtsyShop/` root.
-- **DALL-E 3 is the active image generation tool** — flip `active=true` for Gemini in `skills.json` when billing is confirmed. No other code changes needed.
+- **Never set Etsy listing state to `active`** — the agent always creates drafts. Human publishes manually.
+- **delivery.zip must be ≤ 20MB** — Etsy hard limit. Pillow script checks before Phase 4 completes.
+- **Etsy requires exactly 13 tags per listing** — auto-check in review-sheet must validate this
+- **Etsy title must be ≤ 140 characters** — auto-check in review-sheet must validate this
+- **Google Drive service account** must have Editor access to `/EtsyShop/` root — shared manually in Drive UI
+- **Pinterest API review takes 1–2 weeks** — apply during Sprint 1 so it's ready by Sprint 5
+- **Gemini Imagen 4 is the active image generation tool** — `active=true` in `skills.json`. DALL-E 3 remains as fallback.
 
 ---
 
-## Per-Listing Cost
+## Monthly Cost Estimate (Phase 1)
 
 | Item | Cost |
 |---|---|
-| DALL-E 3 raw image | $0.04 |
-| DALL-E 2 mockups (3×) | $0.06 |
-| **Total per listing** | **$0.10** |
-| 20 listings (one theme) | $2.00 |
-| Claude API (Phase 2, per theme) | ~$0.05 |
+| Gemini Imagen 4 artwork (~$0.04/image) | Variable |
+| Gemini Imagen 4 Fast mockups (~$0.02/image × 3 = $0.06/listing) | Variable |
+| Railway compute | $5–$20/mo |
+| Claude API | $20–$80/mo |
+| Etsy Ads (optional) | $30–$60/listing/mo |
+| Google Drive, Redis, Qdrant | $0 (free tiers) |
+| **Total range** | **$55–$160/mo** |

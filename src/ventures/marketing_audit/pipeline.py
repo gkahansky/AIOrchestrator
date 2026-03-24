@@ -1,0 +1,480 @@
+"""
+Marketing Audit pipeline — website marketing audit delivery.
+
+Phases:
+    1 — URL Scrape           (scrape_website skill → analyze_page.py)
+    2 — Competitor Scrape    (standard/premium only — included in Phase 1 result)
+    3 — Audit Report         (generate_audit_report skill → Claude API)
+    4 — Reports              (full PDF + Markdown; sample PDF + Markdown if report_type allows)
+    5 — Human Review ★       (email notification + approval gate)
+    6 — Delivery             (PDF + Markdown sent / Drive upload)
+
+report_type field in order dict:
+    "both"   (default) — full report + sample/censored report
+    "full"             — full report only
+    "sample"           — sample/censored report only
+
+Order status state machine:
+    pending → scraping → scraped → auditing → audited →
+    generating_report → report_ready → review_pending →
+    approved → delivering → delivered
+              └→ revision_requested → re_delivering → delivered
+              └→ failed
+"""
+
+import json
+import os
+import sys
+from datetime import datetime
+from pathlib import Path
+
+import anthropic
+
+from aiplatform.skills.media.scrape_website import scrape_website
+from aiplatform.skills.media.generate_audit_report import generate_audit_report
+from aiplatform.skills.storage.drive_write import drive_write
+from aiplatform.skills.comms.send_email import send_email
+from aiplatform.skills.finance.log_cost import log_cost
+from aiplatform.skills.finance.log_revenue import log_revenue
+from ventures.marketing_audit import config
+from ventures.marketing_audit.sample_report import (
+    generate_sample_pdf,
+    generate_sample_markdown,
+)
+
+
+def run_order(order: dict, output_dir: str = "./output/marketing_audit") -> dict:
+    """
+    Run all pipeline phases for a single audit order.
+    Saves order state after each phase — safe to re-run from any checkpoint.
+
+    Returns the updated order dict.
+    """
+    work_dir = Path(output_dir) / order["order_id"]
+    work_dir.mkdir(parents=True, exist_ok=True)
+    _save_order(order, work_dir)
+
+    try:
+        # -- Phase 1+2: Scrape target + competitors -----------------------------
+        if order["status"] in ("pending", "scraping"):
+            order["status"] = "scraping"
+            _save_order(order, work_dir)
+            scraped = _run_phase1_scrape(order, work_dir)
+            order["status"] = "scraped"
+            _save_json(scraped, work_dir / "scraped.json")
+            _save_order(order, work_dir)
+        else:
+            scraped = _load_json(work_dir / "scraped.json")
+
+        # -- Phase 3: Generate audit report via Claude --------------------------
+        if order["status"] in ("scraped", "auditing"):
+            order["status"] = "auditing"
+            _save_order(order, work_dir)
+            report_data = _run_phase3_audit(order, scraped, work_dir)
+            order["status"] = "audited"
+            _save_json(report_data, work_dir / "report_data.json")
+            _save_order(order, work_dir)
+        else:
+            report_data = _load_json(work_dir / "report_data.json")
+
+        # -- Phase 4: Generate reports ------------------------------------------
+        if order["status"] in ("audited", "generating_report"):
+            order["status"] = "generating_report"
+            _save_order(order, work_dir)
+            paths = _run_phase4_generate(order, report_data, work_dir)
+            order["status"] = "report_ready"
+            order["pdf_path"] = str(paths.get("pdf", ""))
+            order["md_path"] = str(paths.get("md", ""))
+            order["sample_pdf_path"] = str(paths.get("sample_pdf", ""))
+            order["sample_md_path"] = str(paths.get("sample_md", ""))
+            _save_order(order, work_dir)
+        else:
+            paths = {
+                "pdf":        Path(order.get("pdf_path", "")),
+                "md":         Path(order.get("md_path", "")),
+                "sample_pdf": Path(order.get("sample_pdf_path", "")),
+                "sample_md":  Path(order.get("sample_md_path", "")),
+            }
+        pdf_path        = paths.get("pdf", Path(""))
+        md_path         = paths.get("md", Path(""))
+        sample_pdf_path = paths.get("sample_pdf", Path(""))
+        sample_md_path  = paths.get("sample_md", Path(""))
+
+        # -- Phase 5: Human review ----------------------------------------------
+        if order["status"] in ("report_ready", "review_pending"):
+            order["status"] = "review_pending"
+            _save_order(order, work_dir)
+            _run_phase5_review(order, pdf_path, sample_pdf_path)
+
+            if config.AUTO_APPROVE:
+                order["status"] = "approved"
+                _save_order(order, work_dir)
+            else:
+                print(f"\nPipeline paused at review gate.")
+                print(f"Set status to 'approved' in {work_dir / 'order.json'} to continue.\n")
+                return order
+
+        # -- Phase 6: Delivery --------------------------------------------------
+        if order["status"] == "approved":
+            order["status"] = "delivering"
+            _save_order(order, work_dir)
+            _run_phase6_deliver(order, pdf_path, md_path, sample_pdf_path, sample_md_path, work_dir)
+            order["status"] = "delivered"
+            order["delivered_at"] = datetime.utcnow().isoformat()
+            _save_order(order, work_dir)
+            print(f"\nOK Audit {order['order_id']} delivered.")
+
+    except Exception as exc:
+        order["status"] = "failed"
+        order["error"] = str(exc)
+        _save_order(order, work_dir)
+        raise
+
+    return order
+
+
+# --- Phase implementations ----------------------------------------------------
+
+def _run_phase1_scrape(order: dict, work_dir: Path) -> dict:
+    tier = order["tier"]
+    url = order["url"]
+    competitor_urls = order.get("competitor_urls", [])
+    max_competitors = config.TIERS[tier]["competitors"]
+    competitor_urls = competitor_urls[:max_competitors]
+
+    print(f"  Phase 1: Scraping {url}...")
+    if competitor_urls:
+        print(f"    + {len(competitor_urls)} competitor(s): {', '.join(competitor_urls)}")
+
+    result = scrape_website(url, competitor_urls=competitor_urls or None)
+    print(f"    OK Scraped target + {len(result.get('competitors', []))} competitor(s)")
+    return result
+
+
+def _run_phase3_audit(order: dict, scraped: dict, work_dir: Path) -> dict:
+    print(f"  Phase 3: Running {order['tier']} audit via Claude...")
+
+    report_data = generate_audit_report(order, scraped)
+
+    log_cost(
+        tool_id=config.CLAUDE_MODEL,
+        capability="marketing-audit",
+        cost_usd=report_data.get("cost_usd", 0),
+        metadata={"order_id": order["order_id"], "tier": order["tier"]},
+    )
+
+    score = report_data.get("overall_score", 0)
+    grade = _score_grade(score)
+    print(f"    OK Score: {score}/100 (Grade {grade}) — cost ${report_data.get('cost_usd', 0):.4f}")
+    return report_data
+
+
+def _run_phase4_generate(order: dict, report_data: dict, work_dir: Path) -> dict:
+    """
+    Generate reports based on order["report_type"]:
+      "both"   (default) → full PDF + full MD + sample PDF + sample MD
+      "full"             → full PDF + full MD only
+      "sample"           → sample PDF + sample MD only
+
+    Returns dict with keys: pdf, md, sample_pdf, sample_md (Path or None).
+    """
+    report_type = order.get("report_type", "both")
+    slug = order["order_id"]
+    paths: dict = {}
+
+    want_full   = report_type in ("both", "full")
+    want_sample = report_type in ("both", "sample")
+
+    print(f"  Phase 4: Generating reports (type={report_type})...")
+
+    if want_full:
+        pdf_path = work_dir / f"{slug}-audit.pdf"
+        _generate_pdf(report_data, str(pdf_path))
+        print(f"    OK Full PDF:  {pdf_path.name} ({pdf_path.stat().st_size // 1024} KB)")
+
+        md_path = work_dir / f"{slug}-audit.md"
+        md_path.write_text(_build_markdown(report_data), encoding="utf-8")
+        print(f"    OK Full MD:   {md_path.name}")
+
+        paths["pdf"] = pdf_path
+        paths["md"]  = md_path
+
+    if want_sample:
+        sample_pdf_path = work_dir / f"{slug}-audit-sample.pdf"
+        generate_sample_pdf(report_data, str(sample_pdf_path))
+        print(f"    OK Sample PDF: {sample_pdf_path.name} ({sample_pdf_path.stat().st_size // 1024} KB)")
+
+        sample_md_path = work_dir / f"{slug}-audit-sample.md"
+        sample_md_path.write_text(generate_sample_markdown(report_data), encoding="utf-8")
+        print(f"    OK Sample MD:  {sample_md_path.name}")
+
+        paths["sample_pdf"] = sample_pdf_path
+        paths["sample_md"]  = sample_md_path
+
+    return paths
+
+
+def _run_phase5_review(order: dict, pdf_path, sample_pdf_path) -> None:
+    print(f"  Phase 5: Review notification...")
+
+    review_email = config.HUMAN_REVIEW_EMAIL
+    attachments = [str(p) for p in [pdf_path, sample_pdf_path] if p and Path(p).exists()]
+
+    if review_email:
+        subject = f"[Review] Audit — {order.get('brand_name', order['url'])} ({order['tier'].title()})"
+        body = _review_email_html(order, pdf_path, sample_pdf_path)
+        try:
+            send_email(to=review_email, subject=subject, body_html=body, attachments=attachments)
+            print(f"    OK Review email sent to {review_email}")
+        except NotImplementedError:
+            pass
+
+    print(f"\n{'-' * 60}")
+    print(f"REVIEW REQUIRED — Order: {order['order_id']}")
+    print(f"URL:         {order['url']}")
+    print(f"Tier:        {order['tier'].upper()}")
+    print(f"Report type: {order.get('report_type', 'both')}")
+    if pdf_path and Path(pdf_path).exists():
+        print(f"Full PDF:    {pdf_path}")
+    if sample_pdf_path and Path(sample_pdf_path).exists():
+        print(f"Sample PDF:  {sample_pdf_path}")
+    print(f"{'-' * 60}\n")
+
+
+def _run_phase6_deliver(
+    order: dict,
+    pdf_path,
+    md_path,
+    sample_pdf_path,
+    sample_md_path,
+    work_dir: Path,
+) -> None:
+    print(f"  Phase 6: Delivering to client...")
+    report_type = order.get("report_type", "both")
+
+    # Upload to Drive
+    if config.DRIVE_AUDIT_ROOT_ID:
+        for label, path in [
+            ("full PDF", pdf_path),
+            ("full MD", md_path),
+            ("sample PDF", sample_pdf_path),
+            ("sample MD", sample_md_path),
+        ]:
+            if path and Path(path).exists():
+                try:
+                    res = drive_write(path, config.DRIVE_AUDIT_ROOT_ID)
+                    if "pdf" in label.lower():
+                        order[f"drive_{label.replace(' ', '_')}_link"] = res["web_view_link"]
+                    print(f"    OK {label} on Drive: {res['web_view_link']}")
+                except Exception as exc:
+                    print(f"    WARN  Drive upload failed ({label}): {exc}")
+
+    # Determine which PDF to attach for client delivery
+    # Client always gets the full report; sample is for outreach only
+    client_email = order.get("client_email", "")
+    deliver_pdf = pdf_path if (pdf_path and Path(pdf_path).exists()) else sample_pdf_path
+
+    if client_email:
+        subject = f"Your Marketing Audit — {order.get('brand_name', order['url'])}"
+        body = _delivery_email_html(order)
+        attachments = [str(deliver_pdf)] if deliver_pdf and Path(deliver_pdf).exists() else []
+        try:
+            send_email(to=client_email, subject=subject, body_html=body, attachments=attachments)
+            print(f"    OK Delivery email sent to {client_email}")
+        except NotImplementedError:
+            print(f"    WARN  Email skill not yet active")
+
+    print(f"    Output directory: {work_dir}")
+
+
+# --- PDF generator ------------------------------------------------------------
+
+def _generate_pdf(report_data: dict, output_path: str) -> None:
+    """
+    Call generate_pdf_report.py's generate_report() function from ai-marketing-claude.
+    Falls back to a plain-text PDF stub if reportlab / ai-marketing-claude is unavailable.
+    """
+    try:
+        scripts_path = _resolve_scripts_path()
+        if scripts_path not in sys.path:
+            sys.path.insert(0, scripts_path)
+        from generate_pdf_report import generate_report
+        generate_report(report_data, output_path)
+    except ImportError:
+        _write_fallback_pdf(report_data, output_path)
+
+
+def _resolve_scripts_path() -> str:
+    env = os.environ.get("AI_MARKETING_CLAUDE_PATH", "")
+    if env:
+        return str(Path(env) / "scripts")
+    # pipeline.py lives at src/ventures/marketing_audit/ → 5 parents up = sibling repo root
+    repo_root = Path(__file__).parent.parent.parent.parent.parent
+    return str(repo_root / "ai-marketing-claude" / "scripts")
+
+
+def _write_fallback_pdf(report_data: dict, output_path: str) -> None:
+    """Write a minimal PDF stub if reportlab is not available."""
+    try:
+        from reportlab.pdfgen import canvas
+        c = canvas.Canvas(output_path)
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(50, 780, f"Marketing Audit — {report_data.get('brand_name', 'Site')}")
+        c.setFont("Helvetica", 12)
+        c.drawString(50, 760, f"Score: {report_data.get('overall_score', '?')}/100")
+        c.drawString(50, 745, f"URL: {report_data.get('url', '')}")
+        c.drawString(50, 730, "Full report: see accompanying .md file")
+        c.save()
+    except Exception:
+        Path(output_path).write_bytes(b"%PDF-1.4\n% placeholder")
+
+
+# --- Markdown builder ---------------------------------------------------------
+
+def _build_markdown(d: dict) -> str:
+    score = d.get("overall_score", 0)
+    grade = _score_grade(score)
+    lines = [
+        f"# Marketing Audit: {d.get('brand_name', d.get('url', 'Site'))}",
+        f"**URL:** {d.get('url')}  ",
+        f"**Date:** {d.get('date')}  ",
+        f"**Business Type:** {d.get('business_type', 'Unknown')}  ",
+        f"**Overall Score: {score}/100 (Grade: {grade})**",
+        "",
+        "---",
+        "",
+        "## Executive Summary",
+        "",
+        d.get("executive_summary", ""),
+        "",
+        "---",
+        "",
+        "## Score Breakdown",
+        "",
+        "| Category | Score | Weight | Key Finding |",
+        "|---|---|---|---|",
+    ]
+
+    for dim, cat in d.get("categories", {}).items():
+        lines.append(
+            f"| {dim} | {cat.get('score', '?')}/100 | {cat.get('weight', '')} | "
+            f"{cat.get('key_finding', '')} |"
+        )
+
+    lines += [
+        "",
+        "---",
+        "",
+        "## Key Findings",
+        "",
+    ]
+    for f in d.get("findings", []):
+        lines.append(f"**{f.get('severity', 'Medium')}:** {f.get('finding', '')}")
+        lines.append("")
+
+    lines += ["---", "", "## Quick Wins (This Week)", ""]
+    for i, win in enumerate(d.get("quick_wins", []), 1):
+        lines.append(f"{i}. {win}")
+
+    lines += ["", "## Medium-Term Actions (1–3 Months)", ""]
+    for i, action in enumerate(d.get("medium_term", []), 1):
+        lines.append(f"{i}. {action}")
+
+    lines += ["", "## Strategic Initiatives (3–6 Months)", ""]
+    for i, action in enumerate(d.get("strategic", []), 1):
+        lines.append(f"{i}. {action}")
+
+    if d.get("copy_examples"):
+        lines += ["", "---", "", "## Copy Examples", ""]
+        for ex in d["copy_examples"]:
+            lines += [
+                f"**Page:** {ex.get('page')} — {ex.get('issue')}",
+                f"- Before: *{ex.get('before')}*",
+                f"- After: **{ex.get('after')}**",
+                "",
+            ]
+
+    if d.get("competitors"):
+        lines += ["---", "", "## Competitive Landscape", ""]
+        header = "| | " + " | ".join(c.get("name", f"Comp {i+1}") for i, c in enumerate(d["competitors"])) + " |"
+        sep = "|---|" + "---|" * len(d["competitors"])
+        lines += [header, sep]
+        for row in ["Positioning", "Pricing", "Social Proof", "Content"]:
+            key = row.lower().replace(" ", "_")
+            vals = " | ".join(c.get(key, "—") for c in d["competitors"])
+            lines.append(f"| {row} | {vals} |")
+
+    if d.get("roadmap"):
+        lines += ["", "---", "", "## 30-Day Implementation Roadmap", "", d["roadmap"]]
+
+    lines += [
+        "",
+        "---",
+        "",
+        "*Generated by Heyeye Marketing Audit — heyeye.studio*",
+    ]
+
+    return "\n".join(lines)
+
+
+# --- Email templates ----------------------------------------------------------
+
+def _review_email_html(order: dict, pdf_path, sample_pdf_path) -> str:
+    work_dir = Path(pdf_path).parent if pdf_path else Path(".")
+    attachments_note = ""
+    if pdf_path and Path(pdf_path).exists():
+        attachments_note += "<li>Full report PDF attached</li>"
+    if sample_pdf_path and Path(sample_pdf_path).exists():
+        attachments_note += "<li>Sample/censored PDF attached (for outreach)</li>"
+    return f"""
+<p>Marketing audit report ready for review.</p>
+<table>
+  <tr><td><b>Order</b></td><td>{order['order_id']}</td></tr>
+  <tr><td><b>URL</b></td><td>{order['url']}</td></tr>
+  <tr><td><b>Tier</b></td><td>{order['tier'].upper()}</td></tr>
+  <tr><td><b>Report type</b></td><td>{order.get('report_type', 'both')}</td></tr>
+  <tr><td><b>Client</b></td><td>{order.get('client_email', 'N/A')}</td></tr>
+</table>
+<ul>{attachments_note}</ul>
+<p>Approve by setting status to "approved" in {work_dir}/order.json.</p>
+"""
+
+
+def _delivery_email_html(order: dict) -> str:
+    tier_desc = config.TIERS[order["tier"]]["description"]
+    drive_link = order.get("drive_pdf_link", "")
+    drive_section = f'<p><a href="{drive_link}">View report in Google Drive &rarr;</a></p>' if drive_link else ""
+    return f"""
+<p>Hi,</p>
+<p>Your marketing audit for <b>{order.get('brand_name', order['url'])}</b> is ready.</p>
+<p><b>Package:</b> {tier_desc}</p>
+<p>The full PDF report is attached to this email.{drive_section}</p>
+<p>If you have questions or would like to discuss the findings, reply to this email.</p>
+<p>Thanks,<br>Heyeye Marketing Audit<br>heyeye.studio</p>
+"""
+
+
+# --- Helpers ------------------------------------------------------------------
+
+def _score_grade(score: int) -> str:
+    if score >= 85: return "A"
+    if score >= 70: return "B"
+    if score >= 55: return "C"
+    if score >= 40: return "D"
+    return "F"
+
+
+def _save_order(order: dict, work_dir: Path) -> None:
+    _save_json(order, work_dir / "order.json")
+
+
+def _save_json(data: dict, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+
+
+def _load_json(path) -> dict:
+    p = Path(path)
+    if p.exists():
+        return json.loads(p.read_text(encoding="utf-8"))
+    return {}

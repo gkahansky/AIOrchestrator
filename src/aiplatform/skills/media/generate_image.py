@@ -140,7 +140,17 @@ def generate_via_dalle3(
     }
 
 
-# ─── Gemini Imagen 3 (inactive — pending billing) ────────────────────────────
+# ─── Gemini Imagen 3 ─────────────────────────────────────────────────────────
+
+# Imagen 3 supported aspect ratios. We map our internal ratios to the closest.
+_GEMINI_ASPECT_MAP = {
+    "1:1":  "1:1",
+    "2:3":  "3:4",   # portrait — Imagen has no 2:3, 3:4 is closest
+    "3:2":  "4:3",   # landscape — Imagen has no 3:2, 4:3 is closest
+    "16:9": "16:9",
+    "9:16": "9:16",
+}
+
 
 def generate_via_gemini(
     prompt: str,
@@ -152,14 +162,49 @@ def generate_via_gemini(
     Generate an image using Google Gemini Imagen 3.
 
     Requires env var: GOOGLE_AI_API_KEY
-    Status: inactive — pending Google billing approval.
-    Flip active=true in skills.json when billing is confirmed.
+    Uses the google-genai SDK (pip install google-genai).
     """
-    raise NotImplementedError(
-        "Gemini Imagen 3 is not yet active. "
-        "Waiting on Google billing approval. "
-        "Set active=true in platform/registry/skills.json when ready."
+    api_key = os.environ.get("GOOGLE_AI_API_KEY")
+    if not api_key:
+        raise EnvironmentError("GOOGLE_AI_API_KEY is not set.")
+
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=api_key)
+
+    gemini_ratio = _GEMINI_ASPECT_MAP.get(aspect_ratio, "1:1")
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    response = client.models.generate_images(
+        model="imagen-4.0-generate-001",
+        prompt=prompt,
+        config=types.GenerateImagesConfig(
+            number_of_images=1,
+            aspect_ratio=gemini_ratio,
+            output_mime_type="image/png",
+            safety_filter_level="BLOCK_LOW_AND_ABOVE",
+            person_generation="DONT_ALLOW",
+        ),
     )
+
+    if not response.generated_images:
+        raise RuntimeError("Gemini Imagen returned no images. Check safety filters or prompt.")
+
+    image_bytes = response.generated_images[0].image.image_bytes
+    stem = filename or f"gemini-{uuid.uuid4().hex[:8]}"
+    local_path = output_dir / f"{stem}.png"
+    local_path.write_bytes(image_bytes)
+
+    img = Image.open(local_path)
+    w, h = img.size
+    return {
+        "image_path": str(local_path),
+        "width": w,
+        "height": h,
+        "prompt": prompt,
+    }
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────

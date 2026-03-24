@@ -392,7 +392,7 @@ def run_phase_3(
                 for fmt in ("png", "jpg"):
                     if fmt in v:
                         drive_write(v[fmt], fid)
-        for mp in (mockups.get("living_room"), mockups.get("office"), mockups.get("bedroom")):
+        for mp in (mockups.get("product_shot"), mockups.get("living_room"), mockups.get("flat_lay")):
             if mp and Path(mp).exists():
                 drive_write(mp, fid)
         drive_write(str(metadata_path), fid)
@@ -448,7 +448,7 @@ def run_phase_4(
     mockups = phase3_result.get("mockups", {})
     mockup_paths = [
         p for k, p in mockups.items()
-        if k in ("living_room", "office", "bedroom") and p and Path(p).exists()
+        if k in ("product_shot", "living_room", "flat_lay") and p and Path(p).exists()
     ]
 
     print(f"  Generating review PDF...")

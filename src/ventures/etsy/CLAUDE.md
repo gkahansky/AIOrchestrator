@@ -34,7 +34,7 @@ An automated Etsy shop selling AI-generated digital wall art. The pipeline takes
 | Layer | Tool | Notes |
 |---|---|---|
 | Marketplace | Etsy Open API v3 | Listings, images, files, ads |
-| Mockups | Gemini Imagen 4 Fast (primary) / Pillow composite (fallback) | 3 photorealistic room scenes per listing via `create_mockup.py` |
+| Mockups | `gemini-2.5-flash-image` (primary) / Pillow composite (fallback) | Image-in, image-out: actual artwork PNG passed as input — mockups are visually consistent with the real artwork |
 | Review PDFs | WeasyPrint (Python) | review-sheet.pdf per listing |
 | Promotion | Pinterest API v5 | Pins per listing |
 | Social scheduling | Buffer API | Instagram + Facebook queue |
@@ -132,12 +132,14 @@ Required image sizes (Pillow resizes from raw output):
 
 Etsy minimum: 2000px on shortest side. All variants meet this.
 
-Mockups (3 per listing — Gemini Imagen 4 Fast generates complete room scenes):
+Mockups (3 per listing — `gemini-2.5-flash-image`, image-in, image-out):
 1. Product shot — framed print on clean neutral wall (main listing image, slot 1)
 2. Living room — Scandinavian lifestyle scene with sofa, natural light (slot 2)
 3. Flat lay — overhead desk scene with minimal props (slot 3)
 
-All 3 scenes generated via `media/create_mockup.py` → `create_mockup_gemini()`.
+The actual artwork PNG is passed as image input to Gemini — the model renders the
+real artwork into each scene, ensuring visual consistency.
+Skill: `media/create_mockup.py` → `create_mockup_gemini()`.
 Pillow composite fallback active if Gemini is unavailable.
 
 ---
@@ -262,7 +264,11 @@ pending
 
 **Status: ON HOLD — waiting for Etsy API key**
 
-Gemini Imagen 4 is live and tested (artwork generation + 3-scene photorealistic mockups).
+Gemini image stack fully live and tested:
+- Artwork: `imagen-4.0-generate-001` → consistent fine-line botanical output
+- Mockups: `gemini-2.5-flash-image` (image-in, image-out) → visually consistent with artwork
+- Full Phase 3 cost: $0.10/listing ($0.04 artwork + $0.06 mockups)
+
 When Etsy API key is confirmed, active sprint will be Sprint 1.
 
 - [x] Repo initialised with `.gitignore` and `.env.example`

@@ -32,7 +32,7 @@
         "module": "aiplatform.skills.media.create_mockup",
         "function": "create_mockup_gemini",
         "active": true,
-        "note": "Imagen 4 Fast (imagen-4.0-fast-generate-001) — generates 3 photorealistic room scenes. Requires GOOGLE_AI_API_KEY."
+        "note": "gemini-2.5-flash-image — image-in, image-out: actual artwork passed as input so mockups match the real artwork. Requires GOOGLE_AI_API_KEY."
       },
       {
         "id": "pillow-composite",

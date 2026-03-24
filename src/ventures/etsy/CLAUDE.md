@@ -247,55 +247,82 @@ pending
 
 ---
 
+## Pipeline Phase Status
+
+| Phase | Description | Status | Notes |
+|---|---|---|---|
+| **Phase 1** | Theme research — SerpAPI + Google Trends, score & rank themes, save CSV/JSON to Drive | ✅ Done | Requires SERPAPI_KEY |
+| **Phase 2** | Subject list — Claude generates 20 subjects per theme (titles, prompts, tags, price) | ✅ Done | Requires ANTHROPIC_API_KEY |
+| **Phase 3** | Image gen → resize → mockups → metadata.json + Drive upload | ✅ Done | Gemini artwork + Gemini multimodal mockups (artwork as input) |
+| **Phase 4** | Packaging — delivery.zip (≤ 20 MB enforced) + review-sheet.pdf (auto-checks) | ✅ Done | — |
+| **Phase 5** | Human review notification — email + Slack alert, approval gate | 🔴 Not started | `send_email` + `send_slack` stubs; Etsy API key needed |
+| **Phase 6** | Etsy draft upload — creates listing, attaches images + ZIP. Never auto-publishes. | 🔴 Not started | Etsy API key + OAuth skill not written |
+| **Phase 7** | Promotion — Pinterest pin, Etsy Ads enrol, Buffer social queue, ROAS review | 🔴 Not started | Pinterest, Buffer, Etsy Ads API skills not written |
+
+---
+
 ## Sprint Roadmap
 
-| Sprint | Duration | Goal | Status |
-|---|---|---|---|
-| **Sprint 1 — Foundations** | 1–2 weeks | Scripts only: Drive folder bootstrap + DALL-E 3 image gen + Pillow resize. No agents. Manual trigger. | **Active** |
-| **Sprint 2 — Research + subject list** | 2 weeks | Research agent: Etsy API trend queries + SerpAPI Google Trends. Output themes CSV + subjects.json. | Planned |
-| **Sprint 3 — Full pipeline through packaging** | 2–3 weeks | Executor processes subjects.json: image generation → Pillow resize → Placeit mockups → delivery.zip → review-sheet.pdf. Comms agent Gmail notification. | Planned |
-| **Sprint 4 — Human review gate + Etsy drafts** | 1–2 weeks | Phase 5 review form. Phase 6 Etsy upload (draft only, stops before publish). | Planned |
-| **Sprint 5 — Promotion** | 1–2 weeks | Pinterest API pins. Etsy Ads auto-enrol. Buffer for Instagram/Facebook. Finance agent 30-day ROAS review. | Planned |
-| **Sprint 6 — LangGraph + Tool Router** | 2 weeks | Replace scripts with LangGraph graph. Add Tool Router. Add Gemini Imagen. Redis pub/sub. LangSmith observability. | Planned |
+| Sprint | Goal | Status |
+|---|---|---|
+| **Sprint 1 — Foundations** | Drive folder bootstrap, image gen, Pillow resize | ✅ Done |
+| **Sprint 2 — Research + subject list** | SerpAPI trends, Claude subject generation | ✅ Done |
+| **Sprint 3 — Full pipeline through packaging** | Gemini image gen → consistent mockups → ZIP → review PDF | ✅ Done |
+| **Sprint 4 — Human review gate + Etsy drafts** | Phase 5 email/Slack notification, Phase 6 Etsy draft API upload | 🔴 Blocked — Etsy API key pending |
+| **Sprint 5 — Promotion** | Pinterest pins, Etsy Ads, Buffer social queue, 30-day ROAS review | 🔴 Not started |
+| **Sprint 6 — LangGraph + observability** | Replace scripts with LangGraph graph, Redis pub/sub, LangSmith tracing | 🔴 Not started |
 
 ---
 
 ## Current Status
 
-**Status: ON HOLD — waiting for Etsy API key**
+**Status: ON HOLD — waiting for Etsy API key (Sprint 4 blocker)**
 
-Gemini image stack fully live and tested:
-- Artwork: `imagen-4.0-generate-001` → consistent fine-line botanical output
-- Mockups: `gemini-2.5-flash-image` (image-in, image-out) → visually consistent with artwork
-- Full Phase 3 cost: $0.10/listing ($0.04 artwork + $0.06 mockups)
+Phases 1–4 fully implemented and tested end-to-end:
+- [x] Drive folder structure bootstrap: `scripts/setup_drive_folders.py`
+- [x] Phase 1 — theme research: `scripts/run_phase1.py`
+- [x] Phase 2 — subject list generation: `scripts/run_phase2.py`
+- [x] Phase 3 — Gemini artwork + Gemini multimodal mockups (artwork as input): `scripts/run_phase3.py`
+- [x] Phase 4 — delivery ZIP + review PDF: `scripts/run_phase4.py`
+- [x] Full Phase 3 tested: eucalyptus botanical-03, $0.10/listing total
 
-When Etsy API key is confirmed, active sprint will be Sprint 1.
+**Blocked on Etsy API key:** Sprint 4 (phases 5 + 6) cannot proceed without it.
 
-- [x] Repo initialised with `.gitignore` and `.env.example`
-- [x] Python environment set up with required packages
-- [x] Drive folder bootstrap script written: `scripts/setup_drive_folders.py`
-- [ ] Drive bootstrap script tested and confirmed
-- [ ] Image generation script (DALL-E 3): `scripts/generate_image.py`
-- [ ] Pillow resize script: `scripts/resize_image.py`
-- [ ] End-to-end test: one prompt → raw image → 4 sized variants → saved to Drive
-
-**Next action:** Test `scripts/setup_drive_folders.py` and confirm all 7 top-level folders + subfolders exist in Drive with correct permissions.
+**Next action when Etsy key arrives:** Implement `send_email` + `send_slack` skills, then build Etsy OAuth + draft listing upload in Phase 6.
 
 ---
 
 ## Environment Variables
 
-See `.env.example` for the full list. Key variables for Sprint 1:
+See `.env.example` for the full list.
 
 ```
-OPENAI_API_KEY=                  # DALL-E 3 image generation
+# Active — required for Phases 1–4
+GOOGLE_AI_API_KEY=               # Gemini Imagen 4 (artwork) + gemini-2.5-flash-image (mockups)
+OPENAI_API_KEY=                  # DALL-E 3 fallback only
+ANTHROPIC_API_KEY=               # Claude subject generation (Phase 2)
+SERPAPI_KEY=                     # Google Trends + Etsy listing research (Phase 1)
 GOOGLE_CREDENTIALS_PATH=./google_credentials.json
-GOOGLE_DRIVE_ROOT_FOLDER_ID=     # Set after running setup_drive_folders.py
+GOOGLE_DRIVE_ROOT_FOLDER_ID=     # Set after running scripts/setup_drive_folders.py
+DRIVE_01_RESEARCH=
+DRIVE_02_SUBJECTS=
+DRIVE_03_IMAGES=
+DRIVE_04_PACKAGES=
+DRIVE_05_REVIEW=
+DRIVE_06_AUDIT=
+DRIVE_07_PROMO=
+
+# Sprint 4 — needed when Etsy API key arrives
+ETSY_API_KEY=
+ETSY_API_SECRET=
+ETSY_SHOP_ID=
+HUMAN_REVIEW_EMAIL=
+SLACK_WEBHOOK_URL=
+
+# Sprint 5
+PINTEREST_ACCESS_TOKEN=
+BUFFER_ACCESS_TOKEN=
 ```
-
-Drive folder IDs are generated by `setup_drive_folders.py` and saved to `drive_folder_ids.txt` — copy them into `.env` after first run.
-
-For later sprints: Etsy OAuth tokens, SerpAPI, Pinterest API, Buffer API, Placeit API. Full list in `.env.example`.
 
 ---
 

@@ -67,8 +67,8 @@
         "cost_per_call": 0.01,
         "module": "aiplatform.skills.research.web_search",
         "function": "web_search",
-        "active": false,
-        "note": "Sprint 2"
+        "active": true,
+        "note": "Requires SERPAPI_KEY. Used by Phase 1 research (google_search, google_trends, google_shopping)."
       }
     ]
   },
@@ -107,8 +107,8 @@
         "cost_per_call": 0.00,
         "module": "aiplatform.skills.packaging.create_zip",
         "function": "create_zip",
-        "active": false,
-        "note": "Sprint 3"
+        "active": true,
+        "note": "Fully implemented. Enforces 20 MB Etsy limit with recompression fallback."
       }
     ]
   },
@@ -116,13 +116,13 @@
     "capability": "pdf-generation",
     "tools": [
       {
-        "id": "weasyprint",
+        "id": "fpdf2",
         "tier": "standard",
         "cost_per_call": 0.00,
         "module": "aiplatform.skills.packaging.generate_pdf",
         "function": "generate_pdf",
-        "active": false,
-        "note": "Sprint 3"
+        "active": true,
+        "note": "Fully implemented using fpdf2 (not WeasyPrint — avoids GTK3 Windows dependency). Generates review-sheet PDF with thumbnails, auto-checks, Drive links."
       }
     ]
   },

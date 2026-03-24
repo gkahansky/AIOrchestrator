@@ -288,7 +288,31 @@ Phases 1–4 fully implemented and tested end-to-end:
 
 **Blocked on Etsy API key:** Sprint 4 (phases 5 + 6) cannot proceed without it.
 
-**Next action when Etsy key arrives:** Implement `send_email` + `send_slack` skills, then build Etsy OAuth + draft listing upload in Phase 6.
+---
+
+## Build Plan — What Remains
+
+### Sprint 4 — unblocks when Etsy API key arrives
+
+1. `aiplatform/skills/comms/send_email.py` — implement Gmail send (currently a stub)
+2. `aiplatform/skills/comms/send_slack.py` — implement Slack webhook send (currently a stub)
+3. **Phase 5** — review gate: email + Slack alert with Drive links, poll for approval, auto-approve after 20 validated orders
+4. `aiplatform/skills/marketplace/etsy_upload.py` — Etsy OAuth2 client, create draft listing, attach images (3 mockups), attach delivery.zip
+5. **Phase 6** pipeline function — full Etsy draft flow; agent stops before publish; polls for human publish confirmation
+
+### Sprint 5 — after first listings go live
+
+6. `aiplatform/skills/comms/create_pin.py` — Pinterest API v5: pin per listing (mockup 1, title, Etsy link)
+7. Etsy Ads auto-enrol at $1–2/day via Etsy Ads API
+8. `aiplatform/skills/comms/schedule_social.py` — Buffer API: queue Instagram + Facebook posts
+9. **Phase 7** pipeline function — orchestrates steps 6–8 on publish confirmation
+10. Finance agent 30-day ROAS review: ROAS < 2× pause, 2–4× maintain, > 4× increase to $3–5/day
+
+### Sprint 6 — scale optimisation
+
+11. Replace sequential script calls with LangGraph stateful graph (only when pipeline has > 5 branching phases)
+12. LangSmith tracing for all agent calls
+13. Redis pub/sub for parallel multi-listing runs (event: `phase3_complete` → triggers phase 4 without tight coupling)
 
 ---
 

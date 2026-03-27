@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# Force UTF-8 output so Unicode characters (✓ ⚠ etc.) render on all terminals.
+import sys, io
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 """
 Manual trigger for Content Studio pipeline — Sprint 1 & 2.
 
@@ -150,6 +157,26 @@ def main():
     parser.add_argument("--audience", default="general audience")
     parser.add_argument("--client-email", default="")
 
+    # Add-ons
+    parser.add_argument(
+        "--addons",
+        nargs="*",
+        default=[],
+        metavar="ADDON",
+        help=(
+            "Add-ons to run after packaging. Space-separated. "
+            "Available: brand-voice, promo-copy. "
+            "Example: --addons brand-voice promo-copy"
+        ),
+    )
+    parser.add_argument(
+        "--extra-transcripts",
+        nargs="*",
+        default=[],
+        metavar="PATH",
+        help="Paths to extra episode transcript .txt files (for brand-voice add-on; 2-3 episodes recommended)",
+    )
+
     # Mode flags
     parser.add_argument("--resume", action="store_true", help="Resume a paused order")
     parser.add_argument("--demo", action="store_true",
@@ -194,17 +221,19 @@ def _new_order(args):
     order_id = args.order_id or f"cs-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
 
     order = {
-        "order_id": order_id,
-        "audio_path": str(audio_path.resolve()),
-        "tier": args.tier,
-        "show_name": args.show_name,
-        "episode_title": args.episode_title,
-        "host_name": args.host_name,
-        "niche": args.niche,
-        "audience": args.audience,
-        "client_email": args.client_email,
-        "status": "pending",
-        "created_at": datetime.utcnow().isoformat(),
+        "order_id":          order_id,
+        "audio_path":        str(audio_path.resolve()),
+        "tier":              args.tier,
+        "show_name":         args.show_name,
+        "episode_title":     args.episode_title,
+        "host_name":         args.host_name,
+        "niche":             args.niche,
+        "audience":          args.audience,
+        "client_email":      args.client_email,
+        "add_ons":           args.addons,
+        "extra_transcripts": args.extra_transcripts,
+        "status":            "pending",
+        "created_at":        datetime.utcnow().isoformat(),
     }
 
     print(f"\nContent Studio — New Order")
@@ -213,6 +242,8 @@ def _new_order(args):
     print(f"  Episode:   {args.episode_title}")
     print(f"  Tier:      {args.tier.upper()}")
     print(f"  Audio:     {audio_path.name}")
+    if args.addons:
+        print(f"  Add-ons:   {', '.join(args.addons)}")
     print()
 
     run_order(order, output_dir=args.output_dir)

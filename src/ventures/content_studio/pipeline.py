@@ -24,6 +24,8 @@ from pathlib import Path
 import anthropic
 
 from aiplatform.skills.media.transcribe_audio import transcribe_audio
+from aiplatform.skills.media.generate_brand_voice import generate_brand_voice
+from aiplatform.skills.media.generate_promo_copy import generate_promo_copy
 from aiplatform.skills.storage.create_gdoc import create_gdoc
 from aiplatform.skills.storage.drive_organise import create_folder
 from aiplatform.skills.storage.drive_write import drive_write
@@ -78,6 +80,16 @@ def run_order(order: dict, output_dir: str = "./output/content_studio") -> dict:
             _save_order(order, work_dir)
         else:
             gdoc = order.get("gdoc")
+
+        # ── Phase 3b: Add-ons (optional) ──────────────────────────────────────
+        add_ons = order.get("add_ons") or []
+        if add_ons and order["status"] in ("packaged", "addons_pending"):
+            order["status"] = "addons_pending"
+            _save_order(order, work_dir)
+            addon_results = _run_addons(order, content, work_dir)
+            order["addon_results"] = addon_results
+            order["status"] = "packaged"   # return to packaged so review gate proceeds
+            _save_order(order, work_dir)
 
         # ── Phase 4: Human Review ──────────────────────────────────────────────
         if order["status"] in ("packaged", "review_pending"):
@@ -141,9 +153,12 @@ def _run_phase2_generate(order: dict, transcript_data: dict, work_dir: Path = No
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     user_message = build_content_prompt(order, transcript_data)
 
+    max_tokens = (
+        config.CLAUDE_MAX_TOKENS_PREMIUM if tier == "premium" else config.CLAUDE_MAX_TOKENS
+    )
     response = client.messages.create(
         model=config.CLAUDE_MODEL,
-        max_tokens=config.CLAUDE_MAX_TOKENS,
+        max_tokens=max_tokens,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_message}],
     )
@@ -201,16 +216,28 @@ def _run_phase3_package(order: dict, content: dict, work_dir: Path) -> dict:
         f"{order.get('episode_title', 'Episode')} "
         f"({order['tier'].title()} Package)"
     )
-    gdoc = create_gdoc(
-        title=doc_title,
-        html_content=html,
-        folder_id=folder_id or _fallback_folder_id(),
-        share_anyone_with_link=False,
-    )
+
+    gdoc: dict
+    if folder_id or (config.DRIVE_PODCAST_ROOT_ID):
+        gdoc = create_gdoc(
+            title=doc_title,
+            html_content=html,
+            folder_id=folder_id or config.DRIVE_PODCAST_ROOT_ID,
+            share_anyone_with_link=False,
+        )
+        print(f"    ✓ Google Doc ready: {gdoc['web_view_link']}")
+    else:
+        # Drive not configured — deliver local files only
+        gdoc = {
+            "web_view_link": f"file://{full_pdf_path.resolve()}",
+            "doc_id": None,
+        }
+        print(f"    ✓ Local delivery only (Drive not configured)")
+        print(f"      Full PDF:   {full_pdf_path}")
+        print(f"      Sample PDF: {sample_pdf_path}")
 
     gdoc["full_pdf_path"] = str(full_pdf_path)
     gdoc["sample_pdf_path"] = str(sample_pdf_path)
-    print(f"    ✓ Google Doc ready: {gdoc['web_view_link']}")
     return gdoc
 
 
@@ -256,6 +283,144 @@ def _run_phase5_deliver(order: dict, gdoc: dict) -> None:
             print(f"    ⚠  Email skill not yet active — delivery link: {gdoc['web_view_link']}")
     else:
         print(f"    ✓ Delivery link: {gdoc['web_view_link']}")
+
+
+# ─── Add-on runner ────────────────────────────────────────────────────────────
+
+# Supported add-on IDs — map to their runner function
+_ADDON_RUNNERS = {}  # populated below after function definitions
+
+
+def _run_addons(order: dict, content: dict, work_dir: Path) -> dict:
+    """
+    Run all requested add-ons for an order.
+    Returns a dict of {addon_id: result_or_error}.
+    """
+    add_ons = order.get("add_ons") or []
+    results = {}
+    for addon_id in add_ons:
+        runner = _ADDON_RUNNERS.get(addon_id)
+        if not runner:
+            results[addon_id] = {"error": f"Unknown add-on: {addon_id}"}
+            print(f"    ⚠  Unknown add-on: {addon_id}")
+            continue
+        print(f"  Add-on: {addon_id}...")
+        try:
+            result = runner(order, content, work_dir)
+            results[addon_id] = result
+            cost = result.get("cost_usd", 0)
+            print(f"    ✓ {addon_id} complete — cost ${cost:.4f}")
+            log_cost(
+                tool_id=config.CLAUDE_MODEL,
+                capability=f"addon-{addon_id}",
+                cost_usd=cost,
+                metadata={"order_id": order["order_id"], "addon": addon_id},
+            )
+        except Exception as exc:
+            results[addon_id] = {"error": str(exc)}
+            print(f"    ✗ {addon_id} failed: {exc}")
+    return results
+
+
+def _run_addon_brand_voice(order: dict, content: dict, work_dir: Path) -> dict:
+    """
+    Add-on: brand-voice
+    Analyses the current episode transcript (plus any extra transcripts in the order)
+    and produces a Brand Voice Guide, cached per show.
+    """
+    transcripts = []
+    # Primary transcript from this order
+    primary = (content.get("transcript") or order.get("transcript_data", {}).get("transcript") or "").strip()
+    if primary:
+        transcripts.append(primary)
+    # Extra transcripts supplied via order dict (e.g. from CLI --extra-transcripts)
+    for extra in (order.get("extra_transcripts") or []):
+        path = Path(extra)
+        if path.exists():
+            transcripts.append(path.read_text(encoding="utf-8"))
+
+    if not transcripts:
+        raise ValueError("No transcript available for brand-voice add-on.")
+
+    # Cache path: per-show, not per-episode
+    cache_path = None
+    if config.BRAND_VOICE_CACHE_ENABLED:
+        show_slug = order.get("show_name", "unknown").lower().replace(" ", "-")[:40]
+        cache_path = work_dir.parent / f"{show_slug}-brand-voice.json"
+
+    result = generate_brand_voice(
+        transcripts=transcripts,
+        show_name=order.get("show_name", ""),
+        niche=order.get("niche", "general"),
+        audience=order.get("audience", "general audience"),
+        host_name=order.get("host_name", ""),
+        cache_path=cache_path,
+    )
+
+    # Save the guide as a text file alongside the order
+    guide_path = work_dir / f"{order['order_id']}-brand-voice.txt"
+    guide_path.write_text(result["guide"], encoding="utf-8")
+    result["guide_path"] = str(guide_path)
+    return result
+
+
+def _run_addon_promo_copy(order: dict, content: dict, work_dir: Path) -> dict:
+    """
+    Add-on: promo-copy
+    Generates platform description, audiogram caption, newsletter teaser, LinkedIn post.
+    Injects cached brand voice if available.
+    """
+    # Try to load brand voice injection from cache
+    brand_voice_injection = ""
+    if config.BRAND_VOICE_CACHE_ENABLED:
+        show_slug = order.get("show_name", "unknown").lower().replace(" ", "-")[:40]
+        cache_path = work_dir.parent / f"{show_slug}-brand-voice.json"
+        if cache_path.exists():
+            cached = json.loads(cache_path.read_text(encoding="utf-8"))
+            brand_voice_injection = cached.get("summary", {}).get("brand_voice_injection", "")
+
+    transcript = (
+        content.get("transcript")
+        or order.get("transcript_data", {}).get("transcript")
+        or ""
+    )
+
+    episode_context = {
+        "show_name":              order.get("show_name", ""),
+        "episode_title":          order.get("episode_title", ""),
+        "host_name":              order.get("host_name", ""),
+        "niche":                  order.get("niche", "general"),
+        "audience":               order.get("audience", "general audience"),
+        "transcript":             transcript,
+        "show_notes":             content.get("show_notes", ""),
+        "brand_voice_injection":  brand_voice_injection,
+    }
+
+    result = generate_promo_copy(episode_context)
+
+    # Save all four pieces as a single text file
+    promo_path = work_dir / f"{order['order_id']}-promo-copy.txt"
+    promo_path.write_text(_format_promo_output(result), encoding="utf-8")
+    result["promo_path"] = str(promo_path)
+    return result
+
+
+def _format_promo_output(pieces: dict) -> str:
+    sections = [
+        ("PLATFORM DESCRIPTION", "platform_description"),
+        ("AUDIOGRAM CAPTION",    "audiogram_caption"),
+        ("NEWSLETTER TEASER",    "newsletter_teaser"),
+        ("LINKEDIN POST",        "linkedin_post"),
+    ]
+    lines = []
+    for label, key in sections:
+        lines += [f"{'─' * 60}", f"{label}", f"{'─' * 60}", "", pieces.get(key, ""), ""]
+    return "\n".join(lines)
+
+
+# Register runners
+_ADDON_RUNNERS["brand-voice"] = _run_addon_brand_voice
+_ADDON_RUNNERS["promo-copy"]  = _run_addon_promo_copy
 
 
 # ─── HTML builder ─────────────────────────────────────────────────────────────
@@ -320,15 +485,6 @@ def _get_or_create_order_folder(order_id: str) -> str | None:
         return None
 
 
-def _fallback_folder_id() -> str:
-    """Last-resort folder: root or Drive root."""
-    fid = config.DRIVE_PODCAST_ROOT_ID or ""
-    if not fid:
-        raise ValueError(
-            "No Drive folder configured. Set DRIVE_PODCAST_ORDERS_ID or "
-            "DRIVE_PODCAST_ROOT_ID in .env"
-        )
-    return fid
 
 
 def work_dir_for(order: dict, base: str = "./output/content_studio") -> Path:

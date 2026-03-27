@@ -16,9 +16,9 @@ Dependencies: platform → skills only. Never venture → venture.
 
 | Tier | Price | Delivery | Output |
 |---|---|---|---|
-| Snapshot | $49 | 24h | Score + top 5 actions, PDF |
-| Full Audit | $149 | 48h | 6 dimensions + 2 competitors + copy examples, PDF |
-| Audit + Strategy | $249 | 72h | Full audit + 30-day roadmap + 3 competitors, PDF |
+| Snapshot | $49 | 24h | Score + top 5 actions, PDF — 5–10 pages |
+| Full Audit | $149 | 48h | 6 dimensions + 2 competitors + copy examples, PDF — 10–15 pages |
+| Audit + Strategy | $249 | 72h | Full audit + 30-day roadmap + 3 competitors, PDF — 15–20 pages |
 
 ---
 

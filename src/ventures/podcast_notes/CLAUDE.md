@@ -188,10 +188,12 @@ EMAIL_SEQUENCE_LENGTH=5
 
 Run these after core pipeline Sprints 1–3 are stable.
 
-### Sprint 3b — Brand Voice + Promo Copy
-- Build `generate_brand_voice.py` + caching
-- Build `generate_promo_copy.py`
-- Test: 2 episodes → brand voice guide → promo copy using that guide
+### Sprint 3b — Brand Voice + Promo Copy ✅ DONE (2026-03-25)
+- ✅ `generate_brand_voice.py` — analyses 2–3 transcripts, produces structured Brand Voice Guide; cached as JSON per show (`{show-slug}-brand-voice.json`) for reuse across orders
+- ✅ `generate_promo_copy.py` — platform description (230–250 chars), audiogram caption, newsletter teaser (100–150 words), LinkedIn post; injects brand voice when cached
+- ✅ Add-on runner wired into `content_studio/pipeline.py` — Phase 3b runs after packaging; `--addons brand-voice promo-copy` CLI flags
+- ✅ Tested end-to-end: real 60-min episode → full premium pipeline → 7 sections generated; brand voice + promo copy outputs saved alongside order
+- ✅ Premium truncation fix: `CLAUDE_MAX_TOKENS_PREMIUM = 16000` in `config.py`; pipeline uses tier-aware ceiling
 
 ### Sprint 4b — Social Calendar + Email Sequence
 - Integrate `market-social/SKILL.md` with podcast context prefix

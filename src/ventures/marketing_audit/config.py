@@ -66,4 +66,8 @@ AI_MARKETING_CLAUDE_PATH = os.getenv("AI_MARKETING_CLAUDE_PATH", "")
 
 # ─── Claude ───────────────────────────────────────────────────────────────────
 CLAUDE_MODEL = "claude-sonnet-4-6"
-CLAUDE_MAX_TOKENS = 8192
+CLAUDE_MAX_TOKENS = 8192  # snapshot / full tiers
+
+# Premium tier generates roadmap + 3 competitor analyses + copy examples —
+# needs a higher ceiling to avoid truncated JSON.
+CLAUDE_MAX_TOKENS_PREMIUM = 16000

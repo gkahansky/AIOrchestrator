@@ -73,3 +73,4 @@ BRAND_VOICE_CACHE_ENABLED = os.getenv("BRAND_VOICE_CACHE_ENABLED", "true").lower
 # ─── Content generation model ─────────────────────────────────────────────────
 CLAUDE_MODEL = "claude-sonnet-4-6"
 CLAUDE_MAX_TOKENS = 8192
+CLAUDE_MAX_TOKENS_PREMIUM = 16000

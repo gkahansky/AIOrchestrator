@@ -38,6 +38,7 @@ Thumbs.db
 *.log
 logs/
 output/
+input/
 tmp/
 
 # Test artifacts

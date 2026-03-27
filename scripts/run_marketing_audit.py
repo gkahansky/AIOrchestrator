@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+import sys
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 """
 Manual trigger for Marketing Audit pipeline — Sprint 1.
 
@@ -48,6 +54,17 @@ def main():
         help="both (default): full + sample/censored PDF. full: full only. sample: censored only.",
     )
 
+    # Client context — optional enrichment passed into the Claude prompt
+    parser.add_argument("--audience", default="", help="Target audience description")
+    parser.add_argument("--conversion-goal", default="", help="Primary conversion goal")
+    parser.add_argument("--weak-spots", default="", help="Known weak spots or challenges")
+    parser.add_argument("--traffic-source", default="", help="Primary traffic source(s)")
+    parser.add_argument("--team-size", default="", help="Team size / structure")
+    parser.add_argument("--budget", default="", help="Budget posture (e.g. organic-first, open to paid)")
+    parser.add_argument("--growth-channel", default="", help="Growth channel priorities")
+    parser.add_argument("--milestones", default="", help="Upcoming milestones or launches")
+    parser.add_argument("--email-list", default="", help="Email list size and platform")
+
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--approve", action="store_true", help="Mark as approved before resuming")
     parser.add_argument("--demo", action="store_true", help="Run with sample data (no scraping)")
@@ -85,6 +102,16 @@ def _new_order(args):
         "report_type": args.report_type,
         "status": "pending",
         "created_at": datetime.utcnow().isoformat(),
+        # Optional client context — enriches Claude prompt when provided
+        "audience":        args.audience,
+        "conversion_goal": args.conversion_goal,
+        "weak_spots":      args.weak_spots,
+        "traffic_source":  args.traffic_source,
+        "team_size":       args.team_size,
+        "budget":          args.budget,
+        "growth_channel":  args.growth_channel,
+        "milestones":      args.milestones,
+        "email_list_size": args.email_list,
     }
 
     print(f"\nMarketing Audit — New Order")

@@ -50,7 +50,7 @@ def generate_audit_report(order: dict, scraped: dict) -> dict:
     """
     # Import here to avoid circular deps at module load time
     from ventures.marketing_audit.prompts import build_audit_prompt, parse_audit_response
-    from ventures.marketing_audit.config import CLAUDE_MODEL, CLAUDE_MAX_TOKENS
+    from ventures.marketing_audit.config import CLAUDE_MODEL, CLAUDE_MAX_TOKENS, CLAUDE_MAX_TOKENS_PREMIUM
 
     tier = order.get("tier", "full")
     url = order["url"]
@@ -63,9 +63,12 @@ def generate_audit_report(order: dict, scraped: dict) -> dict:
     )
     user_message = build_audit_prompt(order, scraped)
 
+    max_tokens = CLAUDE_MAX_TOKENS_PREMIUM if tier == "premium" else CLAUDE_MAX_TOKENS
+
     response = client.messages.create(
         model=CLAUDE_MODEL,
-        max_tokens=CLAUDE_MAX_TOKENS,
+        max_tokens=max_tokens,
+        temperature=0,  # deterministic scoring — same site = same scores across tiers
         system=system,
         messages=[{"role": "user", "content": user_message}],
     )

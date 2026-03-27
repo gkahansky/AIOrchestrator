@@ -6,7 +6,7 @@ The JSON schema matches what generate_pdf_report.py expects as input.
 """
 
 import json
-from ventures.marketing_audit.config import TIERS, DIMENSION_WEIGHT_LABELS
+from ventures.marketing_audit.config import DIMENSION_WEIGHT_LABELS
 
 
 SYSTEM_PROMPT = """\
@@ -23,42 +23,63 @@ def build_audit_prompt(order: dict, scraped: dict) -> str:
     """
     Build the Claude user message for a tier-aware audit.
 
+    Scoring instructions are IDENTICAL for all tiers so that dimension scores
+    are computed with the same framing regardless of which report a client ordered.
+    The tier only controls which optional output sections Claude populates.
+
     Args:
         order:   Order dict with url, tier, competitor_urls, brand_name.
         scraped: Output from scrape_website skill — {target, competitors}.
     """
     tier = order["tier"]
-    depth = TIERS[tier]["depth"]
     url = order["url"]
     brand_name = order.get("brand_name", _extract_brand(url))
 
     target = scraped.get("target", {})
     competitors = scraped.get("competitors", [])
 
-    # Summarise scraped data so prompt stays within token budget
     scraped_summary = _summarise_scraped(target, competitors)
+    client_context_block = _build_client_context(order)
 
-    tier_instructions = {
+    # Tier controls OUTPUT SCOPE only — not scoring depth.
+    # This is what keeps dimension scores consistent across tiers.
+    tier_output_scope = {
         "snapshot": """\
-TIER: Snapshot ($49)
-Generate only: overall_score, executive_summary (2 paragraphs max), and 5 quick_wins.
-For categories, provide scores and key_finding only (no details field required).
-Leave medium_term, strategic, competitors, and roadmap as empty arrays/strings.""",
-
+OUTPUT SCOPE — Snapshot tier:
+- categories: score, key_finding, AND details for all 6 dimensions (always required)
+- findings: all issues found (8-15 items across all severity levels)
+- quick_wins: 5-7 specific actions
+- medium_term: leave as empty array []
+- strategic: leave as empty array []
+- copy_examples: leave as empty array []
+- competitors: leave as empty array []
+- roadmap: leave as empty string ""
+""",
         "full": """\
-TIER: Full Audit ($149)
-Generate: all 6 dimension scores with detailed findings, 2-3 findings per dimension.
-Include copy_examples: 2 before/after copy rewrites for the highest-impact issues.
-Competitors: summarise each of the scraped competitor sites in the competitors array.
-Leave roadmap as empty string.""",
-
+OUTPUT SCOPE — Full Audit tier:
+- categories: score, key_finding, AND details for all 6 dimensions (always required)
+- findings: all issues found (8-15 items)
+- quick_wins: 5-7 specific actions
+- medium_term: 4-6 actions (1-3 month horizon)
+- strategic: 3-5 initiatives (3-6 month horizon)
+- copy_examples: exactly 2 before/after rewrites for the highest-impact pages/issues
+- competitors: summarise each scraped competitor in the competitors array
+- roadmap: leave as empty string ""
+""",
         "premium": """\
-TIER: Audit + Strategy ($249)
-Generate: all 6 dimension scores with detailed findings.
-Include copy_examples: 3 before/after copy rewrites.
-Competitors: full comparison of all scraped competitor sites.
-roadmap: A 30-day implementation plan as a markdown string — Week 1/2/3/4 sections \
-with specific daily tasks and owners (e.g. "Founder", "Designer", "Content writer").""",
+OUTPUT SCOPE — Audit + Strategy tier:
+- categories: score, key_finding, AND details for all 6 dimensions (always required)
+- findings: all issues found (10-18 items)
+- quick_wins: 5-7 specific actions
+- medium_term: 4-6 actions (1-3 month horizon)
+- strategic: 3-5 initiatives (3-6 month horizon)
+- copy_examples: exactly 3 before/after rewrites
+- competitors: full deep-dive comparison of all scraped competitor sites
+- roadmap: a 30-day implementation plan as a markdown string. Use ## Week 1 / ## Week 2 / \
+## Week 3 / ## Week 4 headers. Each week: 4-6 specific tasks with named owners \
+(e.g. "Founder", "Designer", "Content writer"). Use real page names, real copy \
+suggestions, and real metric targets where possible.
+""",
     }
 
     schema = """\
@@ -68,12 +89,12 @@ with specific daily tasks and owners (e.g. "Founder", "Designer", "Content write
   "overall_score": 0-100,
   "executive_summary": "string — 3-5 paragraphs for a non-technical stakeholder",
   "categories": {
-    "Content & Messaging":    {"score": 0-100, "key_finding": "string", "details": "string"},
-    "Conversion Optimization": {"score": 0-100, "key_finding": "string", "details": "string"},
-    "SEO & Discoverability":  {"score": 0-100, "key_finding": "string", "details": "string"},
-    "Competitive Positioning": {"score": 0-100, "key_finding": "string", "details": "string"},
-    "Brand & Trust":          {"score": 0-100, "key_finding": "string", "details": "string"},
-    "Growth & Strategy":      {"score": 0-100, "key_finding": "string", "details": "string"}
+    "Content & Messaging":     {"score": 0-100, "key_finding": "string", "details": "string — 2-3 paragraphs of specific evidence and recommendations"},
+    "Conversion Optimization": {"score": 0-100, "key_finding": "string", "details": "string — 2-3 paragraphs"},
+    "SEO & Discoverability":   {"score": 0-100, "key_finding": "string", "details": "string — 2-3 paragraphs"},
+    "Competitive Positioning": {"score": 0-100, "key_finding": "string", "details": "string — 2-3 paragraphs"},
+    "Brand & Trust":           {"score": 0-100, "key_finding": "string", "details": "string — 2-3 paragraphs"},
+    "Growth & Strategy":       {"score": 0-100, "key_finding": "string", "details": "string — 2-3 paragraphs"}
   },
   "findings": [
     {"severity": "Critical | High | Medium | Low", "finding": "string — specific and actionable"}
@@ -103,9 +124,14 @@ Audit the following website and return a JSON object matching the schema below.
 
 URL: {url}
 BRAND: {brand_name}
-{tier_instructions[depth]}
 
-SCORING WEIGHTS (use these when computing overall_score):
+SCORING INSTRUCTIONS (apply identically for all tiers):
+Evaluate all 6 dimensions on a 0-100 scale. Be specific and evidence-based. \
+A score of 50 means average — use the full range. Scores must reflect the actual \
+quality of the site and must NOT be adjusted based on the tier the client purchased.
+{client_context_block}
+{tier_output_scope[tier]}
+SCORING WEIGHTS (use when computing overall_score):
 {json.dumps(DIMENSION_WEIGHT_LABELS, indent=2)}
 
 SCRAPED DATA FROM THE SITE:
@@ -173,6 +199,35 @@ def parse_audit_response(text: str, tier: str, url: str) -> dict:
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
+def _build_client_context(order: dict) -> str:
+    """
+    Build a CLIENT CONTEXT block from optional order fields.
+    Returns an empty string if none of the context fields are present,
+    so the prompt degrades gracefully for orders without enriched context.
+    """
+    fields = [
+        ("audience",          "Target audience"),
+        ("conversion_goal",   "Primary conversion goal"),
+        ("weak_spots",        "Known weak spots"),
+        ("traffic_source",    "Primary traffic source"),
+        ("team_size",         "Team size"),
+        ("budget",            "Budget posture"),
+        ("growth_channel",    "Growth channel priorities"),
+        ("milestones",        "Upcoming milestones"),
+        ("email_list_size",   "Email list size"),
+    ]
+    lines = []
+    for key, label in fields:
+        val = order.get(key, "").strip() if isinstance(order.get(key), str) else ""
+        if val:
+            lines.append(f"- {label}: {val}")
+
+    if not lines:
+        return ""
+
+    return "\nCLIENT CONTEXT (provided by the client — use this to make the audit more specific):\n" + "\n".join(lines) + "\n"
+
+
 def _extract_brand(url: str) -> str:
     from urllib.parse import urlparse
     host = urlparse(url).netloc.replace("www.", "")
@@ -219,11 +274,15 @@ def _summarise_scraped(target: dict, competitors: list) -> str:
                 continue
             cd = comp.get("data", {})
             pos = cd.get("positioning", {})
+            ctas = cd.get("ctas", [])
+            cta_count = len(ctas) if isinstance(ctas, list) else (ctas.get("count", 0) if isinstance(ctas, dict) else 0)
+            social = cd.get("social_links", [])
+            social_count = len(social) if isinstance(social, list) else (social.get("count", 0) if isinstance(social, dict) else 0)
             lines.append(
                 f"{comp.get('domain', comp['url'])}: "
                 f"headline={pos.get('h1_tags', ['?'])[:1]}, "
-                f"CTAs={cd.get('ctas', {}).get('count', 0)}, "
-                f"social_links={cd.get('social_links', {}).get('count', 0)}"
+                f"CTAs={cta_count}, "
+                f"social_links={social_count}"
             )
 
     return "\n".join(lines)

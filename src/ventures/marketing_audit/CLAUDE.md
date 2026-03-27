@@ -207,3 +207,10 @@ COMPETITOR_MAX=3                    # Max competitors scraped per report
 - Competitor URLs always sourced from client requirements form or publicly known — never scraped from private data
 - Reports never claim live data accuracy — always note audit is based on publicly visible page content at time of scrape
 - Client receives PDF only — no source code, no raw JSON
+
+## Pipeline Status
+<!-- managed by update_task.py -->
+
+| Roadmap ID | Task | Status | Note | Updated |
+|---|---|---|---|---|
+| H-02 | Marketing Audit — Sprint 2: PDF Polish | ✅ done | Added Echoforge branded header/footer to all PDF pages: dark navy band with echoforge wordmark + ter... | 2026-03-27 |

@@ -16,7 +16,12 @@
       "Bash(python scripts/setup_clickup_workspace.py)",
       "Bash(python scripts/seed_clickup_from_roadmap.py --dry-run)",
       "Bash(python scripts/seed_clickup_from_roadmap.py)",
-      "Bash(python scripts/update_task.py --id U-03 --status done --note \"ClickUp workspace live. 4-way sync built: update_task.py keeps ClickUp, ROADMAP.md, venture CLAUDE.md, and session log in sync. Auto git push on done. Failures queued in logs/pending_updates.json for retry.\" --venture platform)"
+      "Bash(python scripts/update_task.py --id U-03 --status done --note \"ClickUp workspace live. 4-way sync built: update_task.py keeps ClickUp, ROADMAP.md, venture CLAUDE.md, and session log in sync. Auto git push on done. Failures queued in logs/pending_updates.json for retry.\" --venture platform)",
+      "Bash(python scripts/update_task.py --id H-02 --status in-progress --note \"Resuming: adding Echoforge logo/visual header to PDF, then building audit_deliver.py for Drive upload and marketplace delivery\" --venture marketing_audit)",
+      "Bash(python scripts/run_marketing_audit.py --demo --tier full)",
+      "Bash(start \"\" \"output\\\\marketing_audit\\\\demo-123327\\\\demo-123327-audit.pdf\")",
+      "Bash(start \"\" \"output\\\\marketing_audit\\\\demo-123718\\\\demo-123718-audit.pdf\")",
+      "Bash(python scripts/update_task.py --id H-02 --status done --note \"Added Echoforge branded header/footer to all PDF pages: dark navy band with echoforge wordmark + terracotta accent line + page number footer. No image dependency — pure ReportLab. topMargin/bottomMargin adjusted. Cover spacing polished \\(extra gap between title and URL\\). Committed to ai-marketing-claude \\(local — no push access to zubair-trabzada remote\\).\" --venture marketing_audit)"
     ]
   }
 }

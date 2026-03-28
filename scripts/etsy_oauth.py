@@ -83,7 +83,7 @@ class _CallbackHandler(http.server.BaseHTTPRequestHandler):
                 body = b"<h2>Done! Return to your terminal.</h2><p>You can close this tab.</p>"
             else:
                 _callback_result["error"] = "no_code"
-                body = b"<h2>Unexpected response — no code.</h2>"
+                body = b"<h2>Unexpected response - no code.</h2>"
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
             self.end_headers()
@@ -181,35 +181,70 @@ def run_auto(verifier: str, auth_url: str) -> None:
 
 def run_manual(verifier: str, auth_url: str, redirect_uri: str, state: str) -> None:
     """
-    Manual mode: user clicks the link, Etsy redirects to their registered URL
-    (which may fail to load — that's fine), and they paste the full redirect URL
-    from the browser address bar.
+    Manual mode: user clicks Allow on Etsy, Etsy redirects to their registered URL,
+    browser shows an error page — that's fine. They copy the URL from the address bar.
     """
-    print(f"\nManual mode — redirect URI: {redirect_uri}")
-    print(f"\nStep 1: Open this URL in your browser:")
+    print()
+    print("=" * 60)
+    print("STEP 1 — Make sure you are logged into Etsy in your browser")
+    print("         Go to etsy.com and log in first if you haven't.")
+    print("=" * 60)
+    input("\nPress Enter when you are logged into Etsy...")
+
+    print()
+    print("=" * 60)
+    print("STEP 2 — Open the authorisation URL below in your browser.")
+    print("         The script will try to open it automatically.")
+    print("=" * 60)
     print(f"\n  {auth_url}\n")
     webbrowser.open(auth_url)
 
-    print("Step 2: Click 'Allow Access' on the Etsy page.")
-    print(f"        Etsy will redirect to: {redirect_uri}?code=...&state=...")
-    print("        The page may show an error — that's fine, the code is in the URL.\n")
-    print("Step 3: Copy the FULL URL from your browser address bar and paste it below.")
-    print("        It will look like:  https://yoursite.com?code=AbCdEf...&state=...\n")
+    print("You should now see an Etsy page saying:")
+    print('  "[Your app name] would like to access your Etsy account"')
+    print("with an ALLOW ACCESS button.")
+    print()
+    print("If you see a login page instead — log in, then the consent page will appear.")
+    print("If you see 'redirect URL not permitted' — the wrong website URL was entered.")
+    print()
+    input("Press Enter once you can see the ALLOW ACCESS button on Etsy...")
 
-    raw = input("Paste the full redirect URL here: ").strip()
+    print()
+    print("=" * 60)
+    print("STEP 3 — Click ALLOW ACCESS on the Etsy page.")
+    print("=" * 60)
+    print()
+    print(f"Etsy will redirect your browser to: {redirect_uri}")
+    print("That page will probably show an error or 404 — THAT IS FINE.")
+    print()
+    print("IMPORTANT: Look at your browser ADDRESS BAR after the redirect.")
+    print(f"The URL will start with:  {redirect_uri}")
+    print(f"and will contain:        ?code=XXXXXXXXXX&state=XXXXXXXXXX")
+    print()
+    print("DO NOT paste the etsy.com URL — paste the URL starting with your website.")
+    print()
+
+    raw = input("Paste the full URL from your browser address bar: ").strip()
+
+    if "etsy.com" in raw:
+        print()
+        print("ERROR: That is the Etsy authorization URL — not the redirect URL.")
+        print("       You need to paste the URL your browser shows AFTER clicking Allow Access.")
+        print(f"       It should start with: {redirect_uri}")
+        sys.exit(1)
 
     parsed = urllib.parse.urlparse(raw)
     params = urllib.parse.parse_qs(parsed.query)
 
-    code  = params.get("code",  [None])[0]
-    error = params.get("error", [None])[0]
+    code      = params.get("code",  [None])[0]
+    error     = params.get("error", [None])[0]
     got_state = params.get("state", [None])[0]
 
     if error:
         print(f"\nERROR: Etsy returned: {error}")
         sys.exit(1)
     if not code:
-        print("\nERROR: No 'code' parameter found in the URL. Did you copy the full URL?")
+        print("\nERROR: No 'code' found in the URL.")
+        print(f"       The URL should contain ?code=XXXX and start with {redirect_uri}")
         sys.exit(1)
     if got_state != state:
         print("\nERROR: State mismatch. Start over — run the script again.")

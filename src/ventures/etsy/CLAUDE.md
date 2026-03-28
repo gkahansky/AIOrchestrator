@@ -373,3 +373,10 @@ BUFFER_ACCESS_TOKEN=
 | Etsy Ads (optional) | $30–$60/listing/mo |
 | Google Drive, Redis, Qdrant | $0 (free tiers) |
 | **Total range** | **$55–$160/mo** |
+
+## Pipeline Status
+<!-- managed by update_task.py -->
+
+| Roadmap ID | Task | Status | Note | Updated |
+|---|---|---|---|---|
+| L-06 | Etsy Digital Image Shop — Venture A | 🔄 in-progress | Etsy access token received. Sprint 4 complete: send_email.py (SMTP), send_slack.py (bot token), etsy... | 2026-03-28 |

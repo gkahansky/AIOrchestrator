@@ -1,6 +1,6 @@
 """
 Skill: sync_task_status
-Keep ClickUp, ROADMAP.md, and the relevant venture CLAUDE.md in sync
+Keep Jira, ROADMAP.md, and the relevant venture CLAUDE.md in sync
 whenever a task status changes.
 
 Maintains a rolling session log at logs/session_YYYY-MM-DD.md and a
@@ -36,10 +36,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from aiplatform.skills.comms.update_project_board import (
-    find_task_by_roadmap_id,
-    update_task_status as clickup_update_status,
-    add_task_comment,
+from aiplatform.skills.comms.update_jira_board import (
+    find_issue_by_label,
+    transition_issue,
+    add_comment,
 )
 
 log = logging.getLogger(__name__)
@@ -63,24 +63,17 @@ VENTURE_CLAUDE_MAP = {
     "platform":        "src/aiplatform/CLAUDE.md",
 }
 
-# ClickUp list IDs per space (matches seed script)
-CLICKUP_LISTS = {
-    "platform":         os.getenv("CLICKUP_LIST_PLATFORM",        "901816916122"),
-    "etsy":             os.getenv("CLICKUP_LIST_ETSY",             "901816916147"),
-    "marketing_audit":  os.getenv("CLICKUP_LIST_MARKETING_AUDIT",  "901816916048"),
-    "podcast_notes":    os.getenv("CLICKUP_LIST_PODCAST_NOTES",    "901816916125"),
-    "content_studio":   os.getenv("CLICKUP_LIST_PODCAST_NOTES",    "901816916125"),
-    "content_channels": os.getenv("CLICKUP_LIST_CONTENT_CHANNELS", "901816916113"),
-}
+# Jira project key for all active development work
+JIRA_PROJECT = "AII"
 
-# ROADMAP.md status → ClickUp status (Free tier)
-CLICKUP_STATUS_MAP = {
-    "idea":        "to do",
-    "planned":     "to do",
-    "in-progress": "in progress",
-    "done":        "complete",
-    "on-hold":     "to do",
-    "blocked":     "to do",
+# ROADMAP.md status → Jira transition name
+JIRA_STATUS_MAP = {
+    "idea":        "To Do",
+    "planned":     "To Do",
+    "in-progress": "In Progress",
+    "done":        "Done",
+    "on-hold":     "Pending",
+    "blocked":     "Pending",
 }
 
 # Status emoji for display
@@ -106,7 +99,7 @@ def sync_task_status(
     note: str,
     venture: str | None = None,
     push_to_github: bool | None = None,   # None = auto (True when done)
-    api_key: str | None = None,
+    api_key: str | None = None,           # unused — kept for call-site compatibility
 ) -> dict:
     """
     Synchronise a task status across ClickUp, ROADMAP.md, and venture CLAUDE.md.
@@ -120,7 +113,6 @@ def sync_task_status(
             "commit_sha": str | None,    # git commit SHA if pushed
         }
     """
-    api_key = api_key or os.environ.get("CLICKUP_API_KEY", "")
     venture = venture or _infer_venture(roadmap_id)
     push = push_to_github if push_to_github is not None else (new_status == "done")
     now  = datetime.now(timezone.utc)
@@ -135,16 +127,16 @@ def sync_task_status(
     print(f"  Venture: {venture}")
     print(f"  Note:    {note[:80]}{'...' if len(note) > 80 else ''}")
 
-    # ── 1. ClickUp ─────────────────────────────────────────────────────────────
-    cu_result = _update_clickup(roadmap_id, venture, new_status, note, api_key)
-    if cu_result.startswith("ok"):
-        updated.append("clickup")
-        results["clickup"] = "✓"
-        print(f"    ✓ ClickUp")
+    # ── 1. Jira ─────────────────────────────────────────────────────────────────
+    jira_result = _update_jira(roadmap_id, new_status, note)
+    if jira_result.startswith("ok"):
+        updated.append("jira")
+        results["jira"] = "✓"
+        print(f"    ✓ Jira")
     else:
-        failed.append("clickup")
-        results["clickup"] = f"✗ {cu_result}"
-        print(f"    ✗ ClickUp: {cu_result}")
+        failed.append("jira")
+        results["jira"] = f"✗ {jira_result}"
+        print(f"    ✗ Jira: {jira_result}")
 
     # ── 2. ROADMAP.md ──────────────────────────────────────────────────────────
     rm_result = _update_roadmap(roadmap_id, new_status)
@@ -194,7 +186,7 @@ def sync_task_status(
             results["git"] = f"✓ {sha}"
             print(f"    ✓ Git push: {sha}")
 
-    success = len(failed) == 0 or (failed == ["clickup"] and len(updated) >= 2)
+    success = len(failed) == 0 or (failed == ["jira"] and len(updated) >= 2)
     print(f"\n  Result: {'OK' if success else 'PARTIAL'} — {len(updated)} updated, {len(failed)} failed")
 
     return {
@@ -207,33 +199,29 @@ def sync_task_status(
     }
 
 
-# ─── ClickUp update ───────────────────────────────────────────────────────────
+# ─── Jira update ──────────────────────────────────────────────────────────────
 
-def _update_clickup(roadmap_id: str, venture: str, new_status: str, note: str, api_key: str) -> str:
-    if not api_key:
-        return "failed: no API key"
+def _update_jira(roadmap_id: str, new_status: str, note: str) -> str:
     try:
-        cu_status = CLICKUP_STATUS_MAP.get(new_status, "to do")
-        # Find the task across all lists (try venture list first, then all)
-        list_ids = [CLICKUP_LISTS.get(venture)] + [v for k, v in CLICKUP_LISTS.items() if k != venture]
-        list_ids = [l for l in list_ids if l]
+        issue = find_issue_by_label(JIRA_PROJECT, roadmap_id)
+        if not issue:
+            return f"failed: issue {roadmap_id} not found in Jira project {JIRA_PROJECT}"
 
-        task = None
-        for list_id in dict.fromkeys(list_ids):   # de-duplicate, preserve order
-            task = find_task_by_roadmap_id(list_id, roadmap_id, api_key)
-            if task:
-                break
+        issue_key = issue["issue_key"]
+        jira_status = JIRA_STATUS_MAP.get(new_status, "To Do")
 
-        if not task:
-            return f"failed: task {roadmap_id} not found in ClickUp"
+        # Only transition if status would actually change
+        if issue.get("status", "").lower() != jira_status.lower():
+            t_result = transition_issue(issue_key, jira_status)
+            if "error" in t_result:
+                return f"failed: {t_result['error']}"
 
-        task_id = task["task_id"]
         emoji = STATUS_EMOJI.get(new_status, "")
         comment = f"{emoji} **{new_status.upper()}**\n\n{note}"
+        c_result = add_comment(issue_key, comment)
+        if "error" in c_result:
+            return f"failed (comment): {c_result['error']}"
 
-        result = clickup_update_status(task_id, cu_status, api_key, comment=comment)
-        if "error" in result:
-            return f"failed: {result['error']}"
         return "ok"
     except Exception as exc:
         return f"failed: {exc}"

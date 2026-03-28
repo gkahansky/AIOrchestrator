@@ -507,4 +507,4 @@ Add to `/platform/registry/skills.json`:
 | Roadmap ID | Task | Status | Note | Updated |
 |---|---|---|---|---|
 | U-03 | Project Management Integration | ✅ done | ClickUp workspace live. 4-way sync built: update_task.py keeps ClickUp, ROADMAP.md, venture CLAUDE.m... | 2026-03-27 |
-| H-08 | Gig Generator — Fiverr | 🔄 in-progress | Skill built: src/aiplatform/skills/marketplace/generate_fiverr_gig.py — generates gig title, descrip... | 2026-03-27 |
+| H-08 | Gig Generator — Fiverr | 🔄 in-progress | Fiverr gig generator skill complete. run_gig_generator.py CLI ready for podcast_notes and marketing_... | 2026-03-28 |

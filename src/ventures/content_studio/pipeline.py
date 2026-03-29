@@ -495,6 +495,11 @@ def work_dir_for(order: dict, base: str = "./output/content_studio") -> Path:
 
 def _save_order(order: dict, work_dir: Path) -> None:
     _save_json(order, work_dir / "order.json")
+    try:
+        from aiplatform.database.job_ops import upsert_job
+        upsert_job(order, "content_studio")
+    except Exception:
+        pass  # non-blocking — JSON file is still the source of truth
 
 
 def _save_json(data: dict, path: Path) -> None:

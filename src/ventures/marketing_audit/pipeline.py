@@ -490,6 +490,11 @@ def _score_grade(score: int) -> str:
 
 def _save_order(order: dict, work_dir: Path) -> None:
     _save_json(order, work_dir / "order.json")
+    try:
+        from aiplatform.database.job_ops import upsert_job
+        upsert_job(order, "marketing_audit")
+    except Exception:
+        pass  # non-blocking — JSON file is still the source of truth
 
 
 def _save_json(data: dict, path: Path) -> None:

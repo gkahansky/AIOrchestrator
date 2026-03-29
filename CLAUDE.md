@@ -3,23 +3,25 @@
 
 **Read this entire file before writing any code or making any changes.**
 **This is the authoritative platform context. It applies to every venture.**
-**Also read the venture-specific CLAUDE_<venture>.md in the active venture directory before touching any venture code.**
+**Also read the venture-specific CLAUDE.md in the active venture directory before touching any venture code.**
 
 ---
 
 ## What This Platform Is
 
-**Brand:** Echoforge · echoforge.biz
+**Platform:** AI-Infra (Jira project key: AII)
 
-A reusable, multi-agent AI platform designed to power multiple independent business ventures. The core principle is that agents, skills, memory, and integrations live in a shared infrastructure layer. Each venture is a lightweight configuration and pipeline on top of that shared layer.
+A reusable, multi-agent AI platform powering independent business ventures under two brands:
 
-- **Venture A:** Etsy digital image shop — see `/ventures/etsy/CLAUDE_etsy.md`
-- **Venture B:** Podcast show notes + marketing — see `/ventures/podcast_notes/CLAUDE_podcast_notes.md`
-- **Venture C:** Website marketing audit — see `/ventures/marketing_audit/CLAUDE_marketing_audit.md`
+- **MiroPrintStudio** — Etsy digital image shop (AI-generated wall art)
+- **EchoForge** (echoforge.biz) — Marketing & SEO services (Marketing Audit + Podcast Notes)
+
+The core principle is that agents, skills, memory, and integrations live in a shared infrastructure layer. Each venture is a lightweight configuration and pipeline on top of that shared layer.
+
+- **Venture A:** MiroPrintStudio — Etsy digital image shop — see `/ventures/etsy/CLAUDE.md`
+- **Venture B:** EchoForge — Podcast show notes — see `/ventures/podcast_notes/CLAUDE.md`
+- **Venture C:** EchoForge — Website marketing audit — see `/ventures/marketing_audit/CLAUDE.md`
 - **Venture D+:** Future ventures — each gets its own directory and CLAUDE.md
-
-> **Platform strategy and backlog:** See [`/ROADMAP.md`](./ROADMAP.md) for all planned ventures,
-> system capabilities, and prioritised next steps. Add new ideas there before building.
 
 Adding a new venture means writing a config, a pipeline, and a CLAUDE.md. It does not mean touching `/platform/`.
 
@@ -225,29 +227,11 @@ Venture-specific agent configuration (system prompts, tool subsets) lives in `/v
 
 ---
 
-## Roadmap & Backlog
-
-All planned features, new ventures, and system enhancements are tracked in **`/ROADMAP.md`**.
-
-**Before starting any new work:**
-1. Check `/ROADMAP.md` — the item should exist with a type and priority assigned
-2. If it doesn't exist, add it first, assign priority, then begin
-3. Update status from `planned` → `in-progress` when you start
-4. Update status to `done` and move to the ✅ Done table when shipped
-
-**Fields in ROADMAP.md:**
-- `Type` — `Venture` (revenue service) or `System` (shared platform capability)
-- `Priority` — `urgent` / `high` / `medium` / `low`
-- `Status` — `idea` → `planned` → `in-progress` → `done`
-- `Description` — specific enough for Claude Code to understand scope without asking
-
----
-
 ## Claude Code Instructions
 
 When working on this platform, always:
 
-1. Read this file first. Then read `/ROADMAP.md` to understand current priorities. Then read the venture-specific CLAUDE_<venture>.md for the venture you are working on.
+1. Read this file first. Then read the venture-specific CLAUDE.md for the venture you are working on.
 2. Before writing any function, apply the split test: skill or pipeline?
 3. When adding a new tool integration, add it to `skills.json` and implement it as a new tool option in the existing skill file. Do not create a new skill file per tool.
 4. When asked to build a feature, first ask: does this belong in a skill (reusable, venture-agnostic) or a pipeline (venture-specific orchestration)?

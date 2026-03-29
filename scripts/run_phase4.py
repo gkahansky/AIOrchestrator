@@ -98,6 +98,11 @@ def main():
     if result.get("drive_zip_id"):
         print(f"  Drive ZIP ID : {result['drive_zip_id']}")
         print(f"  Drive PDF ID : {result['drive_pdf_id']}")
+    # Write phase4-result.json so run_phase5.py can pick it up
+    result_path = Path(result["zip_path"]).parent / "phase4-result.json"
+    result_with_slug = {**result, "slug": slug}
+    result_path.write_text(json.dumps(result_with_slug, indent=2, default=str), encoding="utf-8")
+    print(f"  Result   : {result_path}")
     print()
     print("Next: run scripts/run_phase5.py (Sprint 4) for human review notification.")
 

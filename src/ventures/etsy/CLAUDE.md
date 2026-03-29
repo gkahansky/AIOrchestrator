@@ -1,4 +1,4 @@
-# Venture A — Etsy Digital Image Shop
+# Venture A — MiroPrintStudio (Etsy Digital Image Shop)
 ## Claude Code Context File — Etsy Venture
 
 > ⏸️ **STATUS: ON HOLD**
@@ -23,7 +23,7 @@ You are the assistant for the Etsy venture only.
 
 ## What This Venture Is
 
-An automated Etsy shop selling AI-generated digital wall art. The pipeline takes a theme (e.g. "minimalist botanical line art"), researches demand, generates product images, packages them for sale, and gets them listed on Etsy — with two deliberate human checkpoints before anything goes live.
+**MiroPrintStudio** — an automated Etsy shop selling AI-generated digital wall art. The pipeline takes a theme (e.g. "minimalist botanical line art"), researches demand, generates product images, packages them for sale, and gets them listed on Etsy — with two deliberate human checkpoints before anything goes live.
 
 **This is Venture A.** It is also the proving ground for the platform — every skill written here must be venture-agnostic so Venture B can reuse it without modification.
 
@@ -211,16 +211,23 @@ After human publishes: Executor polls Etsy GET listings every 15 min, detects ne
 ### Phase 7 — Promotion
 **Agent:** Comms + Executor
 **Human gate:** No
-**Output:** Pinterest pins, Etsy Ads activated, social posts queued
+**Output:** Etsy Ads activated, social posts queued in Buffer
 **Storage:** `/07-promo/`
-**Skills used:** `comms/create_pin.py`, `comms/schedule_social.py`, `finance/log_cost.py`
+**Skills used:** `comms/schedule_social.py`, `finance/log_cost.py`
 
 | Channel | Action | Tool | Cost |
 |---|---|---|---|
-| Pinterest | Pin per listing: mockup 1 (portrait), title, 150-char description, 5 hashtags, Etsy link | Pinterest API v5 | $0 |
 | Etsy Ads | Auto-bid at $1–$2/day for 30 days | Etsy Ads API | $30–$60/listing/mo |
 | Instagram | Caption + 30 hashtags + Etsy link, queued in Buffer | Buffer API | $0 |
 | Facebook | Reused Instagram caption, shortened hashtags | Buffer API | $0 |
+
+> **Pinterest:** Etsy has suspended Pinterest connectivity — add `comms/create_pin.py` when restored.
+> **Reddit:** Deferred — majority of target subreddits ban AI-generated images or self-promotion.
+
+Etsy Ads 30-day ROAS review (Finance agent):
+- ROAS < 2×: pause ads
+- ROAS 2–4×: maintain budget
+- ROAS > 4×: increase to $3–$5/day
 
 Etsy Ads 30-day ROAS review (Finance agent):
 - ROAS < 2×: pause ads
@@ -257,7 +264,7 @@ pending
 | **Phase 4** | Packaging — delivery.zip (≤ 20 MB enforced) + review-sheet.pdf (auto-checks) | ✅ Done | — |
 | **Phase 5** | Human review notification — email + Slack alert, approval gate | 🔴 Not started | `send_email` + `send_slack` stubs; Etsy API key needed |
 | **Phase 6** | Etsy draft upload — creates listing, attaches images + ZIP. Never auto-publishes. | 🔴 Not started | Etsy API key + OAuth skill not written |
-| **Phase 7** | Promotion — Pinterest pin, Etsy Ads enrol, Buffer social queue, ROAS review | 🔴 Not started | Pinterest, Buffer, Etsy Ads API skills not written |
+| **Phase 7** | Promotion — Etsy Ads enrol, Buffer social queue (Instagram + Facebook), ROAS review | 🔴 Not started | Pinterest suspended by Etsy. Reddit deferred (AI ban on most target subreddits). Buffer + Etsy Ads API skills not written |
 
 ---
 
@@ -269,7 +276,7 @@ pending
 | **Sprint 2 — Research + subject list** | SerpAPI trends, Claude subject generation | ✅ Done |
 | **Sprint 3 — Full pipeline through packaging** | Gemini image gen → consistent mockups → ZIP → review PDF | ✅ Done |
 | **Sprint 4 — Human review gate + Etsy drafts** | Phase 5 email/Slack notification, Phase 6 Etsy draft API upload | 🔴 Blocked — Etsy API key pending |
-| **Sprint 5 — Promotion** | Pinterest pins, Etsy Ads, Buffer social queue, 30-day ROAS review | 🔴 Not started |
+| **Sprint 5 — Promotion** | Etsy Ads, Buffer social queue (Instagram + Facebook), 30-day ROAS review | 🔴 Not started |
 | **Sprint 6 — LangGraph + observability** | Replace scripts with LangGraph graph, Redis pub/sub, LangSmith tracing | 🔴 Not started |
 
 ---

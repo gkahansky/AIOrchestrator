@@ -26,7 +26,84 @@ import requests
 
 log = logging.getLogger(__name__)
 
-_BASE = "https://openapi.etsy.com/v3/application"
+_BASE       = "https://openapi.etsy.com/v3/application"
+_TOKEN_URL  = "https://api.etsy.com/v3/public/oauth/token"
+
+# In-process cache so we refresh at most once per interpreter session
+_token_cache: dict = {}   # {"access_token": str, "expires_at": float}
+
+
+def _ensure_fresh_token() -> str:
+    """
+    Return a valid access token, refreshing automatically if expired or close to expiry.
+    Writes the new token back to the environment (and .env file if dotenv is present)
+    so subsequent calls within the same process see the updated value.
+    """
+    now = time.time()
+    cached = _token_cache.get("access_token", "")
+    expires_at = _token_cache.get("expires_at", 0.0)
+
+    # Use cached token if it has > 60 s left
+    if cached and now < expires_at - 60:
+        return cached
+
+    # Attempt refresh
+    api_key       = os.environ.get("ETSY_API_KEY", "")
+    refresh_token = os.environ.get("ETSY_REFRESH_TOKEN", "")
+
+    if not api_key or not refresh_token:
+        # Fall back to whatever is in the environment
+        return os.environ.get("ETSY_ACCESS_TOKEN", "")
+
+    try:
+        resp = requests.post(
+            _TOKEN_URL,
+            data={
+                "grant_type":    "refresh_token",
+                "client_id":     api_key,
+                "refresh_token": refresh_token,
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=15,
+        )
+        data = resp.json()
+        if resp.status_code == 200 and "access_token" in data:
+            new_token         = data["access_token"]
+            new_refresh       = data.get("refresh_token", refresh_token)
+            expires_in        = int(data.get("expires_in", 3600))
+
+            # Update in-process cache
+            _token_cache["access_token"] = new_token
+            _token_cache["expires_at"]   = now + expires_in
+
+            # Propagate to environment so other calls in this process use it
+            os.environ["ETSY_ACCESS_TOKEN"]  = new_token
+            os.environ["ETSY_REFRESH_TOKEN"] = new_refresh
+
+            # Persist to .env file if python-dotenv is available
+            try:
+                from dotenv import set_key as _set_key
+                env_path = Path(__file__).parent
+                # Walk up to find .ENV
+                for _ in range(6):
+                    candidate = env_path / ".ENV"
+                    if candidate.exists():
+                        _set_key(str(candidate), "ETSY_ACCESS_TOKEN",  new_token,   quote_mode="never")
+                        _set_key(str(candidate), "ETSY_REFRESH_TOKEN", new_refresh, quote_mode="never")
+                        break
+                    env_path = env_path.parent
+            except Exception:
+                pass  # dotenv not available — env vars already updated above
+
+            log.debug("Etsy token refreshed, expires in %ds", expires_in)
+            return new_token
+        else:
+            log.warning("Etsy token refresh failed (%s): %s", resp.status_code, data)
+    except Exception as exc:
+        log.warning("Etsy token refresh error: %s", exc)
+
+    # If refresh failed, return whatever token is currently in env
+    return os.environ.get("ETSY_ACCESS_TOKEN", "")
 
 # Digital Prints taxonomy ID in Etsy's taxonomy tree
 # Art & Collectibles > Prints > Digital Prints
@@ -65,13 +142,10 @@ def create_draft_listing(
     if not sid:
         return {"error": "ETSY_SHOP_ID not set in environment."}
 
-    # Etsy price format: amount in minor units (cents), divisor 100
-    amount = int(round(price_usd * 100))
-
     payload = {
         "title":           title[:140],
         "description":     description[:2000],
-        "price":           {"amount": amount, "divisor": 100, "currency_code": "USD"},
+        "price":           round(price_usd, 2),
         "quantity":        quantity,
         "who_made":        "i_did",
         "when_made":       "made_to_order",
@@ -222,7 +296,7 @@ def get_shop_listings(
     sid = shop_id or os.environ.get("ETSY_SHOP_ID", "")
     if not sid:
         return []
-    resp = _get(f"/shops/{sid}/listings/{state}", params={"limit": limit})
+    resp = _get(f"/shops/{sid}/listings", params={"state": state, "limit": limit})
     if isinstance(resp, dict) and "error" in resp:
         log.error("get_shop_listings failed: %s", resp)
         return []
@@ -236,12 +310,14 @@ def get_shop_listings(
 # ─── HTTP helpers ─────────────────────────────────────────────────────────────
 
 def _auth_headers() -> dict:
-    token   = os.environ.get("ETSY_ACCESS_TOKEN", "")
-    api_key = os.environ.get("ETSY_API_KEY", "")
+    token      = _ensure_fresh_token()
+    api_key    = os.environ.get("ETSY_API_KEY", "")
+    api_secret = os.environ.get("ETSY_API_SECRET", "")
     if not token:
-        raise ValueError("ETSY_ACCESS_TOKEN not set in environment.")
-    headers = {"x-api-key": api_key, "Authorization": f"Bearer {token}"}
-    return headers
+        raise ValueError("ETSY_ACCESS_TOKEN not set and token refresh failed.")
+    # Etsy requires keystring:sharedsecret in x-api-key header
+    x_api_key = f"{api_key}:{api_secret}" if api_secret else api_key
+    return {"x-api-key": x_api_key, "Authorization": f"Bearer {token}"}
 
 
 def _get(path: str, params: dict | None = None) -> dict | list:

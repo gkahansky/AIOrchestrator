@@ -120,7 +120,7 @@ This is the seed data for `scripts/seed_clickup_from_roadmap.py`. Every item bel
 | L-11 | AI Sales Team Integration | Low | Backlog | Evaluate `zubair-trabzada/ai-sales-team-claude` |
 | L-12 | Outreach Automation | Low | Backlog | Upwork InMail / LinkedIn DM pipeline |
 | H-07 | Gemini Imagen 4 Integration | High | Done | Standard-tier image tool live, DALL-E 3 fallback |
-| D-01 | Echoforge Landing Page | — | Done | echoforge.biz live on Cloudflare Pages |
+| D-01 | EchoForge Landing Page | — | Done | echoforge.biz live on Cloudflare Pages |
 | D-02 | Brand Identity & Logo System | — | Done | Terracotta palette, wordmark, favicon |
 | D-03 | Platform CLAUDE.md Hierarchy | — | Done | Root + venture-level context files |
 | D-11 | Gemini Mockups — Consistent Artwork | — | Done | `gemini-2.5-flash-image` mockup pipeline |

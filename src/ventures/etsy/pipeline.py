@@ -543,7 +543,7 @@ def run_phase_5_notify(
             drive_ids[slug] = fid
             link = f"https://drive.google.com/file/d/{fid}/view" if fid else "(Drive upload failed)"
             drive_links.append(f"• {slug}: {link}")
-            print(f"  Uploaded review PDF for {slug} → Drive /05-review/pending/")
+            print(f"  Uploaded review PDF for {slug} -> Drive /05-review/pending/")
         else:
             drive_links.append(f"• {slug}: (review PDF not uploaded)")
 
@@ -572,11 +572,11 @@ and move the listing to <strong>/05-review/approved/</strong> or <strong>/05-rev
         )
         email_ok = "error" not in result
         if email_ok:
-            print(f"  ✓ Email sent to {to_email}")
+            print(f"  [OK] Email sent to {to_email}")
         else:
-            print(f"  ✗ Email failed: {result.get('error')}")
+            print(f"  [FAIL] Email failed: {result.get('error')}")
     else:
-        print("  ⚠  No review email address set (HUMAN_REVIEW_EMAIL)")
+        print("  [!] No review email address set (HUMAN_REVIEW_EMAIL)")
 
     # Slack notification
     slack_text = f"🖼 *Etsy review batch ready* — {n} listing(s) pending approval\n" + \
@@ -584,10 +584,10 @@ and move the listing to <strong>/05-review/approved/</strong> or <strong>/05-rev
     slack_result = send_slack(text=slack_text)
     slack_ok = "error" not in slack_result
     if slack_ok:
-        print(f"  ✓ Slack notification sent")
+        print(f"  [OK] Slack notification sent")
     else:
         # Slack is optional — non-fatal
-        print(f"  ⚠  Slack not sent: {slack_result.get('error')}")
+        print(f"  [!] Slack not sent: {slack_result.get('error')}")
 
     return {
         "notified":   n,
@@ -619,7 +619,7 @@ def poll_for_approvals(
     while pending:
         elapsed = (datetime.now(timezone.utc) - start).total_seconds() / 60
         if elapsed > timeout_minutes:
-            print(f"  ⚠  poll_for_approvals timed out after {timeout_minutes} min. Remaining: {pending}")
+            print(f"  [!] poll_for_approvals timed out after {timeout_minutes} min. Remaining: {pending}")
             break
 
         # Check approved folder
@@ -711,19 +711,22 @@ def run_phase_6(
 
     listing_id = listing_result["listing_id"]
     draft_url  = listing_result["draft_url"]
-    print(f"  ✓ Draft created: {draft_url}")
+    print(f"  [OK] Draft created: {draft_url}")
 
     # ── Upload mockup images ───────────────────────────────────────────────────
     mockups_dir = Path(output_dir) / "images" / slug / "mockups"
     mockup_paths = []
 
-    # Prefer phase3_result mockup paths; fall back to scanning the folder
+    # Prefer phase3_result mockup paths; accept any key names (product_shot /
+    # living_room / flat_lay / office / bedroom — depends on which mockup
+    # generation run produced the listing)
     if phase3_result and "mockups" in phase3_result:
         m = phase3_result["mockups"]
-        for key in ("product_shot", "living_room", "flat_lay"):
-            p = m.get(key, "")
-            if p and Path(p).exists():
-                mockup_paths.append(p)
+        for key, p in m.items():
+            if key == "cost":
+                continue
+            if p and Path(str(p)).exists():
+                mockup_paths.append(str(p))
 
     if not mockup_paths and mockups_dir.exists():
         mockup_paths = sorted([str(p) for p in mockups_dir.glob("*.png")])[:3]
@@ -732,10 +735,10 @@ def run_phase_6(
     for rank, mp in enumerate(mockup_paths[:3], start=1):
         img_result = upload_listing_image(listing_id=listing_id, image_path=mp, rank=rank)
         if "error" in img_result:
-            print(f"  ✗ Image upload rank {rank} failed: {img_result['error']}")
+            print(f"  [FAIL] Image upload rank {rank} failed: {img_result['error']}")
         else:
             images_uploaded += 1
-            print(f"  ✓ Image rank {rank} uploaded")
+            print(f"  [OK] Image rank {rank} uploaded")
 
     # ── Attach delivery.zip ────────────────────────────────────────────────────
     file_uploaded = False
@@ -749,12 +752,12 @@ def run_phase_6(
     if zip_path and Path(zip_path).exists():
         file_result = upload_listing_file(listing_id=listing_id, file_path=zip_path)
         if "error" in file_result:
-            print(f"  ✗ ZIP upload failed: {file_result['error']}")
+            print(f"  [FAIL] ZIP upload failed: {file_result['error']}")
         else:
             file_uploaded = True
-            print(f"  ✓ delivery.zip uploaded ({file_result.get('filesize_bytes', '?')} bytes)")
+            print(f"  [OK] delivery.zip uploaded ({file_result.get('filesize_bytes', '?')} bytes)")
     else:
-        print(f"  ⚠  delivery.zip not found — attach manually before publishing")
+        print(f"  [!] delivery.zip not found -- attach manually before publishing")
 
     # ── Write draft record ─────────────────────────────────────────────────────
     draft_record = {
@@ -777,7 +780,7 @@ def run_phase_6(
     if save_to_drive and config.DRIVE_06_AUDIT_DRAFTS:
         r = drive_write(str(record_path), config.DRIVE_06_AUDIT_DRAFTS)
         drive_draft_id = r.get("file_id")
-        print(f"  ✓ Draft record saved to Drive /06-audit/drafts/")
+        print(f"  [OK] Draft record saved to Drive /06-audit/drafts/")
 
     # ── Notify human ──────────────────────────────────────────────────────────
     review_email = os.environ.get("HUMAN_REVIEW_EMAIL", os.environ.get("GMAIL_ADDRESS", ""))
@@ -804,7 +807,7 @@ def _notify_draft_ready(
 <h3>Upload summary:</h3>
 <ul>
   <li>Images uploaded: {images_uploaded}/3</li>
-  <li>Delivery ZIP: {'✓ attached' if file_uploaded else '⚠ not attached — upload manually'}</li>
+  <li>Delivery ZIP: {'attached' if file_uploaded else 'NOT attached -- upload manually'}</li>
 </ul>
 <p><em>Reminder: The agent never publishes listings. Click "Publish" in Etsy when ready.</em></p>
 """
@@ -814,7 +817,7 @@ def _notify_draft_ready(
     slack_text = (
         f"🛍 *Etsy draft ready* — `{slug}`\n"
         f"<{draft_url}|Open in Etsy Shop Manager>\n"
-        f"Images: {images_uploaded}/3 | ZIP: {'✓' if file_uploaded else '⚠ missing'}"
+        f"Images: {images_uploaded}/3 | ZIP: {'attached' if file_uploaded else 'MISSING'}"
     )
     send_slack(text=slack_text)
 
@@ -837,7 +840,7 @@ def poll_for_publish(
     while pending:
         elapsed = (datetime.now(timezone.utc) - start).total_seconds() / 60
         if elapsed > timeout_minutes:
-            print(f"  ⚠  poll_for_publish timed out. Still draft: {list(pending.values())}")
+            print(f"  [!] poll_for_publish timed out. Still draft: {list(pending.values())}")
             break
 
         active_listings = get_shop_listings(state="active")
@@ -848,7 +851,7 @@ def poll_for_publish(
                 slug = pending.pop(listing_id)
                 url = next((l["url"] for l in active_listings if l["listing_id"] == listing_id), "")
                 published.append({"slug": slug, "listing_id": listing_id, "url": url})
-                print(f"  ✓ Published: {slug} → {url}")
+                print(f"  [OK] Published: {slug} → {url}")
 
         if pending:
             print(f"  Waiting for human to publish ({len(pending)} draft(s))... "

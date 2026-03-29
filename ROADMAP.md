@@ -1,5 +1,6 @@
 # Platform Roadmap
-## Echoforge — AI Business Orchestrator
+## AI-Infra — AI Business Orchestrator
+### Brands: MiroPrintStudio (Etsy) · EchoForge (Marketing & SEO services)
 
 > **How to use this file**
 > Add any new idea here before building it. Assign a type and priority immediately.
@@ -94,15 +95,15 @@
 
 | # | Name | Type | Completed | Notes |
 |---|---|---|---|---|
-| D-01 | Echoforge Landing Page | System | 2026-03 | Deployed to Cloudflare Pages at echoforge.biz. Two services: podcast content + marketing audit. Platform cards live with Upwork + Fiverr links. |
-| D-02 | Brand Identity & Logo System | System | 2026-03 | 3D glossy eye icon in warm terracotta palette. Wordmark: "hey" ink / "eye" terracotta. Favicon, app icon, horizontal lockup. Files in `/echoforge-landing/`. |
+| D-01 | EchoForge Landing Page | System | 2026-03 | Deployed to Cloudflare Pages at echoforge.biz. Two services: podcast content + marketing audit. Platform cards live with Upwork + Fiverr links. |
+| D-02 | EchoForge Brand Identity & Logo System | System | 2026-03 | 3D glossy eye icon in warm terracotta palette. Wordmark: "hey" ink / "eye" terracotta. Favicon, app icon, horizontal lockup. Files in `/echoforge-landing/`. |
 | D-03 | Platform CLAUDE.md Hierarchy | System | 2026-03 | Root `/CLAUDE_root.md` + venture-level CLAUDE.md per venture. VS Code scoping: open from venture directory. |
 | D-04 | Podcast Venture CLAUDE.md | Venture | 2026-03 | Enhanced v2: core pipeline + 8 marketing add-ons specced. ai-marketing-claude integration pattern documented. |
 | D-05 | Marketing Audit Venture CLAUDE.md | Venture | 2026-03 | Full 6-sprint roadmap, scoring framework, pipeline phases, skills map, env vars. |
 | D-06 | Platform Metadata v4 | System | 2026-03 | Fiverr + Upwork gig copy for both podcast and marketing audit services. Outreach templates included. |
-| D-07 | Upwork Profile Live (Echoforge) | Venture | `pending` | New account to be created today. Old profile: https://www.upwork.com/freelancers/~017f07e5d7ff255755 |
-| D-08 | Fiverr + Freelancer Profiles (Echoforge) | Venture | `pending` | New Fiverr, Freelancer, and Upwork accounts to be created today under Echoforge brand. Publish gigs from platform_metadata_v4 once live. |
-| D-09 | Marketing Audit Pipeline — Sprint 1 | Venture | 2026-03 | Full manual-trigger pipeline built and live-tested against echoforge.biz (29/100, Grade F, 14 findings, $0.07 cost). Phases: scrape → Claude audit → full PDF + Markdown + sample PDF + sample MD → human review gate → delivery stub. Sample report: diagonal watermark, redaction bars with accurate counts, Echoforge branding, mailto CTA. Resumable via `--resume --order-id`. CLI: `scripts/run_marketing_audit.py`. |
+| D-07 | Upwork Profile Live (EchoForge) | Venture | `pending` | New account to be created today. Old profile: https://www.upwork.com/freelancers/~017f07e5d7ff255755 |
+| D-08 | Fiverr + Freelancer Profiles (EchoForge) | Venture | `pending` | New Fiverr, Freelancer, and Upwork accounts to be created today under EchoForge brand. Publish gigs from platform_metadata_v4 once live. |
+| D-09 | Marketing Audit Pipeline — Phase 1 | Venture | 2026-03 | Full manual-trigger pipeline built and live-tested against echoforge.biz (29/100, Grade F, 14 findings, $0.07 cost). Phases: scrape → Claude audit → full PDF + Markdown + sample PDF + sample MD → human review gate → delivery stub. Sample report: diagonal watermark, redaction bars with accurate counts, EchoForge branding, mailto CTA. Resumable via `--resume --order-id`. CLI: `scripts/run_marketing_audit.py`. |
 | D-10 | Podcast Pipeline — Sprint 1 & 2 | Venture | 2026-03 | Manual-trigger pipeline: audio → Whisper transcription → Claude content generation (tier-aware) → Google Doc + full PDF backup + watermarked sample PDF. Sample shows timestamps + guest bio in full, all other sections redacted with CTA. `--demo` mode (no audio needed) + `--pdf-only` flag. Venture: `content_studio`. CLI: `scripts/run_content_studio.py`. |
 | D-12 | Podcast Add-ons — Sprint 3b: Brand Voice + Promo Copy | Venture | 2026-03-25 | `generate_brand_voice.py`: analyses transcripts, outputs Brand Voice Guide, cached as `{show-slug}-brand-voice.json`. `generate_promo_copy.py`: 4 promo pieces with optional brand voice injection. Add-on runner (Phase 3b) wired into `content_studio/pipeline.py`. CLI: `--addons brand-voice promo-copy`. Premium truncation fixed: `CLAUDE_MAX_TOKENS_PREMIUM = 16000`. Tested end-to-end with real 60-min episode. |
 | D-13 | Project Management — ClickUp Integration + Sync | System | 2026-03-27 | ClickUp workspace `AI Infra` live with 5 spaces, 53 tasks seeded. `comms/update_project_board.py` skill (create/update/read tasks). `comms/sync_task_status.py` skill: 4-way sync (ClickUp + ROADMAP.md + venture CLAUDE.md + session log) on every status change; auto git push on done; failures queued in `logs/pending_updates.json`. Scripts: `setup_clickup_workspace.py`, `seed_clickup_from_roadmap.py`, `sync_clickup_to_roadmap.py`, `update_task.py`, `retry_pending_updates.py`. |

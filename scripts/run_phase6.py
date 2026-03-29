@@ -102,12 +102,12 @@ def main():
     print(f"  Listing ID:      {result['listing_id']}")
     print(f"  Draft URL:       {result['draft_url']}")
     print(f"  Images uploaded: {result['images_uploaded']}/3")
-    print(f"  ZIP uploaded:    {'✓' if result['file_uploaded'] else '✗'}")
+    print(f"  ZIP uploaded:    {'YES' if result['file_uploaded'] else 'NO'}")
     if result.get("drive_draft_id"):
         print(f"  Drive record:    https://drive.google.com/file/d/{result['drive_draft_id']}/view")
 
-    print(f"\n  → Open your Etsy Shop Manager and click Publish when ready.")
-    print(f"  → {result['draft_url']}")
+    print(f"\n  -> Open your Etsy Shop Manager and click Publish when ready.")
+    print(f"  -> {result['draft_url']}")
 
     # ── Optionally poll for publish ───────────────────────────────────────────
     if args.poll_publish:
@@ -115,7 +115,7 @@ def main():
         poll_result = poll_for_publish(draft_records=[result])
         if poll_result["published"]:
             listing_url = poll_result["published"][0].get("url", "")
-            print(f"\n  ✓ Published! {listing_url}")
+            print(f"\n  [PUBLISHED] {listing_url}")
         else:
             print(f"\n  Draft still unpublished — run again with --poll-publish to resume.")
 

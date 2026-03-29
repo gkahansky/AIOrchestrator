@@ -48,3 +48,5 @@ htmlcov/
 
 # LangSmith / tracing
 langsmith_traces/
+google_token.json
+google_oauth_client.json

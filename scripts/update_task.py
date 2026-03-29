@@ -6,7 +6,7 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 """
-Update a task's status across ClickUp, ROADMAP.md, and venture CLAUDE.md.
+Update a task's status across Jira, ROADMAP.md, and venture CLAUDE.md.
 Also appends to the rolling session log and pushes to GitHub on completion.
 
 Usage:
@@ -56,7 +56,7 @@ VALID_VENTURES = {
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Sync a task status across ClickUp, ROADMAP.md, and venture CLAUDE.md"
+        description="Sync a task status across Jira, ROADMAP.md, and venture CLAUDE.md"
     )
     parser.add_argument("--id",       metavar="ROADMAP_ID", help="Roadmap ID, e.g. H-02")
     parser.add_argument("--status",   choices=sorted(VALID_STATUSES), help="New status")

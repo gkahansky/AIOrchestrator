@@ -4,7 +4,7 @@
 ## Context
 Standalone service: audit any public website across 6 weighted marketing dimensions,
 deliver a scored PDF + Markdown report within 24–72 hours depending on tier.
-Powered by ai-marketing-claude skill system + custom Echoforge delivery pipeline.
+Powered by ai-marketing-claude skill system + custom EchoForge delivery pipeline.
 
 ## Isolation Rule
 This venture may import platform skills only. No cross-venture imports.
@@ -163,9 +163,9 @@ COMPETITOR_MAX=3                    # Max competitors scraped per report
 - Manual trigger: `python scripts/run_marketing_audit.py --url https://example.com --tier full`
 
 ### Sprint 2 — PDF Polish + Delivery Format
-- [ ] Customise full report PDF with Echoforge branding (logo, colour palette, score gauges, bar charts)
+- [ ] Customise full report PDF with EchoForge branding (logo, colour palette, score gauges, bar charts)
 - [ ] Build `audit_deliver.py` platform skill (Drive upload + Upwork/Fiverr message delivery)
-- Sample PDF polish ✓ done in Sprint 1: Echoforge branding, correct margins, centred score pill, accurate redaction counts, mailto CTA link
+- Sample PDF polish ✓ done in Sprint 1: EchoForge branding, correct margins, centred score pill, accurate redaction counts, mailto CTA link
 
 ### Sprint 3 — Upwork Integration
 - Build `audit_order_listener.py` for Upwork
@@ -213,4 +213,4 @@ COMPETITOR_MAX=3                    # Max competitors scraped per report
 
 | Roadmap ID | Task | Status | Note | Updated |
 |---|---|---|---|---|
-| H-02 | Marketing Audit — Sprint 2: PDF Polish | ✅ done | Added Echoforge branded header/footer to all PDF pages: dark navy band with echoforge wordmark + ter... | 2026-03-27 |
+| H-02 | Marketing Audit — Sprint 2: PDF Polish | ✅ done | Added EchoForge branded header/footer to all PDF pages: dark navy band with echoforge wordmark + ter... | 2026-03-27 |

@@ -19,25 +19,16 @@ import io
 import os
 from pathlib import Path
 
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 
-
-SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
-
-
-def _get_service():
-    creds_path = os.environ.get("GOOGLE_CREDENTIALS_PATH", "./google_credentials.json")
-    creds = service_account.Credentials.from_service_account_file(creds_path, scopes=SCOPES)
-    return build("drive", "v3", credentials=creds, cache_discovery=False)
+from aiplatform.skills.storage._drive_auth import get_drive_service
 
 
 def drive_read(file_id: str, dest_path: str | Path) -> dict:
     dest_path = Path(dest_path)
     dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-    service = _get_service()
+    service = get_drive_service()
 
     meta = (
         service.files()

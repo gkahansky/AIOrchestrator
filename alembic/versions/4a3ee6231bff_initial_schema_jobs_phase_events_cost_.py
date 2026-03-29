@@ -19,46 +19,45 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-# Enum type helpers — create/drop outside of table context so they're shared
-venture_enum = postgresql.ENUM(
-    "etsy", "marketing_audit", "content_studio",
-    name="venture_enum",
-)
-environment_enum = postgresql.ENUM(
-    "production", "staging",
-    name="environment_enum",
-)
-phase_event_type_enum = postgresql.ENUM(
-    "started", "completed", "failed", "paused", "resumed",
-    name="phase_event_type_enum",
-)
-
-
 def upgrade() -> None:
-    """Create all four tables and their supporting enum types."""
-
-    # ── Enum types ─────────────────────────────────────────────────────────────
-    venture_enum.create(op.get_bind(), checkfirst=True)
-    environment_enum.create(op.get_bind(), checkfirst=True)
-    phase_event_type_enum.create(op.get_bind(), checkfirst=True)
+    # ── Enum types via DO block (safe to re-run — ignores if already exists) ───
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE venture_enum AS ENUM ('etsy', 'marketing_audit', 'content_studio');
+        EXCEPTION WHEN duplicate_object THEN null;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE environment_enum AS ENUM ('production', 'staging');
+        EXCEPTION WHEN duplicate_object THEN null;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE phase_event_type_enum AS ENUM ('started', 'completed', 'failed', 'paused', 'resumed');
+        EXCEPTION WHEN duplicate_object THEN null;
+        END $$;
+    """)
 
     # ── jobs ───────────────────────────────────────────────────────────────────
     op.create_table(
         "jobs",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("venture", sa.Enum("etsy", "marketing_audit", "content_studio",
-                                     name="venture_enum"), nullable=False),
+        sa.Column("venture",
+                  postgresql.ENUM(name="venture_enum", create_type=False),
+                  nullable=False),
         sa.Column("status", sa.String(50), nullable=False, server_default="pending"),
         sa.Column("phase_current", sa.Integer, nullable=True),
         sa.Column("phase_total", sa.Integer, nullable=True),
-        sa.Column("input_data", postgresql.JSONB(astext_type=sa.Text()), nullable=False,
-                  server_default="{}"),
-        sa.Column("output_data", postgresql.JSONB(astext_type=sa.Text()), nullable=False,
-                  server_default="{}"),
+        sa.Column("input_data", postgresql.JSONB(astext_type=sa.Text()),
+                  nullable=False, server_default="{}"),
+        sa.Column("output_data", postgresql.JSONB(astext_type=sa.Text()),
+                  nullable=False, server_default="{}"),
         sa.Column("error_message", sa.Text, nullable=True),
         sa.Column("celery_task_id", sa.String(100), nullable=True),
-        sa.Column("environment", sa.Enum("production", "staging",
-                                          name="environment_enum"),
+        sa.Column("environment",
+                  postgresql.ENUM(name="environment_enum", create_type=False),
                   nullable=False, server_default="production"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False,
                   server_default=sa.text("NOW()")),
@@ -77,10 +76,11 @@ def upgrade() -> None:
         sa.Column("job_id", postgresql.UUID(as_uuid=True),
                   sa.ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False),
         sa.Column("phase", sa.Integer, nullable=True),
-        sa.Column("event_type", sa.Enum("started", "completed", "failed", "paused", "resumed",
-                                         name="phase_event_type_enum"), nullable=False),
-        sa.Column("details", postgresql.JSONB(astext_type=sa.Text()), nullable=False,
-                  server_default="{}"),
+        sa.Column("event_type",
+                  postgresql.ENUM(name="phase_event_type_enum", create_type=False),
+                  nullable=False),
+        sa.Column("details", postgresql.JSONB(astext_type=sa.Text()),
+                  nullable=False, server_default="{}"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False,
                   server_default=sa.text("NOW()")),
     )
@@ -124,12 +124,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Drop all four tables and enum types."""
     op.drop_table("revenue_events")
     op.drop_table("cost_events")
     op.drop_table("phase_events")
     op.drop_table("jobs")
-
-    phase_event_type_enum.drop(op.get_bind(), checkfirst=True)
-    environment_enum.drop(op.get_bind(), checkfirst=True)
-    venture_enum.drop(op.get_bind(), checkfirst=True)
+    op.execute("DROP TYPE IF EXISTS phase_event_type_enum")
+    op.execute("DROP TYPE IF EXISTS environment_enum")
+    op.execute("DROP TYPE IF EXISTS venture_enum")

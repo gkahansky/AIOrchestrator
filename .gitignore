@@ -50,3 +50,4 @@ htmlcov/
 langsmith_traces/
 google_token.json
 google_oauth_client.json
+.claude/settings.local.json

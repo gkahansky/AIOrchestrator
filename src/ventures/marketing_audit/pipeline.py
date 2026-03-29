@@ -43,13 +43,15 @@ from ventures.marketing_audit.sample_report import (
 )
 
 
-def run_order(order: dict, output_dir: str = "./output/marketing_audit") -> dict:
+def run_order(order: dict, output_dir: str | None = None) -> dict:
     """
     Run all pipeline phases for a single audit order.
     Saves order state after each phase — safe to re-run from any checkpoint.
 
     Returns the updated order dict.
     """
+    if output_dir is None:
+        output_dir = str(Path(config.OUTPUT_DIR) / "marketing_audit")
     work_dir = Path(output_dir) / order["order_id"]
     work_dir.mkdir(parents=True, exist_ok=True)
     _save_order(order, work_dir)
@@ -305,12 +307,18 @@ def _generate_pdf(report_data: dict, output_path: str) -> None:
 
 
 def _resolve_scripts_path() -> str:
+    # 1. Explicit env var (local dev or Railway)
     env = os.environ.get("AI_MARKETING_CLAUDE_PATH", "")
     if env:
         return str(Path(env) / "scripts")
-    # pipeline.py lives at src/ventures/marketing_audit/ → 5 parents up = sibling repo root
-    repo_root = Path(__file__).parent.parent.parent.parent.parent
-    return str(repo_root / "ai-marketing-claude" / "scripts")
+    # 2. Git submodule: vendor/ai-marketing-claude inside this repo
+    repo_root = Path(__file__).parent.parent.parent.parent
+    vendor_path = repo_root / "vendor" / "ai-marketing-claude" / "scripts"
+    if vendor_path.exists():
+        return str(vendor_path)
+    # 3. Sibling repo on local dev machines (legacy fallback)
+    sibling_root = repo_root.parent
+    return str(sibling_root / "ai-marketing-claude" / "scripts")
 
 
 def _write_fallback_pdf(report_data: dict, output_path: str) -> None:

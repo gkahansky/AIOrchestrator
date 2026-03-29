@@ -58,6 +58,9 @@ TIERS = {
     },
 }
 
+# ─── Output directory ─────────────────────────────────────────────────────────
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./output")
+
 # ─── Review settings ──────────────────────────────────────────────────────────
 AUTO_APPROVE = os.getenv("CONTENT_STUDIO_AUTO_APPROVE", "false").lower() == "true"
 AUTO_APPROVE_AFTER = int(os.getenv("CONTENT_STUDIO_AUTO_APPROVE_AFTER", "20"))

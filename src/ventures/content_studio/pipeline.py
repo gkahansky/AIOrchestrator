@@ -36,13 +36,15 @@ from ventures.content_studio.content_pdf import generate_full_pdf, generate_samp
 from ventures.content_studio.prompts import SYSTEM_PROMPT, build_content_prompt, parse_content_response
 
 
-def run_order(order: dict, output_dir: str = "./output/content_studio") -> dict:
+def run_order(order: dict, output_dir: str | None = None) -> dict:
     """
     Run all pipeline phases for a single order.
     Saves order state after each phase — safe to re-run from any checkpoint.
 
     Returns the updated order dict.
     """
+    if output_dir is None:
+        output_dir = str(Path(config.OUTPUT_DIR) / "content_studio")
     work_dir = Path(output_dir) / order["order_id"]
     work_dir.mkdir(parents=True, exist_ok=True)
     _save_order(order, work_dir)

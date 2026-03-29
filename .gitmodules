@@ -1,0 +1,3 @@
+[submodule "vendor/ai-marketing-claude"]
+	path = vendor/ai-marketing-claude
+	url = https://github.com/zubair-trabzada/ai-marketing-claude.git

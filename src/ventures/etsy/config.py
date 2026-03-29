@@ -32,6 +32,9 @@ DRIVE_06_AUDIT_DRAFTS = os.getenv("DRIVE_06_AUDIT_DRAFTS_ID")
 DRIVE_06_AUDIT_PUBLISHED = os.getenv("DRIVE_06_AUDIT_PUBLISHED_ID")
 DRIVE_07_PROMO = os.getenv("DRIVE_07_PROMO_ID")
 
+# ─── Output directory ─────────────────────────────────────────────────────────
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./output")
+
 # ─── Pipeline settings ────────────────────────────────────────────────────────
 THEME_MIN_SCORE = 60            # Themes below this score are dropped after Phase 1
 SUBJECTS_PER_THEME = 20        # Number of subjects generated per theme in Phase 2

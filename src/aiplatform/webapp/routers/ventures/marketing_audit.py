@@ -41,7 +41,15 @@ def create_audit_order(
         "client_email": req.client_email,
         "status":       "pending",
     }
+    # Write initial job record immediately — ensures the job is visible in the
+    # jobs list even if the worker hasn't picked up the task yet or fails.
+    from aiplatform.database.job_ops import upsert_job
+    upsert_job(order, "marketing_audit")
+
     task = celery_task.delay(order)
+    # Update the job row with the Celery task ID now that we have it.
+    upsert_job(order, "marketing_audit", celery_task_id=task.id)
+
     return AuditOrderResponse(order_id=order_id, celery_task_id=task.id)
 
 

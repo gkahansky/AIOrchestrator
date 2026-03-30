@@ -97,7 +97,7 @@ _STATUS_EVENTS: dict[str, dict[str, tuple[int | None, str]]] = {
 }
 
 
-def upsert_job(order: dict, venture: str) -> None:
+def upsert_job(order: dict, venture: str, *, celery_task_id: str | None = None) -> None:
     """
     Insert or update a Job row from a pipeline order dict.
 
@@ -105,8 +105,10 @@ def upsert_job(order: dict, venture: str) -> None:
     If not found, inserts a new row.
 
     Args:
-        order:   The full order dict written by the pipeline (must contain "order_id").
-        venture: One of "marketing_audit", "content_studio", "etsy".
+        order:           The full order dict written by the pipeline (must contain "order_id").
+        venture:         One of "marketing_audit", "content_studio", "etsy".
+        celery_task_id:  Optional Celery task ID to store on the job row (set by the API router
+                         after queuing, not available inside the pipeline itself).
     """
     order_id = str(order.get("order_id") or order.get("id") or "").strip()
     if not order_id:
@@ -131,6 +133,8 @@ def upsert_job(order: dict, venture: str) -> None:
                 existing.phase_current = phase_current
                 existing.output_data = dict(order)
                 existing.updated_at = now
+                if celery_task_id:
+                    existing.celery_task_id = celery_task_id
                 if status in _TERMINAL_STATUSES and not existing.completed_at:
                     existing.completed_at = now
                 if status not in _STARTED_STATUSES and not existing.started_at:
@@ -144,6 +148,7 @@ def upsert_job(order: dict, venture: str) -> None:
                     phase_total=phase_total,
                     input_data={"order_id": order_id},
                     output_data=dict(order),
+                    celery_task_id=celery_task_id,
                     started_at=now if status not in _STARTED_STATUSES else None,
                 )
                 db.add(new_job)

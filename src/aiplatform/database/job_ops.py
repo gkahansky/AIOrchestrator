@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from aiplatform.database.models import Job
+from aiplatform.database.models import Job, PhaseEvent
 from aiplatform.database.session import get_session
 
 
@@ -65,6 +65,37 @@ _PHASE_MAPS: dict[str, dict[str, tuple[int, int]]] = {
 _TERMINAL_STATUSES = {"delivered", "published", "failed"}
 _STARTED_STATUSES  = {"pending"}  # anything NOT in this set counts as started
 
+# Status → (phase_number, event_type) — only meaningful transition milestones.
+# "pending" and intermediate non-transition statuses are intentionally omitted.
+_STATUS_EVENTS: dict[str, dict[str, tuple[int | None, str]]] = {
+    "marketing_audit": {
+        "scraping":          (1, "started"),
+        "scraped":           (1, "completed"),
+        "auditing":          (3, "started"),
+        "audited":           (3, "completed"),
+        "generating_report": (4, "started"),
+        "report_ready":      (4, "completed"),
+        "review_pending":    (5, "paused"),
+        "approved":          (5, "resumed"),
+        "delivering":        (6, "started"),
+        "delivered":         (6, "completed"),
+        "failed":            (None, "failed"),
+    },
+    "content_studio": {
+        "transcribing":   (1, "started"),
+        "transcribed":    (1, "completed"),
+        "generating":     (2, "started"),
+        "generated":      (2, "completed"),
+        "packaging":      (3, "started"),
+        "packaged":       (3, "completed"),
+        "review_pending": (4, "paused"),
+        "approved":       (4, "resumed"),
+        "delivering":     (5, "started"),
+        "delivered":      (5, "completed"),
+        "failed":         (None, "failed"),
+    },
+}
+
 
 def upsert_job(order: dict, venture: str) -> None:
     """
@@ -93,6 +124,8 @@ def upsert_job(order: dict, venture: str) -> None:
                 Job.input_data["order_id"].astext == order_id,
             ).first()
 
+            old_status = existing.status if existing else None
+
             if existing:
                 existing.status = status
                 existing.phase_current = phase_current
@@ -102,8 +135,9 @@ def upsert_job(order: dict, venture: str) -> None:
                     existing.completed_at = now
                 if status not in _STARTED_STATUSES and not existing.started_at:
                     existing.started_at = now
+                job_id = existing.id
             else:
-                db.add(Job(
+                new_job = Job(
                     venture=venture,
                     status=status,
                     phase_current=phase_current,
@@ -111,6 +145,20 @@ def upsert_job(order: dict, venture: str) -> None:
                     input_data={"order_id": order_id},
                     output_data=dict(order),
                     started_at=now if status not in _STARTED_STATUSES else None,
+                )
+                db.add(new_job)
+                db.flush()  # populate new_job.id before logging the phase event
+                job_id = new_job.id
+
+            # Append a PhaseEvent if this status represents a meaningful transition
+            event_spec = _STATUS_EVENTS.get(venture, {}).get(status)
+            if event_spec and old_status != status:
+                phase_n, event_type = event_spec
+                db.add(PhaseEvent(
+                    job_id=job_id,
+                    phase=phase_n,
+                    event_type=event_type,
+                    details={},
                 ))
     except SQLAlchemyError as exc:
         print(f"[upsert_job:{venture}] non-fatal DB write failed: {exc}")

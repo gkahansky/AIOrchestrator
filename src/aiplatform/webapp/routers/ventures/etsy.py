@@ -1,0 +1,67 @@
+"""
+Etsy venture router.
+
+  POST /api/ventures/etsy/phase/{n}   — queue a pipeline phase via Celery
+  GET  /api/ventures/etsy/listings    — list Etsy jobs from the DB
+"""
+
+from typing import Any
+
+from fastapi import APIRouter, Body, Depends, Path
+
+from aiplatform.database.models import Job
+from aiplatform.database.session import get_db
+from aiplatform.webapp.auth import require_auth
+from aiplatform.webapp.schemas import (
+    EtsyListing,
+    EtsyListingsResponse,
+    EtsyPhaseResponse,
+)
+
+router = APIRouter()
+
+
+@router.post("/phase/{n}", response_model=EtsyPhaseResponse)
+def run_etsy_phase(
+    n: int = Path(..., ge=1, le=7),
+    params: dict[str, Any] = Body(default_factory=dict),
+    _: str = Depends(require_auth),
+) -> EtsyPhaseResponse:
+    """Queue an Etsy pipeline phase as a Celery task. Body is optional extra params."""
+    from aiplatform.worker import run_etsy_phase as celery_task
+
+    task = celery_task.delay(n, params)
+    return EtsyPhaseResponse(celery_task_id=task.id, phase=n)
+
+
+@router.get("/listings", response_model=EtsyListingsResponse)
+def get_etsy_listings(
+    _: str = Depends(require_auth),
+    db=Depends(get_db),
+) -> EtsyListingsResponse:
+    """Return all Etsy jobs (subjects), mapped to listing objects for the UI."""
+    jobs = (
+        db.query(Job)
+        .filter(Job.venture == "etsy")
+        .order_by(Job.created_at.desc())
+        .limit(200)
+        .all()
+    )
+
+    listings = []
+    for job in jobs:
+        out = job.output_data or {}
+        inp = job.input_data  or {}
+        listings.append(
+            EtsyListing(
+                listing_id=out.get("listing_id") or inp.get("listing_id"),
+                title=out.get("title") or inp.get("title") or inp.get("slug"),
+                status=job.status,
+                drive_folder=out.get("drive_folder_url") or out.get("drive_folder"),
+                tags=out.get("tags", []),
+                price_usd=out.get("price_usd") or inp.get("price_usd"),
+                created_at=job.created_at,
+            )
+        )
+
+    return EtsyListingsResponse(items=listings, total=len(listings))

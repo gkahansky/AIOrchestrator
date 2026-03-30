@@ -1,0 +1,206 @@
+"""
+Celery worker — one task per venture pipeline.
+
+This is the canonical worker module. The webapp re-exports from here.
+
+Start locally:
+    celery -A aiplatform.worker worker --loglevel=info
+
+On Railway: the separate "worker" service runs this command.
+
+Approval gate pattern
+─────────────────────
+When a pipeline reaches review_pending it writes to DB and returns normally.
+The Celery task also sets a Redis key:
+
+    approval_gate:{job_id} = "pending"
+
+POST /api/jobs/{id}/approve updates that key to "approve" and re-dispatches
+the same Celery task with order["status"] = "approved".  The pipeline's
+checkpoint logic (if order["status"] in (..., "review_pending")) re-enters
+the review phase, sees "approved", and continues to delivery.
+
+This keeps CLI scripts unchanged — they call pipeline.run_order() directly
+without Redis.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+# Allow imports from src/
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from dotenv import load_dotenv
+load_dotenv()
+
+from celery import Celery
+
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+
+celery_app = Celery(
+    "aiplatform",
+    broker=REDIS_URL,
+    backend=REDIS_URL,
+)
+
+celery_app.conf.update(
+    task_serializer="json",
+    result_serializer="json",
+    accept_content=["json"],
+    task_track_started=True,
+    task_acks_late=True,           # re-queue if worker dies mid-task
+    worker_prefetch_multiplier=1,  # one task at a time per worker thread
+    result_expires=86400,          # 24 hours
+)
+
+
+# ── helpers ────────────────────────────────────────────────────────────────────
+
+def _mark_failed(order_id: str | None, venture: str, error: str) -> None:
+    """Write a failure status to the DB — best-effort, never raises."""
+    if not order_id:
+        return
+    try:
+        from aiplatform.database.models import Job
+        from aiplatform.database.session import get_session
+
+        with get_session() as db:
+            job = db.query(Job).filter(
+                Job.venture == venture,
+                Job.input_data["order_id"].astext == order_id,
+            ).first()
+            if job:
+                job.status = "failed"
+                job.error_message = error[:500]
+    except Exception:
+        pass
+
+
+def _set_approval_gate(job_id: str, signal: str) -> None:
+    """Write an approval signal to Redis so the API + frontend can poll."""
+    try:
+        import redis as redis_lib
+        r = redis_lib.from_url(REDIS_URL)
+        r.set(f"approval_gate:{job_id}", signal, ex=86400)
+    except Exception:
+        pass
+
+
+def _get_job_id(order: dict, venture: str) -> str | None:
+    """Look up the DB job UUID for an order — returns None if not found."""
+    try:
+        from aiplatform.database.models import Job
+        from aiplatform.database.session import get_session
+
+        with get_session() as db:
+            job = db.query(Job).filter(
+                Job.venture == venture,
+                Job.input_data["order_id"].astext == order.get("order_id", ""),
+            ).first()
+            return str(job.id) if job else None
+    except Exception:
+        return None
+
+
+# ── Etsy venture ───────────────────────────────────────────────────────────────
+
+@celery_app.task(bind=True, name="etsy.run_phase", max_retries=2)
+def run_etsy_phase(self, phase: int, params: dict) -> dict:
+    """Run a single Etsy pipeline phase."""
+    try:
+        from ventures.etsy import pipeline as etsy_pipeline
+
+        phase_fns = {
+            1: etsy_pipeline.run_phase_1,
+            2: etsy_pipeline.run_phase_2,
+            3: etsy_pipeline.run_phase_3,
+            4: etsy_pipeline.run_phase_4,
+            5: etsy_pipeline.run_phase_5_notify,
+            6: etsy_pipeline.run_phase_6,
+            7: etsy_pipeline.run_phase_7,
+        }
+
+        fn = phase_fns.get(phase)
+        if fn is None:
+            raise ValueError(f"Unknown Etsy phase: {phase}")
+
+        result = fn(**params)
+        return {"phase": phase, "status": "completed", "result": result}
+
+    except Exception as exc:
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=60)
+        raise
+
+
+# ── Marketing Audit venture ────────────────────────────────────────────────────
+
+@celery_app.task(bind=True, name="audit.run_order", max_retries=2)
+def run_audit_order(self, order: dict) -> dict:
+    """
+    Run a marketing audit order through all pipeline phases.
+
+    The pipeline pauses naturally at review_pending — it returns the order dict
+    with status="review_pending".  This task then sets the Redis approval gate
+    key to "pending" so the frontend can poll its state.
+
+    On re-dispatch from POST /api/jobs/{id}/approve, the order arrives with
+    status="approved" and the pipeline continues directly to delivery.
+    """
+    try:
+        from ventures.marketing_audit import pipeline as audit_pipeline
+
+        result = audit_pipeline.run_order(order)
+
+        # If pipeline paused at review gate, signal Redis
+        if result.get("status") == "review_pending":
+            job_id = _get_job_id(order, "marketing_audit")
+            if job_id:
+                _set_approval_gate(job_id, "pending")
+
+        return {
+            "order_id": order.get("order_id"),
+            "status":   result.get("status"),
+            "result":   result,
+        }
+
+    except Exception as exc:
+        _mark_failed(order.get("order_id"), "marketing_audit", str(exc))
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=120)
+        raise
+
+
+# ── Content Studio venture ─────────────────────────────────────────────────────
+
+@celery_app.task(bind=True, name="podcast.run_order", max_retries=2)
+def run_podcast_order(self, order: dict) -> dict:
+    """
+    Run a podcast show notes order through all pipeline phases.
+
+    Same approval gate pattern as run_audit_order.
+    """
+    try:
+        from ventures.content_studio import pipeline as podcast_pipeline
+
+        result = podcast_pipeline.run_order(order)
+
+        if result.get("status") == "review_pending":
+            job_id = _get_job_id(order, "content_studio")
+            if job_id:
+                _set_approval_gate(job_id, "pending")
+
+        return {
+            "order_id": order.get("order_id"),
+            "status":   result.get("status"),
+            "result":   result,
+        }
+
+    except Exception as exc:
+        _mark_failed(order.get("order_id"), "content_studio", str(exc))
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=120)
+        raise

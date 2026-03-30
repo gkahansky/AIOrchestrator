@@ -1,7 +1,7 @@
 """
 API authentication — simple Bearer token for internal/admin use.
 
-The token is set via the API_SECRET_KEY environment variable.
+The token is set via the API_SECRET_TOKEN environment variable.
 Phase 3 (React frontend) will use this same token via a login endpoint.
 """
 
@@ -12,7 +12,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 _bearer = HTTPBearer(auto_error=False)
 
-_SECRET = os.environ.get("API_SECRET_KEY", "")
+_SECRET = os.environ.get("API_SECRET_TOKEN", "")
 
 
 def require_auth(

@@ -122,8 +122,18 @@ def upgrade() -> None:
     op.create_index("ix_revenue_events_job_id", "revenue_events", ["job_id"])
     op.create_index("ix_revenue_events_venture", "revenue_events", ["venture"])
 
+    # ── platform_settings ──────────────────────────────────────────────────────
+    op.create_table(
+        "platform_settings",
+        sa.Column("key", sa.String(200), primary_key=True),
+        sa.Column("value", sa.Text, nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False,
+                  server_default=sa.text("NOW()")),
+    )
+
 
 def downgrade() -> None:
+    op.drop_table("platform_settings")
     op.drop_table("revenue_events")
     op.drop_table("cost_events")
     op.drop_table("phase_events")

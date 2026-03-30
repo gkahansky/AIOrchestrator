@@ -159,3 +159,65 @@ class PodcastApproveRequest(BaseModel):
     order_id: str
     action: str = Field(..., pattern="^(approve|reject|revision)$")
     notes: str | None = None
+
+
+# ── Jobs — approve / reject ─────────────────────────────────────────────────────
+
+class JobApproveRequest(BaseModel):
+    notes: str | None = None
+
+
+class JobRejectRequest(BaseModel):
+    reason: str | None = None
+
+
+# ── Venture — Etsy listings ─────────────────────────────────────────────────────
+
+class EtsyListing(BaseModel):
+    listing_id: str | None
+    title: str | None
+    status: str
+    drive_folder: str | None
+    tags: list[str] = Field(default_factory=list)
+    price_usd: float | None
+    created_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+class EtsyListingsResponse(BaseModel):
+    items: list[EtsyListing]
+    total: int
+
+
+# ── Platform settings ─────────────────────────────────────────────────────────
+
+class SettingsKeyResponse(BaseModel):
+    service: str
+    masked_key: str          # last 6 chars only, e.g. "...abc123"
+    is_set: bool
+    last_tested: datetime | None = None
+    test_ok: bool | None = None
+
+
+class SettingsKeyUpdate(BaseModel):
+    key: str = Field(..., min_length=1)
+
+
+class SettingsKeyTestResponse(BaseModel):
+    service: str
+    ok: bool
+    detail: str
+
+
+class ToolSettingUpdate(BaseModel):
+    active: bool
+
+
+class ToolSettingResponse(BaseModel):
+    capability: str
+    tool_id: str
+    tier: str
+    cost_per_call: float
+    active: bool
+    note: str | None = None

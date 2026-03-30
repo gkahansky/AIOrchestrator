@@ -41,6 +41,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from aiplatform.database.session import ping as db_ping
 from aiplatform.webapp.routers import health
+from aiplatform.webapp.routers.platform import auth as platform_auth
 from aiplatform.webapp.routers.platform import jobs as platform_jobs
 from aiplatform.webapp.routers.platform import dashboard as platform_dashboard
 from aiplatform.webapp.routers.platform import finance as platform_finance
@@ -93,6 +94,9 @@ def create_app() -> FastAPI:
 
     # Health — no auth, no prefix (returns at /api/health)
     app.include_router(health.router, prefix="/api", tags=["platform"])
+
+    # Auth — no auth required (issues tokens)
+    app.include_router(platform_auth.router, prefix="/api/auth", tags=["auth"])
 
     # Platform — jobs, dashboard, finance, settings
     app.include_router(platform_jobs.router,     prefix="/api/jobs",                        tags=["jobs"])

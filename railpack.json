@@ -1,5 +1,5 @@
 {
   "deploy": {
-    "startCommand": "/app/.venv/bin/python -m alembic upgrade head && /app/.venv/bin/uvicorn aiplatform.webapp.main:app --host 0.0.0.0 --port $PORT"
+    "startCommand": "sh /app/start.sh"
   }
 }

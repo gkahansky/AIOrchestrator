@@ -40,6 +40,10 @@ DATABASE_URL = os.environ.get(
     "postgresql://postgres:dev@localhost:5432/aiinfra",
 )
 
+# Railway provides postgres:// but SQLAlchemy 2.x requires postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 # SQLite needs connect_args for thread safety in tests
 _connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 

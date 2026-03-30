@@ -49,7 +49,14 @@ from aiplatform.webapp.routers.ventures import etsy as ventures_etsy
 from aiplatform.webapp.routers.ventures import marketing_audit as ventures_audit
 from aiplatform.webapp.routers.ventures import content_studio as ventures_podcast
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Startup diagnostics — log key env vars (masked)
+_db_url = os.environ.get("DATABASE_URL", "NOT SET")
+_db_url_masked = _db_url[:30] + "..." if len(_db_url) > 30 else _db_url
+logger.info("DATABASE_URL = %s", _db_url_masked)
+logger.info("PYTHONPATH = %s", os.environ.get("PYTHONPATH", "NOT SET"))
 
 
 # ── Google service account — materialise from env var at startup ───────────────

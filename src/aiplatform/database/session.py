@@ -54,6 +54,8 @@ engine = create_engine(
     pool_size=5,
     max_overflow=10,
     echo=False,               # set True locally to log all SQL
+    # Do not connect on import — only when first query is made
+    pool_recycle=300,
 )
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)

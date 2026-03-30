@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AI-Infra | Finance &amp; Monitoring</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "tertiary-fixed-dim": "#e0b6ff",
+                        "on-tertiary-fixed-variant": "#6a0baa",
+                        "surface-container": "#eaedff",
+                        "primary-fixed-dim": "#b0c6ff",
+                        "on-tertiary-container": "#fffbff",
+                        "surface-bright": "#faf8ff",
+                        "primary-fixed": "#d9e2ff",
+                        "on-primary-fixed-variant": "#00429c",
+                        "on-secondary-fixed-variant": "#38485d",
+                        "error": "#ba1a1a",
+                        "inverse-surface": "#283044",
+                        "on-tertiary": "#ffffff",
+                        "surface": "#faf8ff",
+                        "background": "#faf8ff",
+                        "secondary-fixed-dim": "#b7c8e1",
+                        "inverse-on-surface": "#eef0ff",
+                        "surface-container-lowest": "#ffffff",
+                        "tertiary-fixed": "#f2daff",
+                        "on-surface-variant": "#424655",
+                        "primary-container": "#006df8",
+                        "on-secondary-container": "#54647a",
+                        "surface-dim": "#d2d9f4",
+                        "error-container": "#ffdad6",
+                        "on-secondary": "#ffffff",
+                        "tertiary-container": "#9c4ddc",
+                        "on-error-container": "#93000a",
+                        "surface-container-low": "#f2f3ff",
+                        "on-background": "#131b2e",
+                        "secondary": "#505f76",
+                        "on-error": "#ffffff",
+                        "tertiary": "#8130c1",
+                        "outline": "#727787",
+                        "on-primary": "#ffffff",
+                        "surface-tint": "#0058cb",
+                        "secondary-container": "#d0e1fb",
+                        "on-primary-container": "#fefcff",
+                        "on-primary-fixed": "#001945",
+                        "on-tertiary-fixed": "#2e004e",
+                        "primary": "#0056c6",
+                        "outline-variant": "#c2c6d8",
+                        "surface-container-high": "#e2e7ff",
+                        "on-surface": "#131b2e",
+                        "inverse-primary": "#b0c6ff"
+                    },
+                    fontFamily: {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+        .glass-panel {
+            background: rgba(218, 226, 253, 0.7);
+            backdrop-filter: blur(12px);
+        }
+        .tabular-nums { font-variant-numeric: tabular-nums; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface">
+<!-- SideNavBar Shell -->
+<aside class="h-screen w-64 fixed left-0 top-0 flex flex-col bg-slate-50 border-r border-slate-200 z-50">
+<div class="p-6 flex items-center gap-3">
+<div class="w-8 h-8 bg-primary rounded flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary text-sm" data-icon="account_tree">account_tree</span>
+</div>
+<div>
+<h1 class="text-xl font-black tracking-tight text-slate-900 leading-none">AI-Infra</h1>
+<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Infrastructure Admin</p>
+</div>
+</div>
+<nav class="flex-1 mt-4 px-3 space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-200/50 transition-colors rounded-md group" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="text-sm font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-200/50 transition-colors rounded-md group" href="#">
+<span class="material-symbols-outlined" data-icon="account_tree">account_tree</span>
+<span class="text-sm font-medium">Ventures</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-blue-700 font-semibold border-r-4 border-blue-600 bg-slate-200/50 transition-colors rounded-l-md group" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span class="text-sm font-medium">Finance</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-200/50 transition-colors rounded-md group" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+</nav>
+<div class="p-4 mt-auto border-t border-slate-100">
+<button class="w-full flex items-center justify-between px-4 py-2 bg-slate-100 rounded text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-all">
+<span>Environment Switcher</span>
+<span class="material-symbols-outlined text-[16px]" data-icon="unfold_more">unfold_more</span>
+</button>
+<div class="mt-4 space-y-1">
+<a class="flex items-center gap-3 px-4 py-2 text-slate-500 hover:text-slate-900 transition-colors" href="#">
+<span class="material-symbols-outlined text-sm" data-icon="monitor_heart">monitor_heart</span>
+<span class="text-xs font-medium">System Health</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-slate-500 hover:text-slate-900 transition-colors" href="#">
+<span class="material-symbols-outlined text-sm" data-icon="account_circle">account_circle</span>
+<span class="text-xs font-medium">Profile</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- TopNavBar Shell -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 z-40 bg-white/70 backdrop-blur-xl flex justify-between items-center px-8">
+<div class="flex items-center gap-4 bg-surface-container-low px-3 py-1.5 rounded w-96">
+<span class="material-symbols-outlined text-slate-400 text-lg" data-icon="search">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-xs w-full font-body text-on-surface" placeholder="Search transactions, ventures or keys..." type="text"/>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-400 hover:text-blue-500 transition-all cursor-pointer" data-icon="notifications">notifications</span>
+<div class="w-8 h-8 rounded-full bg-slate-200 overflow-hidden border border-white">
+<img alt="User Avatar" class="w-full h-full object-cover" data-alt="professional portrait of a system administrator in a minimal office setting with soft natural lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBqE8hLZ-D3AXGgta9qvzurCDkcAz00Co1hXZNVsDL2VayiVpdRnR5nlMMK6U3PKZaLBddnhtwi9zMl0MJtz1dbpY0nmM-DUmHeiiIsVBKgq9NRiJ2EXtlns-LfCgkuDG3ZLGLniR2gWv9iLJ_JQwwTSel34wCTk5c_BS9Ld5W0HBENoD078HV17gfZdCR4hcclyX7OIOf2BftVVcM8zAfNs6nZiFApDQPxPwcMvdJTpskjQHFKVD6PANt4WKeuWe96L72jpLgpMYMs"/>
+</div>
+</div>
+<button class="bg-gradient-to-br from-primary to-primary-container text-on-primary px-4 py-2 rounded text-xs font-bold tracking-tight shadow-sm hover:opacity-90 transition-opacity">
+                New Order
+            </button>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-64 pt-24 pb-12 px-8 min-h-screen">
+<!-- Page Header & Environment Badge -->
+<div class="flex justify-between items-end mb-8">
+<div>
+<nav class="flex text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 gap-2">
+<span>Finance</span>
+<span>/</span>
+<span class="text-primary">Overview</span>
+</nav>
+<h2 class="text-3xl font-extrabold tracking-tight text-on-surface">Platform P&amp;L and Health</h2>
+</div>
+<div class="flex items-center gap-2 px-3 py-1 bg-primary rounded-sm">
+<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+<span class="text-[10px] font-bold text-on-primary uppercase tracking-tighter">Environment: PRODUCTION</span>
+</div>
+</div>
+<!-- Top Row: Financial Charts Bento Grid -->
+<div class="grid grid-cols-12 gap-6 mb-8">
+<!-- Monthly Revenue vs Costs -->
+<div class="col-span-8 bg-surface-container-lowest rounded-lg p-6 flex flex-col h-[340px]">
+<div class="flex justify-between items-start mb-6">
+<div>
+<h3 class="text-sm font-bold text-on-surface-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="trending_up">trending_up</span>
+                            P&amp;L Trend Analysis
+                        </h3>
+<p class="text-xs text-slate-400 font-medium">Revenue vs API Operational Costs (Trailing 6 Months)</p>
+</div>
+<div class="flex gap-4">
+<div class="flex items-center gap-2 text-[10px] font-semibold text-slate-500">
+<span class="w-2 h-2 rounded-full bg-primary"></span> Revenue
+                        </div>
+<div class="flex items-center gap-2 text-[10px] font-semibold text-slate-500">
+<span class="w-2 h-2 rounded-full bg-tertiary-container"></span> API Costs
+                        </div>
+</div>
+</div>
+<div class="flex-1 flex items-end gap-3 px-2">
+<!-- Mock Chart Bars -->
+<div class="flex-1 flex flex-col justify-end gap-1">
+<div class="bg-primary/20 h-[40%] w-full rounded-t-sm relative group">
+<div class="bg-primary h-full w-full rounded-t-sm"></div>
+<div class="absolute -top-10 left-1/2 -translate-x-1/2 glass-panel px-2 py-1 rounded shadow-xl text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity z-10">$12.4k</div>
+</div>
+<div class="bg-tertiary-container h-[15%] w-full rounded-b-sm"></div>
+<span class="text-[10px] font-bold text-slate-400 text-center mt-2">MAR</span>
+</div>
+<div class="flex-1 flex flex-col justify-end gap-1">
+<div class="bg-primary h-[55%] w-full rounded-t-sm"></div>
+<div class="bg-tertiary-container h-[18%] w-full rounded-b-sm"></div>
+<span class="text-[10px] font-bold text-slate-400 text-center mt-2">APR</span>
+</div>
+<div class="flex-1 flex flex-col justify-end gap-1">
+<div class="bg-primary h-[62%] w-full rounded-t-sm"></div>
+<div class="bg-tertiary-container h-[22%] w-full rounded-b-sm"></div>
+<span class="text-[10px] font-bold text-slate-400 text-center mt-2">MAY</span>
+</div>
+<div class="flex-1 flex flex-col justify-end gap-1">
+<div class="bg-primary h-[78%] w-full rounded-t-sm relative group">
+<div class="bg-primary h-full w-full rounded-t-sm"></div>
+<div class="absolute -top-10 left-1/2 -translate-x-1/2 glass-panel px-2 py-1 rounded shadow-xl text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity z-10">$24.1k</div>
+</div>
+<div class="bg-tertiary-container h-[25%] w-full rounded-b-sm"></div>
+<span class="text-[10px] font-bold text-slate-400 text-center mt-2">JUN</span>
+</div>
+<div class="flex-1 flex flex-col justify-end gap-1">
+<div class="bg-primary h-[85%] w-full rounded-t-sm"></div>
+<div class="bg-tertiary-container h-[20%] w-full rounded-b-sm"></div>
+<span class="text-[10px] font-bold text-slate-400 text-center mt-2">JUL</span>
+</div>
+<div class="flex-1 flex flex-col justify-end gap-1">
+<div class="bg-primary h-[92%] w-full rounded-t-sm relative group">
+<div class="bg-primary h-full w-full rounded-t-sm"></div>
+<div class="absolute -top-10 left-1/2 -translate-x-1/2 glass-panel px-2 py-1 rounded shadow-xl text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity z-10">$28.9k</div>
+</div>
+<div class="bg-tertiary-container h-[18%] w-full rounded-b-sm"></div>
+<span class="text-[10px] font-bold text-slate-400 text-center mt-2">AUG</span>
+</div>
+</div>
+</div>
+<!-- Revenue by Venture (Donut/Pie) -->
+<div class="col-span-4 bg-surface-container-lowest rounded-lg p-6 flex flex-col h-[340px]">
+<h3 class="text-sm font-bold text-on-surface-variant mb-1">Revenue by Venture</h3>
+<p class="text-xs text-slate-400 font-medium mb-6">Market share distribution</p>
+<div class="flex-1 flex flex-col items-center justify-center relative">
+<!-- Mock Pie/Donut with SVG -->
+<svg class="w-40 h-40" viewbox="0 0 36 36">
+<path class="text-primary-container" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="45, 100" stroke-width="6"></path>
+<path class="text-tertiary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="30, 100" stroke-dashoffset="-45" stroke-width="6"></path>
+<path class="text-secondary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="25, 100" stroke-dashoffset="-75" stroke-width="6"></path>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+<span class="text-xl font-black text-on-surface tabular-nums">$142k</span>
+<span class="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Total ARR</span>
+</div>
+</div>
+<div class="mt-4 space-y-2">
+<div class="flex justify-between items-center text-[10px]">
+<div class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-primary-container"></span> <span class="font-medium text-slate-600">MiroPrintStudio</span></div>
+<span class="font-bold">45%</span>
+</div>
+<div class="flex justify-between items-center text-[10px]">
+<div class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> <span class="font-medium text-slate-600">ContentFlux AI</span></div>
+<span class="font-bold">30%</span>
+</div>
+<div class="flex justify-between items-center text-[10px]">
+<div class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-secondary"></span> <span class="font-medium text-slate-600">LogiFlow Infra</span></div>
+<span class="font-bold">25%</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Middle Section: ROAS Table -->
+<section class="mb-8">
+<div class="flex items-center justify-between mb-4">
+<div class="flex items-center gap-3">
+<h3 class="text-lg font-extrabold tracking-tight">ROAS Performance: MiroPrintStudio</h3>
+<div class="bg-surface-container-high px-2 py-0.5 rounded text-[10px] font-bold text-primary border border-primary/10">30D PERFORMANCE</div>
+</div>
+<div class="relative group">
+<button class="flex items-center gap-2 text-xs font-semibold text-primary">
+<span class="material-symbols-outlined text-sm" data-icon="info">info</span>
+                        Understanding ROAS Logic
+                    </button>
+<!-- Tooltip Mockup -->
+<div class="absolute right-0 bottom-full mb-2 w-64 glass-panel p-4 rounded-lg shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
+<h4 class="text-[10px] font-bold uppercase tracking-widest text-primary mb-2">Cost Breakdown Logic</h4>
+<div class="space-y-2">
+<div class="flex justify-between text-[10px]">
+<span class="text-slate-500">LLM Tokens (avg/job)</span>
+<span class="font-bold text-on-surface">$0.042</span>
+</div>
+<div class="flex justify-between text-[10px]">
+<span class="text-slate-500">Image Generation (SDXL)</span>
+<span class="font-bold text-on-surface">$0.180</span>
+</div>
+<div class="flex justify-between text-[10px]">
+<span class="text-slate-500">Storage &amp; Bandwidth</span>
+<span class="font-bold text-on-surface">$0.008</span>
+</div>
+<div class="pt-2 border-t border-slate-200 flex justify-between text-[11px]">
+<span class="font-bold text-slate-700">Total Net Cost</span>
+<span class="font-black text-primary">$0.230</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-lg overflow-hidden ring-1 ring-slate-200/50">
+<table class="w-full text-left border-collapse">
+<thead class="bg-slate-50/50 border-b border-slate-100">
+<tr>
+<th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Listing Title</th>
+<th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Ad Spend</th>
+<th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Revenue</th>
+<th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">ROAS</th>
+<th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Recommendation</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-50">
+<tr class="hover:bg-slate-50/50 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-slate-100 flex-shrink-0">
+<img alt="Thumbnail" class="w-full h-full object-cover rounded" data-alt="vibrant abstract digital art print with geometric shapes and neon colors on a clean white background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC2rttKfYBSc2aADKHiFh7LTh9PlTrBGemJA-_sosysEzh5cYuDapdKiA1C93dO9TkDkVqsSjhGf95Olf4yshfFzgnOCB4fXRAFlCI5YN0J3ar9EF2iKSxyQOjqfLHf128UPzo7n2fjrW6ykYPXAFayDmtwD643Z-CpuErDOJSszV9Tygc-WOtBWHhtp2TRLJe96XYSvuxDKjczhLQ69vwfALB7EX5uSyduTZg-EBdYMoMtoPs_IA_jG2Q_RbNvQDVHKl_kH8jy5CxO"/>
+</div>
+<span class="text-sm font-semibold text-slate-700">Neon Synthwave Poster v2</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm font-medium tabular-nums text-slate-600">$1,240.00</td>
+<td class="px-6 py-4 text-sm font-bold tabular-nums text-on-surface">$8,942.50</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-sm text-[11px] font-black tabular-nums">7.21x</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2 text-emerald-600 font-bold text-xs">
+<span class="material-symbols-outlined text-sm" data-icon="trending_up">trending_up</span>
+                                    Scale Up
+                                </div>
+</td>
+</tr>
+<tr class="bg-slate-50/30 hover:bg-slate-50/50 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-slate-100 flex-shrink-0">
+<img alt="Thumbnail" class="w-full h-full object-cover rounded" data-alt="minimalist watercolor painting of a mountain landscape with soft blue and grey tones" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCm4V4_2rLeDEzl-8Lnr-sqIRjLBkjmY_jrunku0ehoXsVmOtkpahyJtkproauJDs0KR--7ZYSvhiZA9Z8k0ULsS-KpFORonnweAiC2vVZMkJrraNg00PwoDFDg1g_k4OiroJbwBMMP6SqfPWsetEoncVhK-rARAxeCLA0G87Zr0Cr3QRXxsxi2kvP1W_zXTWZr8ogHrPUkNo_1D5hJz3j95YsfNcBce1LiCA1OK02X9vPnr0J0UsAG2GXdVEiAyRjXvN3aaGiq3InM"/>
+</div>
+<span class="text-sm font-semibold text-slate-700">Minimalist Alpine Series</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm font-medium tabular-nums text-slate-600">$850.00</td>
+<td class="px-6 py-4 text-sm font-bold tabular-nums text-on-surface">$2,410.00</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 bg-blue-100 text-blue-700 rounded-sm text-[11px] font-black tabular-nums">2.83x</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2 text-blue-600 font-bold text-xs">
+<span class="material-symbols-outlined text-sm" data-icon="pause_circle">pause_circle</span>
+                                    Maintain
+                                </div>
+</td>
+</tr>
+<tr class="hover:bg-slate-50/50 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-slate-100 flex-shrink-0">
+<img alt="Thumbnail" class="w-full h-full object-cover rounded" data-alt="charcoal sketch of a sleeping cat on a rustic textured paper background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBfyv0OEg7_2PGQqHer33JZwDo326Rue8r2_cDc_fkODXFR2JQEKBXLq4zQWpHYY6I9p91VDFwdqM5U7pbU4L-siPUKs1LtOfER--6pEy_2J6RYZ9gpJ0jIdBd7go7-ICD2Rth9Gg70U9jV-flNe1nP8hvZ2IBKIMELylPPKAcCILCkm_Lw8cWExBSdqfbes7wHc6vlftjBDNhtagpF2uiZynqwYp5GL-8829EobAdbV3u0S9vHDKZlNUxS7x2K2xaVBKJ5G6vJtGLk"/>
+</div>
+<span class="text-sm font-semibold text-slate-700">Custom Pet Portrait Bundle</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm font-medium tabular-nums text-slate-600">$2,100.00</td>
+<td class="px-6 py-4 text-sm font-bold tabular-nums text-on-surface">$1,980.00</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 bg-rose-100 text-rose-700 rounded-sm text-[11px] font-black tabular-nums">0.94x</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2 text-rose-600 font-bold text-xs">
+<span class="material-symbols-outlined text-sm" data-icon="warning">warning</span>
+                                    Audit Cost
+                                </div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- Bottom Section: API Key Management -->
+<section>
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-lg font-extrabold tracking-tight">API Infrastructure Health</h3>
+<div class="flex gap-2">
+<button class="px-3 py-1.5 bg-surface-container-highest text-on-surface text-xs font-bold rounded flex items-center gap-2 hover:bg-slate-200 transition-all">
+<span class="material-symbols-outlined text-sm" data-icon="refresh">refresh</span>
+                        Rotate All Keys
+                    </button>
+<button class="px-3 py-1.5 bg-primary text-on-primary text-xs font-bold rounded flex items-center gap-2 hover:opacity-90 transition-all">
+<span class="material-symbols-outlined text-sm" data-icon="add">add</span>
+                        New Provider
+                    </button>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded-lg ring-1 ring-slate-200/50">
+<table class="w-full text-left">
+<thead class="bg-slate-50/50 border-b border-slate-100">
+<tr>
+<th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Service Provider</th>
+<th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Key Identifier</th>
+<th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Health Status</th>
+<th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Latency</th>
+<th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Last Success</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-50">
+<tr class="hover:bg-slate-50/50 transition-colors">
+<td class="px-6 py-4 flex items-center gap-3">
+<div class="w-6 h-6 rounded bg-slate-900 flex items-center justify-center">
+<span class="text-[10px] font-bold text-white">OA</span>
+</div>
+<span class="text-sm font-bold text-slate-700">OpenAI (GPT-4o)</span>
+</td>
+<td class="px-6 py-4 font-mono text-[10px] text-slate-500">sk-proj-••••••••x9A1</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-emerald-500 text-lg" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-[10px] font-bold text-emerald-700 uppercase">Operational</span>
+</div>
+</td>
+<td class="px-6 py-4 text-xs tabular-nums font-semibold text-slate-600">342ms</td>
+<td class="px-6 py-4 text-[10px] font-bold text-slate-400 text-right uppercase">2 mins ago</td>
+</tr>
+<tr class="hover:bg-slate-50/50 transition-colors">
+<td class="px-6 py-4 flex items-center gap-3">
+<div class="w-6 h-6 rounded bg-orange-500 flex items-center justify-center">
+<span class="text-[10px] font-bold text-white">AN</span>
+</div>
+<span class="text-sm font-bold text-slate-700">Anthropic (Claude 3.5)</span>
+</td>
+<td class="px-6 py-4 font-mono text-[10px] text-slate-500">ant-api-••••••••fK30</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-emerald-500 text-lg" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-[10px] font-bold text-emerald-700 uppercase">Operational</span>
+</div>
+</td>
+<td class="px-6 py-4 text-xs tabular-nums font-semibold text-slate-600">512ms</td>
+<td class="px-6 py-4 text-[10px] font-bold text-slate-400 text-right uppercase">Just now</td>
+</tr>
+<tr class="hover:bg-slate-50/50 transition-colors">
+<td class="px-6 py-4 flex items-center gap-3">
+<div class="w-6 h-6 rounded bg-blue-600 flex items-center justify-center">
+<span class="text-[10px] font-bold text-white">ST</span>
+</div>
+<span class="text-sm font-bold text-slate-700">Stability AI (SDXL)</span>
+</td>
+<td class="px-6 py-4 font-mono text-[10px] text-slate-500">st-key-••••••••Lz77</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-rose-500 text-lg" data-icon="error" style="font-variation-settings: 'FILL' 1;">error</span>
+<span class="text-[10px] font-bold text-rose-700 uppercase">Rate Limited</span>
+</div>
+</td>
+<td class="px-6 py-4 text-xs tabular-nums font-semibold text-slate-400">--</td>
+<td class="px-6 py-4 text-[10px] font-bold text-rose-400 text-right uppercase tracking-tighter">Failed (429)</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</main>
+<!-- Global Floating Signature Component: The Pulse Monitor -->
+<div class="fixed bottom-6 right-6 w-72 bg-surface-container-lowest p-4 rounded shadow-2xl border border-primary/10 flex flex-col gap-3 ring-4 ring-primary/5">
+<div class="flex justify-between items-center">
+<h4 class="text-[10px] font-extrabold uppercase tracking-tighter text-slate-400">Real-time Job Pulse</h4>
+<div class="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_8px_rgba(0,86,198,0.5)]"></div>
+</div>
+<div class="flex items-end gap-1 h-8">
+<div class="flex-1 bg-primary/10 h-3 rounded-t-sm"></div>
+<div class="flex-1 bg-primary/20 h-5 rounded-t-sm"></div>
+<div class="flex-1 bg-primary h-8 rounded-t-sm"></div>
+<div class="flex-1 bg-primary/40 h-4 rounded-t-sm"></div>
+<div class="flex-1 bg-primary/60 h-6 rounded-t-sm"></div>
+<div class="flex-1 bg-primary h-7 rounded-t-sm"></div>
+<div class="flex-1 bg-primary/30 h-3 rounded-t-sm"></div>
+<div class="flex-1 bg-primary/10 h-2 rounded-t-sm"></div>
+</div>
+<div class="flex justify-between items-center">
+<div class="text-[10px] font-bold text-on-surface">42.8 ops/sec</div>
+<div class="text-[10px] font-black text-primary">+12% vs avg</div>
+</div>
+</div>
+</body></html>

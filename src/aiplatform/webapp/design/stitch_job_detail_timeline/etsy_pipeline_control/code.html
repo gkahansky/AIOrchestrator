@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>MiroPrintStudio Pipeline Control</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "tertiary-fixed-dim": "#e0b6ff",
+                        "on-tertiary-fixed-variant": "#6a0baa",
+                        "surface-container": "#eaedff",
+                        "primary-fixed-dim": "#b0c6ff",
+                        "on-tertiary-container": "#fffbff",
+                        "surface-bright": "#faf8ff",
+                        "primary-fixed": "#d9e2ff",
+                        "on-primary-fixed-variant": "#00429c",
+                        "on-secondary-fixed-variant": "#38485d",
+                        "error": "#ba1a1a",
+                        "inverse-surface": "#283044",
+                        "on-tertiary": "#ffffff",
+                        "surface": "#faf8ff",
+                        "background": "#faf8ff",
+                        "secondary-fixed-dim": "#b7c8e1",
+                        "inverse-on-surface": "#eef0ff",
+                        "surface-container-lowest": "#ffffff",
+                        "tertiary-fixed": "#f2daff",
+                        "on-surface-variant": "#424655",
+                        "primary-container": "#006df8",
+                        "on-secondary-container": "#54647a",
+                        "surface-dim": "#d2d9f4",
+                        "error-container": "#ffdad6",
+                        "on-secondary": "#ffffff",
+                        "tertiary-container": "#9c4ddc",
+                        "on-error-container": "#93000a",
+                        "surface-container-low": "#f2f3ff",
+                        "on-background": "#131b2e",
+                        "secondary": "#505f76",
+                        "on-error": "#ffffff",
+                        "tertiary": "#8130c1",
+                        "outline": "#727787",
+                        "on-primary": "#ffffff",
+                        "surface-tint": "#0058cb",
+                        "secondary-container": "#d0e1fb",
+                        "on-primary-container": "#fefcff",
+                        "on-primary-fixed": "#001945",
+                        "on-tertiary-fixed": "#2e004e",
+                        "primary": "#0056c6",
+                        "outline-variant": "#c2c6d8",
+                        "surface-container-high": "#e2e7ff",
+                        "on-surface": "#131b2e",
+                        "inverse-primary": "#b0c6ff"
+                    },
+                    fontFamily: {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-headline { font-family: 'Manrope', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .glass-panel {
+            background: rgba(218, 226, 253, 0.7);
+            backdrop-filter: blur(12px);
+        }
+        .btn-primary-gradient {
+            background: linear-gradient(135deg, #0056c6 0%, #006df8 100%);
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface">
+<!-- SideNavBar Anchor -->
+<aside class="h-screen w-64 fixed left-0 top-0 flex flex-col bg-slate-50 border-r border-slate-200 z-50">
+<div class="p-6 flex items-center gap-3">
+<div class="w-8 h-8 bg-primary rounded flex items-center justify-center text-white">
+<span class="material-symbols-outlined text-sm">account_tree</span>
+</div>
+<span class="text-xl font-black tracking-tight text-slate-900 font-headline">AI-Infra</span>
+</div>
+<nav class="flex-1 px-4 py-4 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:bg-slate-200/50 transition-colors rounded-lg group" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-sm font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-blue-700 font-semibold border-r-4 border-blue-600 bg-slate-200/50 rounded-l-lg transition-colors" href="#">
+<span class="material-symbols-outlined">account_tree</span>
+<span class="text-sm font-medium">Ventures</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:bg-slate-200/50 transition-colors rounded-lg group" href="#">
+<span class="material-symbols-outlined">payments</span>
+<span class="text-sm font-medium">Finance</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:bg-slate-200/50 transition-colors rounded-lg group" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+</nav>
+<div class="mt-auto px-4 py-6 border-t border-slate-200/50 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:bg-slate-200/50 transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined">monitor_heart</span>
+<span class="text-sm font-medium">System Health</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-500 hover:bg-slate-200/50 transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined">account_circle</span>
+<span class="text-sm font-medium">Profile</span>
+</a>
+</div>
+</aside>
+<!-- TopNavBar Anchor -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 z-40 bg-white/70 backdrop-blur-xl flex justify-between items-center px-8 border-b border-slate-200/10 shadow-sm">
+<div class="flex items-center bg-surface-container-low px-4 py-1.5 rounded-lg w-96">
+<span class="material-symbols-outlined text-slate-400 text-sm mr-2">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-xs w-full font-body" placeholder="Search infrastructure..." type="text"/>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-slate-500 hover:text-blue-500 transition-all">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="btn-primary-gradient px-4 py-2 text-white text-xs font-semibold rounded shadow-lg active:scale-[0.99] transition-transform">
+                New Order
+            </button>
+<img alt="User Avatar" class="w-8 h-8 rounded-full object-cover" data-alt="professional headshot of a technical manager in a brightly lit modern office environment" src="https://lh3.googleusercontent.com/aida-public/AB6AXuByUatPwH8MMHetLRg-zQVinqRAydwcwKu-XXjy88Fq6EeX0NHXEnjvFj8qztasH6NtC8H79jYTYgxy3fwqRli2MrGPK0MpuXAVwODY0_5u8dormhiwekEy81OdY6VBI6ZkG6Z7OKCnNPPuJZOxI1MjLjZbpkNb81slLXYQzT0AkFAQsNVistfJXNKj8Wv2uTh_tAFwUxofMdqL5Zum8ed9o-eTEZ-grik7UBT_LcETY3jokidCJLo1xW4IbWfR9V8z5BVaC_VJ-35P"/>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-64 pt-16 min-h-screen bg-surface">
+<div class="p-8 max-w-7xl mx-auto space-y-8">
+<!-- Breadcrumb & Status -->
+<div class="flex justify-between items-end">
+<div>
+<h1 class="text-3xl font-extrabold tracking-tight font-headline text-on-surface">MiroPrintStudio (Etsy)</h1>
+<p class="text-on-surface-variant mt-1 font-body">Venture Pipeline: Professional Home Decor Vertical</p>
+</div>
+<div class="flex items-center gap-2 bg-primary px-3 py-1 rounded-sm">
+<span class="w-2 h-2 bg-white rounded-full"></span>
+<span class="text-[10px] font-bold text-white tracking-widest uppercase">PRODUCTION</span>
+</div>
+</div>
+<!-- 7-Phase Stepper Tracker -->
+<div class="bg-surface-container-lowest p-6 rounded-lg shadow-sm">
+<div class="flex items-center justify-between relative">
+<!-- Progress Line Background -->
+<div class="absolute top-1/2 left-0 w-full h-0.5 bg-surface-container-high -translate-y-1/2 z-0"></div>
+<!-- Progress Line Active -->
+<div class="absolute top-1/2 left-0 w-[42%] h-0.5 bg-primary -translate-y-1/2 z-0"></div>
+<!-- Phase 1: Theme Research -->
+<div class="relative z-10 flex flex-col items-center group">
+<div class="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold text-sm shadow-md">
+<span class="material-symbols-outlined">check</span>
+</div>
+<span class="mt-2 text-[10px] font-bold text-primary text-center">Theme Research</span>
+</div>
+<!-- Phase 2: Subject Gen -->
+<div class="relative z-10 flex flex-col items-center group">
+<div class="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold text-sm shadow-md">
+<span class="material-symbols-outlined">check</span>
+</div>
+<span class="mt-2 text-[10px] font-bold text-primary text-center">Subject Gen</span>
+</div>
+<!-- Phase 3: Image Gen (ACTIVE) -->
+<div class="relative z-10 flex flex-col items-center group">
+<div class="w-12 h-12 -mt-1 rounded-full bg-white border-2 border-primary text-primary flex items-center justify-center font-bold text-sm shadow-xl ring-4 ring-primary-container/20">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">image</span>
+</div>
+<span class="mt-2 text-[10px] font-black text-on-surface text-center">Image Gen</span>
+</div>
+<!-- Phase 4: Packaging -->
+<div class="relative z-10 flex flex-col items-center group">
+<div class="w-10 h-10 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center font-bold text-sm">4</div>
+<span class="mt-2 text-[10px] font-semibold text-on-surface-variant text-center">Packaging</span>
+</div>
+<!-- Phase 5: Send for Review -->
+<div class="relative z-10 flex flex-col items-center group">
+<div class="w-10 h-10 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center font-bold text-sm">5</div>
+<span class="mt-2 text-[10px] font-semibold text-on-surface-variant text-center">Review</span>
+</div>
+<!-- Phase 6: Etsy Draft -->
+<div class="relative z-10 flex flex-col items-center group">
+<div class="w-10 h-10 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center font-bold text-sm">6</div>
+<span class="mt-2 text-[10px] font-semibold text-on-surface-variant text-center">Etsy Draft</span>
+</div>
+<!-- Phase 7: Promotion -->
+<div class="relative z-10 flex flex-col items-center group">
+<div class="w-10 h-10 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center font-bold text-sm">7</div>
+<span class="mt-2 text-[10px] font-semibold text-on-surface-variant text-center">Promotion</span>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+<!-- Left Column: Active Phase Area (Phase 3) -->
+<div class="lg:col-span-8 space-y-6">
+<div class="bg-surface-container-lowest rounded-lg p-6 shadow-sm">
+<div class="flex justify-between items-start mb-6">
+<div>
+<h2 class="text-xl font-bold font-headline">Phase 3: Image Generation</h2>
+<p class="text-sm text-on-surface-variant">Processing high-resolution assets for current subjects</p>
+</div>
+<div class="text-right">
+<div class="flex items-center gap-2 group relative">
+<span class="text-sm font-semibold text-on-surface">Total Cost</span>
+<span class="material-symbols-outlined text-slate-400 text-sm cursor-help">info</span>
+<!-- Tooltip -->
+<div class="absolute bottom-full right-0 mb-2 w-48 p-2 glass-panel text-[10px] rounded-sm shadow-xl opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                                        Current run cost-per-job: <span class="font-bold text-primary">$2.40 so far</span>
+</div>
+</div>
+<div class="text-2xl font-black text-primary">$19.20</div>
+</div>
+</div>
+<!-- Gallery Grid (Asymmetric) -->
+<div class="grid grid-cols-4 gap-4 mb-6">
+<div class="col-span-2 row-span-2 relative group overflow-hidden rounded-md">
+<img class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="minimalist interior design mockup with a high-end abstract painting on a clean white wall" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA034YBX_n81G7tpDy-jDGd313igZKgbmtElhbK9Lfwofs3W6tFDffGFN7ORjKP9Y99sL3t_AVYDoJyYxB5tXx1bOsc5BzdSDtoO9Pvq6b_QoHQ6SSrlldlYwWpltwyiqu0lmTEvykmi3jmZprbHDhPEMcJuaVYHaHIuXvKtlQ6u4kaQqv8weqV6mK3yWy2s_bkMXjf3agQykaoy3Uk874XHBvtmAwJhZRwknd1d6BzH4gD-Ind1tJRzPsdoFVy9YJFg03yrQs_mZnk"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
+<span class="text-white text-[10px] font-bold tracking-widest uppercase">Subject #008</span>
+</div>
+</div>
+<div class="relative group overflow-hidden rounded-md aspect-square">
+<img class="w-full h-full object-cover" data-alt="abstract expressionist canvas print with vibrant blue and gold textures" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCVsj-6m3tBRgo7E5fCaEm0WcpQbh3xgso4tXwLBSHpqJjytp8vPPfgza3ffPU3dOzR8Ol1I3j2TiQ4qAI9f7G3CEIjzqfmE4p3gV4VTXwDD4-EeuYwSF_B9z4tZwc2O3JXzoxzK7hps-knrfBJwRMzH4kmoVBPq2vfDxmzDemPRVDs6zlyzUQJlp6BeQ4a9SgnWz058TU0mhoDmHxAmwImdfvkLNlPYYxGdLwo8Q4u-fWMgkFNMGRz0Uc3Q6m19X43x8GMOCq6IXap"/>
+</div>
+<div class="relative group overflow-hidden rounded-md aspect-square">
+<img class="w-full h-full object-cover" data-alt="modern floral wall art with rich saturated colors on a dark background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC9920Tt8bIUrhEkDAAQ3s9VhUvkOmwGzxMguEnwgXwO150ByfGGIiw-EVQz8PpGqs_DLDsrE9KoxteorzQqhNB9J_TiLxHJI4-qxNaairbdaZd_kGNPETMxkQzCIZnDrxyYbWHf1YDS3iQqWUKNiI_g2qWklOmwcx5T8Jj7-lkDwcToHqUkiiVd1m8Rd1rFhP1lPMX5-yFoCReN4jNuSWusAsNmZ9AHU0attB2HTxVm8D-S_7C3q4qScdI_GTTS3mJiDlrZUduCV5k"/>
+</div>
+<div class="relative group overflow-hidden rounded-md aspect-square bg-surface-container-high flex flex-col items-center justify-center p-4">
+<span class="material-symbols-outlined text-primary mb-2">sync</span>
+<span class="text-[10px] font-bold text-center">Processing 8/12 subjects</span>
+</div>
+<div class="relative group overflow-hidden rounded-md aspect-square">
+<img class="w-full h-full object-cover" data-alt="geometric line art print framed in a light wood oak frame" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCWXydZAuI-qHe8fGD6xZEWDYwhh-evQysrMk39GeWv_1lHXArOiuYukSGuZ1bIRhpYXGN8y23mtO-v3izTIkMYODpnJg26H5bXTbasXrUe_LomBetFNIf4gGG73eIuYhcsyGH1SSOSQMznU4iA7SoQ6Wwoo8xXgk3B2RuLtYzxDUbmv9TRJVUELlOyPfi8rC-GPrAYzpuQFAHAOHvmedpfAzYWI7FVcApF9no_69lp_BcNMc4Nb4wc4bHOiw34bkTCY2pX54KX6dYe"/>
+</div>
+</div>
+<!-- Progress Bar -->
+<div class="space-y-2">
+<div class="flex justify-between text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+<span>Batch Integrity</span>
+<span>66% Completed</span>
+</div>
+<div class="w-full h-2 bg-surface-container-low rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 66%"></div>
+</div>
+</div>
+</div>
+<!-- Tabs Section -->
+<div class="bg-surface-container-lowest rounded-lg shadow-sm">
+<div class="flex border-b border-surface-container-low px-6">
+<button class="py-4 px-4 text-sm font-bold border-b-2 border-primary text-primary">Overview</button>
+<button class="py-4 px-4 text-sm font-medium text-on-surface-variant hover:text-on-surface">Control</button>
+<button class="py-4 px-4 text-sm font-medium text-on-surface-variant hover:text-on-surface">Listings</button>
+<button class="py-4 px-4 text-sm font-medium text-on-surface-variant hover:text-on-surface flex items-center gap-2">
+                                Review Queue
+                                <span class="px-1.5 py-0.5 bg-error text-white text-[8px] rounded-sm">2</span>
+</button>
+</div>
+<div class="p-6">
+<div class="grid grid-cols-3 gap-6">
+<!-- Chart Mockup 1 -->
+<div class="space-y-3">
+<p class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Status Distribution</p>
+<div class="h-32 flex items-end gap-2">
+<div class="bg-primary w-full h-[80%] rounded-t-sm" title="Completed"></div>
+<div class="bg-primary/40 w-full h-[60%] rounded-t-sm" title="Active"></div>
+<div class="bg-surface-container-high w-full h-[20%] rounded-t-sm" title="Pending"></div>
+</div>
+<div class="flex justify-between text-[9px] font-medium text-slate-500">
+<span>Done</span>
+<span>Gen</span>
+<span>Idle</span>
+</div>
+</div>
+<!-- Table Preview -->
+<div class="col-span-2">
+<table class="w-full text-xs">
+<thead>
+<tr class="text-on-surface-variant text-left">
+<th class="pb-2 font-bold uppercase tracking-tighter">Listing Name</th>
+<th class="pb-2 font-bold uppercase tracking-tighter">Status</th>
+<th class="pb-2 font-bold uppercase tracking-tighter">Views</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-surface-container-low">
+<tr>
+<td class="py-2 font-medium">Nordic Fog Series 01</td>
+<td class="py-2"><span class="px-2 py-0.5 bg-green-100 text-green-700 rounded-sm text-[10px] font-bold">PUBLISHED</span></td>
+<td class="py-2 tabular-nums">1,240</td>
+</tr>
+<tr>
+<td class="py-2 font-medium">Golden Hour Minimalist</td>
+<td class="py-2"><span class="px-2 py-0.5 bg-surface-container-high text-on-surface-variant rounded-sm text-[10px] font-bold">DRAFT</span></td>
+<td class="py-2 tabular-nums">--</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column: Pipeline Controls & Summary -->
+<div class="lg:col-span-4 space-y-6">
+<!-- Control Tab Quick Panel -->
+<div class="bg-surface-container-lowest rounded-lg p-6 shadow-sm space-y-4">
+<h3 class="text-sm font-bold font-headline uppercase tracking-widest text-on-surface-variant">Pipeline Controls</h3>
+<div class="grid grid-cols-1 gap-3">
+<button class="flex items-center justify-between w-full p-3 bg-surface-container-low hover:bg-surface-container-high transition-colors rounded-md group text-left">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary">play_circle</span>
+<div>
+<p class="text-xs font-bold">Trigger Next Phase</p>
+<p class="text-[10px] text-on-surface-variant">Start Packaging (Phase 4)</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">chevron_right</span>
+</button>
+<button class="flex items-center justify-between w-full p-3 bg-error/5 hover:bg-error/10 transition-colors rounded-md group text-left">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-error">pause_circle</span>
+<div>
+<p class="text-xs font-bold text-error">Pause All Operations</p>
+<p class="text-[10px] text-error/60">Halt all API calls immediately</p>
+</div>
+</div>
+</button>
+</div>
+</div>
+<!-- Pulse Monitor Signature Component -->
+<div class="bg-surface-container-lowest rounded-lg p-6 shadow-sm border border-primary/5">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-xs font-bold font-headline uppercase tracking-widest text-on-surface-variant">System Pulse</h3>
+<span class="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+</div>
+<div class="flex items-end gap-1 h-12 mb-4">
+<!-- Monospaced Sparkline Simulation -->
+<div class="w-2 bg-primary/10 h-1/2 rounded-t-sm"></div>
+<div class="w-2 bg-primary/20 h-3/4 rounded-t-sm"></div>
+<div class="w-2 bg-primary/30 h-1/3 rounded-t-sm"></div>
+<div class="w-2 bg-primary/40 h-2/3 rounded-t-sm"></div>
+<div class="w-2 bg-primary/60 h-full rounded-t-sm"></div>
+<div class="w-2 bg-primary h-4/5 rounded-t-sm"></div>
+<div class="w-2 bg-primary/50 h-1/2 rounded-t-sm"></div>
+<div class="w-2 bg-primary/30 h-2/3 rounded-t-sm"></div>
+<div class="w-2 bg-primary/20 h-3/4 rounded-t-sm"></div>
+<div class="w-2 bg-primary/10 h-1/2 rounded-t-sm"></div>
+</div>
+<div class="space-y-3">
+<div class="flex justify-between items-center">
+<span class="text-[10px] font-medium text-slate-500">API Latency</span>
+<span class="text-xs font-bold tabular-nums">42ms</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-[10px] font-medium text-slate-500">Subject Yield</span>
+<span class="text-xs font-bold tabular-nums">98.4%</span>
+</div>
+</div>
+</div>
+<!-- Review Queue Quick Look -->
+<div class="bg-surface-container-lowest rounded-lg p-6 shadow-sm space-y-4">
+<div class="flex justify-between items-center">
+<h3 class="text-xs font-bold font-headline uppercase tracking-widest text-on-surface-variant">Validation Needed</h3>
+<a class="text-[10px] font-bold text-primary hover:underline" href="#">VIEW ALL</a>
+</div>
+<div class="space-y-3">
+<div class="flex gap-3 items-center p-2 rounded-md hover:bg-surface-container-low transition-colors cursor-pointer">
+<div class="w-10 h-10 rounded bg-slate-100 overflow-hidden flex-shrink-0">
+<img class="w-full h-full object-cover" data-alt="close-up of texture and color validation for a printed textile asset" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA4Dxw7xBIH75qeUhWQ1h6OOQqZ40DDpVmSTPDb5nO3j_rX1BwJyqy5kUlPy_keJn21WuJV-xzCVD3jzEa5LXiFSytblqwdlzy6qAPhnWONHcMMcINc6WcUZhLLPjFppU8UiDzdhC_QHlc3y0ChzJCLcHIE8HVeS051Y3vFOX6B9b4HhpryWrEsVAD-wkA3YWckg0tqWe4BW7hatVunOhp_2iD_gLYmrq-H459MAsWaTFeYODTvHkgCELIJGaiFDN9Dire0uR4wpYUD"/>
+</div>
+<div>
+<p class="text-[11px] font-bold">Metadata Mismatch</p>
+<p class="text-[9px] text-on-surface-variant">Subject #005 Title Length</p>
+</div>
+</div>
+<div class="flex gap-3 items-center p-2 rounded-md hover:bg-surface-container-low transition-colors cursor-pointer">
+<div class="w-10 h-10 rounded bg-slate-100 overflow-hidden flex-shrink-0">
+<img class="w-full h-full object-cover" data-alt="visual artifact check on a digital illustration mockup" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCqI8sncjPXAaWstEa1D0wc1aVIKW4T2YZGaCkyFzguKfDnnme4NKc848j0ioS35_eJZOeMfOPk1SzRo6MMIhWQ_t-kf7YQrWqm0lY6UQG2sdcNApKdpSpWeBkmDyZCOK0USPOO21-I7fI6KCiQspoN0sMxyS7cstve6hWSGP1tV4CjBmEIzLILFZKmcjlgOhvHvHx-cbrbJS9RWV1V2Q_kaxHYrSD40BRXPA3pUmJKL53gA9a3pn181P67i_BHcCFMJ8llpfnf9PlM"/>
+</div>
+<div>
+<p class="text-[11px] font-bold">Image Resolution</p>
+<p class="text-[9px] text-on-surface-variant">Subject #002 Upscale Fail</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

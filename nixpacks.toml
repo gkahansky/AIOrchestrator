@@ -1,0 +1,5 @@
+[variables]
+PYTHONPATH = "/app/src"
+
+[start]
+cmd = "python -m uvicorn aiplatform.webapp.main:app --host 0.0.0.0 --port $PORT"

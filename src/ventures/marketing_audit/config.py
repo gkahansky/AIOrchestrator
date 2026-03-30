@@ -64,6 +64,9 @@ COMPETITOR_MAX = int(os.getenv("COMPETITOR_MAX", "3"))
 # Set this to C:\Projects\AI\ai-marketing-claude (or wherever the repo lives)
 AI_MARKETING_CLAUDE_PATH = os.getenv("AI_MARKETING_CLAUDE_PATH", "")
 
+# Output directory for local pipeline artefacts (overridden on Railway)
+OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./output")
+
 # ─── Claude ───────────────────────────────────────────────────────────────────
 CLAUDE_MODEL = "claude-sonnet-4-6"
 CLAUDE_MAX_TOKENS = 8192  # snapshot / full tiers

@@ -11,18 +11,13 @@ type Tab = "overview" | "new_order" | "orders"
 const TIERS = [
   { id: "snapshot", label: "Snapshot", price: "$49", description: "Quick SEO health check" },
   { id: "full", label: "Full Audit", price: "$149", description: "Complete site analysis" },
-  {
-    id: "full_strategy",
-    label: "Audit + Strategy",
-    price: "$249",
-    description: "Audit with 90-day action plan",
-  },
+  { id: "premium", label: "Audit + Strategy", price: "$249", description: "Audit with 90-day action plan" },
 ] as const
 
 const REPORT_TYPES = [
-  { id: "full_and_sample", label: "Full + Sample" },
-  { id: "full_only", label: "Full Only" },
-  { id: "sample_only", label: "Sample Only" },
+  { id: "both", label: "Full + Sample" },
+  { id: "full", label: "Full Only" },
+  { id: "sample", label: "Sample Only" },
 ] as const
 
 function formatDate(iso: string) {
@@ -77,14 +72,14 @@ function NewOrderForm() {
     url: "",
     tier: "snapshot",
     client_email: "",
-    report_type: "full_and_sample",
+    report_type: "both",
   })
   const [errors, setErrors] = useState<Partial<Record<keyof AuditOrderRequest, string>>>({})
 
   const mutation = useMutation({
     mutationFn: createAuditOrder,
     onSuccess: (data) => {
-      navigate(`/jobs/${data.job_id}`)
+      navigate(`/jobs/${data.order_id}`)
     },
   })
 
@@ -98,8 +93,8 @@ function NewOrderForm() {
         e.url = "Must be a valid URL"
       }
     }
-    if (!form.client_email.trim()) e.client_email = "Client email is required"
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.client_email))
+    if (!(form.client_email ?? "").trim()) e.client_email = "Client email is required"
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.client_email ?? ""))
       e.client_email = "Must be a valid email"
     return e
   }

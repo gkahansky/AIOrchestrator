@@ -23,6 +23,7 @@ from aiplatform.database.session import get_db
 from aiplatform.webapp.auth import require_auth
 from aiplatform.webapp.schemas import (
     SettingsKeyResponse,
+    SettingsKeysListResponse,
     SettingsKeyTestResponse,
     SettingsKeyUpdate,
     ToolSettingResponse,
@@ -87,6 +88,27 @@ def _mask(key: str) -> str:
     if not key:
         return ""
     return f"...{key[-6:]}" if len(key) > 6 else "***"
+
+
+# ── /settings/keys ───────────────────────────────────────────────────────────
+
+@router.get("/keys", response_model=SettingsKeysListResponse)
+def list_api_keys(
+    _: str = Depends(require_auth),
+    db=Depends(get_db),
+) -> SettingsKeysListResponse:
+    """Return masked status for all known API key services."""
+    keys = []
+    for service in sorted(_KNOWN_SERVICES):
+        raw = _get_setting(db, _setting_key(service)) or os.environ.get(
+            f"{service.upper()}_API_KEY", ""
+        )
+        keys.append(SettingsKeyResponse(
+            service=service,
+            masked_key=_mask(raw),
+            is_set=bool(raw),
+        ))
+    return SettingsKeysListResponse(keys=keys)
 
 
 # ── /settings/keys/{service} ─────────────────────────────────────────────────

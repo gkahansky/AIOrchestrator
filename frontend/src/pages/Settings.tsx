@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { fetchSettings, testApiKey, updateApiKey, fetchHealth } from "../api"
+import { fetchApiKeys, testApiKey, updateApiKey, fetchHealth } from "../api"
 import type { ApiKey } from "../types"
 
 type Tab = "api_keys" | "notifications" | "environment"
@@ -19,19 +19,19 @@ function ApiKeysTab() {
   const qc = useQueryClient()
   const { data, isLoading, error } = useQuery({
     queryKey: ["settings", "keys"],
-    queryFn: () => fetchSettings("keys"),
+    queryFn: fetchApiKeys,
   })
 
   const [editingService, setEditingService] = useState<string | null>(null)
   const [editValue, setEditValue] = useState("")
-  const [testResults, setTestResults] = useState<Record<string, { status: string; message: string }>>({})
+  const [testResults, setTestResults] = useState<Record<string, { ok: boolean; detail: string }>>({})
 
   const testMutation = useMutation({
     mutationFn: (service: string) => testApiKey(service),
     onSuccess: (result) => {
       setTestResults((prev) => ({
         ...prev,
-        [result.service]: { status: result.status, message: result.message },
+        [result.service]: { ok: result.ok, detail: result.detail },
       }))
     },
   })
@@ -54,7 +54,7 @@ function ApiKeysTab() {
     )
   }
 
-  const keys: ApiKey[] = data?.keys ?? []
+  const keys: ApiKey[] = (data as { keys?: ApiKey[] } | undefined)?.keys ?? []
 
   return (
     <div className="space-y-4">
@@ -129,7 +129,7 @@ function ApiKeysTab() {
                           </div>
                         ) : (
                           <span className="font-mono text-xs text-on-surface-variant">
-                            {key.masked_value}
+                            {key.is_set ? key.masked_key : <span className="text-error/70">Not set</span>}
                           </span>
                         )}
                       </td>
@@ -145,28 +145,12 @@ function ApiKeysTab() {
                       </td>
                       <td className="px-4 py-3">
                         {testResult ? (
-                          <span
-                            className={`text-xs font-label font-medium ${
-                              testResult.status === "ok" ? "text-emerald-600" : "text-error"
-                            }`}
-                          >
-                            {testResult.status === "ok" ? "✓ OK" : "✗ Failed"}
+                          <span className={`text-xs font-label font-medium ${testResult.ok ? "text-emerald-600" : "text-error"}`}>
+                            {testResult.ok ? "✓ OK" : `✗ ${testResult.detail}`}
                           </span>
                         ) : (
-                          <span
-                            className={`text-xs font-label ${
-                              key.test_status === "ok"
-                                ? "text-emerald-600"
-                                : key.test_status === "failed"
-                                ? "text-error"
-                                : "text-on-surface-variant"
-                            }`}
-                          >
-                            {key.test_status === "ok"
-                              ? "✓ OK"
-                              : key.test_status === "failed"
-                              ? "✗ Failed"
-                              : "Untested"}
+                          <span className={`text-xs font-label ${key.test_ok === true ? "text-emerald-600" : key.test_ok === false ? "text-error" : "text-on-surface-variant"}`}>
+                            {key.test_ok === true ? "✓ OK" : key.test_ok === false ? "✗ Failed" : "Untested"}
                           </span>
                         )}
                       </td>
@@ -208,22 +192,10 @@ function ApiKeysTab() {
 }
 
 function NotificationsTab() {
-  const { data, isLoading } = useQuery({
-    queryKey: ["settings", "notifications"],
-    queryFn: () => fetchSettings("notifications"),
-  })
-
   const [slack, setSlack] = useState("")
   const [emailFailure, setEmailFailure] = useState(false)
   const [emailReview, setEmailReview] = useState(false)
   const [saved, setSaved] = useState(false)
-
-  // Sync from server data
-  if (data?.notifications && !saved) {
-    if (slack === "" && data.notifications.slack_webhook) setSlack(data.notifications.slack_webhook)
-    if (!emailFailure && data.notifications.email_on_failure) setEmailFailure(data.notifications.email_on_failure)
-    if (!emailReview && data.notifications.email_on_review) setEmailReview(data.notifications.email_on_review)
-  }
 
   return (
     <div className="max-w-md space-y-6">
@@ -236,17 +208,13 @@ function NotificationsTab() {
           <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
             Slack Webhook URL
           </label>
-          {isLoading ? (
-            <div className="h-10 bg-surface-dim rounded-xl animate-pulse" />
-          ) : (
-            <input
+          <input
               type="text"
               value={slack}
               onChange={(e) => setSlack(e.target.value)}
               placeholder="https://hooks.slack.com/services/…"
               className="w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors"
             />
-          )}
         </div>
 
         <div className="space-y-3">
@@ -338,7 +306,7 @@ function EnvironmentTab() {
             <div className="h-5 w-20 bg-surface-dim rounded animate-pulse" />
           ) : (
             <span className="text-sm font-label font-semibold text-on-surface capitalize">
-              {data?.environment ?? "—"}
+              Production
             </span>
           )}
         </div>
@@ -355,77 +323,35 @@ function EnvironmentTab() {
       </div>
 
       {/* Services table */}
-      <div className="bg-surface-container-lowest rounded-xl shadow-float overflow-hidden">
+      <div className="bg-surface-container-lowest rounded-xl overflow-hidden" style={{ boxShadow: "0px 20px 40px rgba(19,27,46,0.06)" }}>
         <div className="px-5 py-4 border-b border-outline-variant/15">
           <h2 className="font-headline font-bold text-sm text-on-surface">Service Health</h2>
-          {data?.checked_at && (
-            <p className="text-xs font-label text-on-surface-variant mt-0.5">
-              Last checked:{" "}
-              {new Date(data.checked_at).toLocaleString("en-US", {
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit",
-              })}
-            </p>
-          )}
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-surface-container-low border-b border-outline-variant/10">
-                {["Service", "Status", "Latency", "Message"].map((h) => (
-                  <th
-                    key={h}
-                    className="px-4 py-2.5 text-left text-[11px] font-label font-semibold uppercase tracking-wider text-on-surface-variant"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-outline-variant/10">
-              {isLoading
-                ? Array(5)
-                    .fill(null)
-                    .map((_, i) => (
-                      <tr key={i}>
-                        {Array(4)
-                          .fill(null)
-                          .map((__, j) => (
-                            <td key={j} className="px-4 py-3">
-                              <div className="h-4 bg-surface-dim rounded animate-pulse" />
-                            </td>
-                          ))}
-                      </tr>
-                    ))
-                : data?.services.map((svc) => (
-                    <tr key={svc.name} className="hover:bg-surface-container-low/40 transition-colors">
-                      <td className="px-4 py-3 font-label font-medium text-on-surface">{svc.name}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <HealthDot status={svc.status} />
-                          <span className="text-sm font-label text-on-surface capitalize">
-                            {svc.status}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm font-label text-on-surface-variant">
-                        {svc.latency_ms != null ? `${svc.latency_ms}ms` : "—"}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-label text-on-surface-variant">
-                        {svc.message ?? "—"}
-                      </td>
-                    </tr>
-                  ))}
-              {!isLoading && !data?.services.length && (
-                <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-sm font-label text-on-surface-variant">
-                    No service data
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div className="divide-y divide-outline-variant/10">
+          {isLoading ? (
+            Array(3).fill(null).map((_, i) => (
+              <div key={i} className="px-5 py-3 flex items-center justify-between">
+                <div className="h-4 w-24 bg-surface-dim rounded animate-pulse" />
+                <div className="h-4 w-16 bg-surface-dim rounded animate-pulse" />
+              </div>
+            ))
+          ) : data ? (
+            [
+              { name: "Database", ok: data.db },
+              { name: "Redis", ok: data.redis },
+              { name: "API", ok: data.status === "ok" },
+            ].map((svc) => (
+              <div key={svc.name} className="px-5 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <HealthDot status={svc.ok ? "ok" : "down"} />
+                  <span className="text-sm font-label font-medium text-on-surface">{svc.name}</span>
+                </div>
+                <span className={`text-xs font-label font-semibold ${svc.ok ? "text-emerald-600" : "text-error"}`}>
+                  {svc.ok ? "Connected" : "Down"}
+                </span>
+              </div>
+            ))
+          ) : null}
         </div>
       </div>
     </div>

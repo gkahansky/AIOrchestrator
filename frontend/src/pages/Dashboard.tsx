@@ -35,6 +35,7 @@ function formatCurrency(n: number) {
 function HealthDot({ status }: { status: string }) {
   const colors: Record<string, string> = {
     healthy: "bg-emerald-500",
+    ok: "bg-emerald-500",
     degraded: "bg-amber-400",
     down: "bg-error",
   }
@@ -50,31 +51,36 @@ export default function Dashboard() {
   const { data: jobsData, isLoading: jobsLoading } = useJobs({ page_size: 10 })
   const { data: health } = useHealth()
 
+  // Compute KPI values from the ventures[] array the backend actually returns
+  const activeJobs    = dash?.ventures.reduce((s, v) => s + v.in_progress, 0) ?? 0
+  const pendingReview = dash?.ventures.reduce((s, v) => s + v.pending_review, 0) ?? 0
+
   const kpis = [
     {
       label: "Active Jobs",
-      value: dashLoading ? "—" : String(dash?.active_jobs ?? 0),
+      value: dashLoading ? "—" : String(activeJobs),
       icon: "bolt",
     },
     {
       label: "Pending Reviews",
-      value: dashLoading ? "—" : String(dash?.pending_reviews ?? 0),
+      value: dashLoading ? "—" : String(pendingReview),
       icon: "pending_actions",
     },
     {
       label: "Monthly Revenue",
-      value: dashLoading ? "—" : formatCurrency(dash?.monthly_revenue ?? 0),
+      value: dashLoading ? "—" : formatCurrency(dash?.total_revenue_usd_month ?? 0),
       icon: "payments",
     },
     {
       label: "API Spend",
-      value: dashLoading ? "—" : formatCurrency(dash?.api_spend ?? 0),
+      value: dashLoading ? "—" : formatCurrency(dash?.total_cost_usd_month ?? 0),
       icon: "account_balance_wallet",
     },
   ]
 
-  const jobs: Job[] = dash?.jobs_in_flight ?? jobsData?.items ?? []
-  const reviewQueue: Job[] = dash?.review_queue ?? []
+  const jobs: Job[] = jobsData?.items ?? []
+  // Review queue: filter jobs currently waiting for review
+  const reviewQueue: Job[] = jobs.filter((j) => j.status === "review_pending")
 
   return (
     <div className="space-y-8">
@@ -159,21 +165,41 @@ export default function Dashboard() {
             {health && <HealthDot status={health.status} />}
           </div>
           <div className="px-5 py-3 space-y-3">
-            {health?.services ? (
-              health.services.map((svc) => (
-                <div key={svc.name} className="flex items-center justify-between">
+            {health ? (
+              <>
+                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <HealthDot status={svc.status} />
-                    <span className="text-sm font-label text-on-surface">{svc.name}</span>
+                    <HealthDot status={health.db ? "healthy" : "down"} />
+                    <span className="text-sm font-label text-on-surface">Database</span>
                   </div>
                   <span className="text-xs font-label text-on-surface-variant">
-                    {svc.latency_ms != null ? `${svc.latency_ms}ms` : svc.status}
+                    {health.db ? "Connected" : "Down"}
                   </span>
                 </div>
-              ))
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <HealthDot status={health.redis ? "healthy" : "down"} />
+                    <span className="text-sm font-label text-on-surface">Redis</span>
+                  </div>
+                  <span className="text-xs font-label text-on-surface-variant">
+                    {health.redis ? "Connected" : "Down"}
+                  </span>
+                </div>
+                {dash && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <HealthDot status={dash.db_ok ? "healthy" : "down"} />
+                      <span className="text-sm font-label text-on-surface">API</span>
+                    </div>
+                    <span className="text-xs font-label text-on-surface-variant">
+                      v{health.version}
+                    </span>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="space-y-3">
-                {[1, 2, 3, 4].map((i) => (
+                {[1, 2, 3].map((i) => (
                   <div key={i} className="flex items-center justify-between">
                     <div className="h-4 w-24 bg-surface-dim rounded animate-pulse" />
                     <div className="h-4 w-12 bg-surface-dim rounded animate-pulse" />

@@ -200,6 +200,10 @@ class SettingsKeyResponse(BaseModel):
     test_ok: bool | None = None
 
 
+class SettingsKeysListResponse(BaseModel):
+    keys: list[SettingsKeyResponse]
+
+
 class SettingsKeyUpdate(BaseModel):
     key: str = Field(..., min_length=1)
 

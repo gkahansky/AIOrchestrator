@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom"
+import { NavLink, useNavigate } from "react-router-dom"
 
 interface NavItem {
   label: string
@@ -14,6 +14,13 @@ const navItems: NavItem[] = [
 ]
 
 export default function Sidebar() {
+  const navigate = useNavigate()
+
+  function handleLogout() {
+    localStorage.removeItem("api_token")
+    navigate("/login")
+  }
+
   return (
     <aside className="fixed top-0 left-0 h-screen w-64 bg-surface-container-lowest border-r border-outline-variant/15 flex flex-col z-40">
       {/* Logo */}
@@ -49,19 +56,26 @@ export default function Sidebar() {
       </nav>
 
       {/* Bottom */}
-      <div className="px-5 pb-6 space-y-3">
-        <div className="flex items-center gap-2">
-          <span className="bg-primary text-on-primary text-[10px] font-label font-bold uppercase tracking-widest px-2 py-0.5 rounded-full">
+      <div className="px-5 pb-6 space-y-2">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="bg-primary text-on-primary text-[10px] font-label font-bold uppercase tracking-widest px-2 py-0.5 rounded-sm">
             Production
           </span>
         </div>
         <NavLink
           to="/settings?tab=environment"
-          className="flex items-center gap-2 text-xs font-label text-on-surface-variant hover:text-primary transition-colors"
+          className="flex items-center gap-2 text-xs font-label text-on-surface-variant hover:text-primary transition-colors py-1"
         >
           <span className="material-symbols-outlined text-[16px]">monitor_heart</span>
           System Health
         </NavLink>
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-2 text-xs font-label text-on-surface-variant hover:text-error transition-colors py-1 w-full text-left"
+        >
+          <span className="material-symbols-outlined text-[16px]">logout</span>
+          Sign out
+        </button>
       </div>
     </aside>
   )

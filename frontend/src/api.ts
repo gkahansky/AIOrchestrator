@@ -7,7 +7,7 @@ import type {
   AuditOrderRequest,
   PodcastOrderRequest,
   OrderResponse,
-  Settings,
+  ApiKey,
   ApiKeyTestResult,
 } from "./types"
 
@@ -137,9 +137,9 @@ export async function fetchPodcastOrders(params?: {
   return handleResponse<JobListResponse>(res)
 }
 
-export async function fetchSettings(type: string): Promise<Settings> {
-  const res = await fetch(`${BASE}/api/platform/settings/${type}`, { headers: getHeaders() })
-  return handleResponse<Settings>(res)
+export async function fetchApiKeys(): Promise<{ keys: ApiKey[] }> {
+  const res = await fetch(`${BASE}/api/platform/settings/keys`, { headers: getHeaders() })
+  return handleResponse<{ keys: ApiKey[] }>(res)
 }
 
 export async function testApiKey(service: string): Promise<ApiKeyTestResult> {
@@ -150,11 +150,11 @@ export async function testApiKey(service: string): Promise<ApiKeyTestResult> {
   return handleResponse<ApiKeyTestResult>(res)
 }
 
-export async function updateApiKey(service: string, value: string): Promise<{ message: string }> {
+export async function updateApiKey(service: string, value: string): Promise<ApiKey> {
   const res = await fetch(`${BASE}/api/platform/settings/keys/${service}`, {
-    method: "PATCH",
+    method: "PUT",
     headers: getHeaders(),
-    body: JSON.stringify({ value }),
+    body: JSON.stringify({ key: value }),
   })
-  return handleResponse<{ message: string }>(res)
+  return handleResponse<ApiKey>(res)
 }

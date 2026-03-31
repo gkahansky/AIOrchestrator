@@ -88,7 +88,7 @@ function NewOrderForm() {
   const mutation = useMutation({
     mutationFn: createPodcastOrder,
     onSuccess: (data) => {
-      navigate(`/jobs/${data.job_id}`)
+      navigate(`/jobs/${data.order_id}`)
     },
   })
 
@@ -102,8 +102,8 @@ function NewOrderForm() {
         e.audio_url = "Must be a valid URL"
       }
     }
-    if (!form.client_email.trim()) e.client_email = "Client email is required"
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.client_email))
+    if (!(form.client_email ?? "").trim()) e.client_email = "Client email is required"
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.client_email ?? ""))
       e.client_email = "Must be a valid email"
     return e
   }

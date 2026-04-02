@@ -11,7 +11,7 @@ import type {
   ApiKeyTestResult,
 } from "./types"
 
-const BASE = import.meta.env.VITE_API_URL || "https://api.echoforge.biz"
+const BASE = import.meta.env.VITE_API_URL || "https://api.planbadmin.com"
 
 function getHeaders(): HeadersInit {
   const token = localStorage.getItem("api_token") ?? "test"

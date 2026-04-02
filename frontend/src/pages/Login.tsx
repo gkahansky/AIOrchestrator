@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 
-const BASE = import.meta.env.VITE_API_URL || "https://api.echoforge.biz"
+const BASE = import.meta.env.VITE_API_URL || "https://api.planbadmin.com"
 
 declare global {
   interface Window {

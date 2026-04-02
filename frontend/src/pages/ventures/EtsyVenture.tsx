@@ -105,7 +105,7 @@ function PhaseCard({
         <div className="bg-surface-container-low rounded-lg px-3 py-2">
           <p className="text-[10px] font-label font-semibold uppercase tracking-wider text-on-surface-variant mb-1">Result</p>
           <p className="text-xs font-mono text-on-surface-variant break-all">
-            Task queued — job_id: {result.job_id as string ?? "—"}
+            Task queued — celery_task_id: {(result.celery_task_id ?? result.job_id) as string ?? "—"}
           </p>
         </div>
       )}
@@ -291,10 +291,6 @@ export default function EtsyVenture() {
           <p className="text-sm font-body text-on-surface-variant">
             AI-generated digital wall art — 6-phase automated pipeline
           </p>
-        </div>
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200">
-          <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
-          <span className="text-xs font-label font-medium text-amber-700">Etsy API key pending</span>
         </div>
       </div>
 

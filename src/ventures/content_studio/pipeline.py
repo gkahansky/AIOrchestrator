@@ -31,6 +31,7 @@ from aiplatform.skills.storage.drive_organise import create_folder
 from aiplatform.skills.storage.drive_write import drive_write
 from aiplatform.skills.comms.send_email import send_email
 from aiplatform.skills.finance.log_cost import log_cost
+from aiplatform.skills.finance.log_revenue import log_revenue
 from ventures.content_studio import config
 from ventures.content_studio.content_pdf import generate_full_pdf, generate_sample_pdf
 from ventures.content_studio.prompts import SYSTEM_PROMPT, build_content_prompt, parse_content_response
@@ -107,6 +108,9 @@ def run_order(order: dict, output_dir: str | None = None) -> dict:
                 print(f"\nPipeline paused at review gate.")
                 print(f"Set order status to 'approved' in {work_dir / 'order.json'} to continue.\n")
                 return order
+        elif order["status"] == "approved":
+            # Re-dispatched from API after human approval — reload gdoc from order
+            gdoc = order.get("gdoc") or gdoc
 
         # ── Phase 5: Delivery ──────────────────────────────────────────────────
         if order["status"] == "approved":
@@ -116,6 +120,14 @@ def run_order(order: dict, output_dir: str | None = None) -> dict:
             order["status"] = "delivered"
             order["delivered_at"] = datetime.utcnow().isoformat()
             _save_order(order, work_dir)
+            tier_info = config.TIERS.get(order.get("tier", "starter"), {})
+            log_revenue(
+                venture="content_studio",
+                source=order.get("source", "direct"),
+                amount_usd=tier_info.get("price_usd", 0),
+                job_id=order.get("job_id"),
+                description=f"{order.get('tier','starter')} — {order.get('show_name','')[:80]}",
+            )
             print(f"\n✓ Order {order['order_id']} delivered.")
 
     except Exception as exc:
@@ -130,7 +142,21 @@ def run_order(order: dict, output_dir: str | None = None) -> dict:
 # ─── Phase implementations ────────────────────────────────────────────────────
 
 def _run_phase1_transcribe(order: dict, work_dir: Path) -> dict:
-    audio_path = order["audio_path"]
+    audio_path = order.get("audio_path")
+
+    # Web UI orders supply audio_url instead of a local path — download it first.
+    if not audio_path and order.get("audio_url"):
+        import urllib.request
+        audio_url = order["audio_url"]
+        suffix = Path(audio_url.split("?")[0]).suffix or ".mp3"
+        audio_path = str(work_dir / f"audio{suffix}")
+        print(f"  Phase 1: Downloading audio from URL...")
+        urllib.request.urlretrieve(audio_url, audio_path)
+        order["audio_path"] = audio_path
+
+    if not audio_path:
+        raise ValueError("Order must have either 'audio_path' or 'audio_url'")
+
     print(f"  Phase 1: Transcribing {Path(audio_path).name}...")
 
     result = transcribe_audio(audio_path)

@@ -115,6 +115,18 @@ def run_order(order: dict, output_dir: str | None = None) -> dict:
                 print(f"\nPipeline paused at review gate.")
                 print(f"Set status to 'approved' in {work_dir / 'order.json'} to continue.\n")
                 return order
+        elif order["status"] == "approved":
+            # Re-dispatched from API after human approval — reload paths from order
+            paths = {
+                "pdf":        Path(order.get("pdf_path", "")),
+                "md":         Path(order.get("md_path", "")),
+                "sample_pdf": Path(order.get("sample_pdf_path", "")),
+                "sample_md":  Path(order.get("sample_md_path", "")),
+            }
+            pdf_path        = paths["pdf"]
+            md_path         = paths["md"]
+            sample_pdf_path = paths["sample_pdf"]
+            sample_md_path  = paths["sample_md"]
 
         # -- Phase 6: Delivery --------------------------------------------------
         if order["status"] == "approved":
@@ -124,6 +136,14 @@ def run_order(order: dict, output_dir: str | None = None) -> dict:
             order["status"] = "delivered"
             order["delivered_at"] = datetime.utcnow().isoformat()
             _save_order(order, work_dir)
+            tier_info = config.TIERS.get(order.get("tier", "snapshot"), {})
+            log_revenue(
+                venture="marketing_audit",
+                source=order.get("source", "direct"),
+                amount_usd=tier_info.get("price_usd", 0),
+                job_id=order.get("job_id"),
+                description=f"{order.get('tier','snapshot')} audit — {order.get('url','')[:80]}",
+            )
             print(f"\nOK Audit {order['order_id']} delivered.")
 
     except Exception as exc:

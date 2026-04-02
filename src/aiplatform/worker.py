@@ -38,6 +38,22 @@ load_dotenv()
 
 from celery import Celery
 
+
+def _materialise_google_credentials() -> None:
+    """Write GOOGLE_SERVICE_ACCOUNT_JSON env var to disk so Drive auth can find it."""
+    import base64, logging
+    b64 = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+    if not b64:
+        return
+    dest = Path(os.environ.get("GOOGLE_CREDENTIALS_PATH", "./google_credentials.json"))
+    try:
+        dest.write_bytes(base64.b64decode(b64))
+        logging.getLogger(__name__).info("Google service account written to %s", dest)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Failed to write Google credentials: %s", exc)
+
+_materialise_google_credentials()
+
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
 celery_app = Celery(

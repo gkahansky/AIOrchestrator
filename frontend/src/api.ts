@@ -13,7 +13,7 @@ import type {
 
 const BASE = import.meta.env.VITE_API_URL || "https://api.planbadmin.com"
 
-function getHeaders(): HeadersInit {
+export function getHeaders(): HeadersInit {
   const token = localStorage.getItem("api_token") ?? "test"
   return {
     "Content-Type": "application/json",

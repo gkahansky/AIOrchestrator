@@ -109,7 +109,27 @@ def _get_job_id(order: dict, venture: str) -> str | None:
 
 @celery_app.task(bind=True, name="etsy.run_phase", max_retries=2)
 def run_etsy_phase(self, phase: int, params: dict) -> dict:
-    """Run a single Etsy pipeline phase."""
+    """Run a single Etsy pipeline phase and track it in the DB."""
+    import uuid
+    from datetime import datetime, timezone
+
+    job_id = params.get("job_id") or str(uuid.uuid4())
+    params["job_id"] = job_id
+
+    # Build a minimal order dict for DB tracking
+    order = {
+        "order_id": job_id,
+        "phase":    phase,
+        "status":   "running",
+        **{k: v for k, v in params.items() if k != "job_id"},
+    }
+
+    try:
+        from aiplatform.database.job_ops import upsert_job
+        upsert_job(order, "etsy", celery_task_id=self.request.id)
+    except Exception:
+        pass
+
     try:
         from ventures.etsy import pipeline as etsy_pipeline
 
@@ -127,10 +147,43 @@ def run_etsy_phase(self, phase: int, params: dict) -> dict:
         if fn is None:
             raise ValueError(f"Unknown Etsy phase: {phase}")
 
-        result = fn(**params)
-        return {"phase": phase, "status": "completed", "result": result}
+        # Strip internal tracking keys before passing to pipeline
+        pipeline_params = {k: v for k, v in params.items() if k != "job_id"}
+        result = fn(**pipeline_params)
+
+        # Update DB with completed status + output
+        try:
+            from aiplatform.database.models import Job
+            from aiplatform.database.session import get_session
+            with get_session() as db:
+                job = db.query(Job).filter(
+                    Job.venture == "etsy",
+                    Job.input_data["order_id"].astext == job_id,
+                ).first()
+                if job:
+                    job.status = "completed"
+                    job.output_data = result
+                    job.completed_at = datetime.now(timezone.utc)
+        except Exception:
+            pass
+
+        return {"phase": phase, "status": "completed", "job_id": job_id, "result": result}
 
     except Exception as exc:
+        try:
+            from aiplatform.database.models import Job
+            from aiplatform.database.session import get_session
+            with get_session() as db:
+                job = db.query(Job).filter(
+                    Job.venture == "etsy",
+                    Job.input_data["order_id"].astext == job_id,
+                ).first()
+                if job:
+                    job.status = "failed"
+                    job.error_message = str(exc)[:500]
+        except Exception:
+            pass
+
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc, countdown=60)
         raise

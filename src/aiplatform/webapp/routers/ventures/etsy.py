@@ -28,9 +28,19 @@ def run_etsy_phase(
     _: str = Depends(require_auth),
 ) -> EtsyPhaseResponse:
     """Queue an Etsy pipeline phase as a Celery task. Body is optional extra params."""
+    import uuid
     from aiplatform.worker import run_etsy_phase as celery_task
+    from aiplatform.database.job_ops import upsert_job
+
+    job_id = params.get("job_id") or str(uuid.uuid4())
+    params["job_id"] = job_id
+
+    order = {"order_id": job_id, "phase": n, "status": "pending", **params}
+    upsert_job(order, "etsy")
 
     task = celery_task.delay(n, params)
+    upsert_job(order, "etsy", celery_task_id=task.id)
+
     return EtsyPhaseResponse(celery_task_id=task.id, phase=n)
 
 

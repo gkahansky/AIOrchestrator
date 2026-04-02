@@ -168,8 +168,8 @@ This is the seed data for `scripts/seed_clickup_from_roadmap.py`. Every item bel
 
 | Roadmap ID | Task Name | Priority | Status | Notes |
 |---|---|---|---|---|
-| H-09 | Management App | High | Planned | FastAPI + React, venture overview, order trigger panel |
-| M-09 | Dashboard Endpoint | Medium | Planned | `/dashboard` — orders, pipeline status, revenue, costs |
+| H-09 | Management App | High | Done | FastAPI + React webapp live at planBadmin.com. Railway + Vercel. Google OAuth. PostgreSQL job state. |
+| M-09 | Dashboard Endpoint | Medium | Done | GET /api/platform/dashboard live. Covered by H-09 Management App. |
 
 ---
 
@@ -508,3 +508,7 @@ Add to `/platform/registry/skills.json`:
 |---|---|---|---|---|
 | U-03 | Project Management Integration | ✅ done | ClickUp workspace live. 4-way sync built: update_task.py keeps ClickUp, ROADMAP.md, venture CLAUDE.m... | 2026-03-27 |
 | H-08 | Gig Generator — Fiverr | 🔄 in-progress | Fiverr gig generator skill complete. run_gig_generator.py CLI ready for podcast_notes and marketing_... | 2026-03-28 |
+| H-09 | Management App | ✅ done | FastAPI + React webapp live at planBadmin.com. Railway backend + Vercel frontend. Google OAuth. PostgreSQL job state. | 2026-03-31 |
+| H-05 | Human Review Gate | ✅ done | /api/jobs/{id}/approve + /api/jobs/{id}/reject endpoints live. Review queue in dashboard UI. | 2026-03-31 |
+| M-09 | Dashboard Endpoint | ✅ done | GET /api/platform/dashboard live. Covered by H-09 Management App. | 2026-03-31 |
+| D-15 | Database Foundation | ✅ done | SQLAlchemy models + Alembic migrations. job_ops.py upsert. | 2026-03-29 |

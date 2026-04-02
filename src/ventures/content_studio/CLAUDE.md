@@ -13,6 +13,14 @@ This venture may import platform skills only. No cross-venture imports.
 
 ---
 
+## Web UI Trigger
+
+Orders can be submitted via the management app at planBadmin.com (Ventures → Podcast Notes → New Order).
+The UI posts to `POST /api/ventures/content-studio/orders` which writes the job to DB and queues a Celery task.
+CLI trigger still works: `python scripts/run_content_studio.py`.
+
+---
+
 ## Core Service Tiers (unchanged)
 
 | Tier | Price | Delivery | Included |

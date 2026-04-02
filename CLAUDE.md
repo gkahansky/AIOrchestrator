@@ -140,11 +140,15 @@ Scripts add `src/` to `sys.path` explicitly. Pytest uses `conftest.py` for the s
 | Image gen (next) | Gemini Imagen 3 | Pending Google billing approval — flip active=true in skills.json |
 | Image processing | Pillow (Python) | Resize to any required aspect ratios |
 | Storage | Google Drive API | All media, metadata, audit logs |
-| Compute | Railway | Cloud hosting for agents/scripts |
+| Backend hosting | Railway | FastAPI backend + Celery worker |
+| Frontend hosting | Vercel | React + Vite admin app at planBadmin.com. Source: `frontend/` |
+| Database | PostgreSQL (Railway plugin) | Job state, phase events, cost/revenue events. Alembic migrations |
+| Job queue | Celery + Redis | Async pipeline execution; Redis Cloud as broker |
+| Auth | Google OAuth + PyJWT | Google Identity Services login; 24h JWT sessions |
 | Session memory | Redis Cloud | Pub/sub + short-term state |
 | Long-term memory | Qdrant Cloud | Research history, brand guidelines — namespaced per venture |
 | Observability | LangSmith | Agent tracing and cost tracking |
-| API layer | FastAPI | HTTP wrapper around agents |
+| API layer | FastAPI | HTTP wrapper around agents. Source: `src/aiplatform/webapp/` |
 
 Venture-specific tools (Etsy API, Pinterest, Buffer, Placeit, etc.) are listed in the relevant venture CLAUDE.md.
 
@@ -196,6 +200,22 @@ Selection order (first matching rule wins):
 3. **Budget cap** — if monthly spend for a tool is over its cap, skip it
 4. **Availability** — if tool health-check fails, skip it
 5. **Fallback** — use the tool marked `tier='fallback'`; if that also fails, raise and alert Slack
+
+---
+
+## Web Management App
+
+The platform has a live web admin at **planBadmin.com**.
+
+| Layer | Details |
+|---|---|
+| Frontend | React + Vite, hosted on Vercel. Source: `frontend/` |
+| Backend | FastAPI, hosted on Railway. Source: `src/aiplatform/webapp/` |
+| Auth | Google OAuth — only the `ALLOWED_EMAIL` account can log in |
+| Domain | Frontend: `planBadmin.com` → Vercel. API: `api.planBadmin.com` → Railway |
+
+Key env vars required on Railway: `GOOGLE_CLIENT_ID`, `ALLOWED_EMAIL`, `JWT_SECRET`, `CORS_ORIGINS`, `DATABASE_URL`, `ANTHROPIC_API_KEY`.
+Key env vars required on Vercel: `VITE_API_URL=https://api.planBadmin.com`.
 
 ---
 

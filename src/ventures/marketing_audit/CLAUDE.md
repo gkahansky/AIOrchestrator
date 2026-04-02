@@ -12,6 +12,14 @@ Dependencies: platform → skills only. Never venture → venture.
 
 ---
 
+## Web UI Trigger
+
+Orders can be submitted via the management app at planBadmin.com (Ventures → Marketing Audit → New Order).
+The UI posts to `POST /api/ventures/marketing-audit/orders` which writes the job to DB and queues a Celery task.
+CLI trigger still works: `python scripts/run_marketing_audit.py`.
+
+---
+
 ## Service Tiers
 
 | Tier | Price | Delivery | Output |

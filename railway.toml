@@ -6,7 +6,7 @@ dockerfilePath = "Dockerfile"
 # Railway selects this section for the "web" service.
 # Runs Alembic migrations before starting Uvicorn so schema is always current.
 [deploy]
-startCommand = "sh start.sh"
+startCommand = "sh -c 'if [ \"$SERVICE_ROLE\" = \"worker\" ]; then exec celery -A aiplatform.worker worker --loglevel=info --concurrency=2; else python -m alembic upgrade head && exec uvicorn aiplatform.webapp.main:app --host 0.0.0.0 --port ${PORT:-8000}; fi'"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"

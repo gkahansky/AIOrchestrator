@@ -75,6 +75,7 @@ export default function JobDetail() {
 
   const [notes, setNotes] = useState("")
   const [actionDone, setActionDone] = useState<string | null>(null)
+  const [cancelling, setCancelling] = useState(false)
 
   async function handleApprove() {
     if (!id) return
@@ -92,6 +93,24 @@ export default function JobDetail() {
     if (!id) return
     await retry.mutateAsync({ id })
     setActionDone("retried")
+  }
+
+  async function handleCancel() {
+    if (!id) return
+    setCancelling(true)
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "https://api.planbadmin.com"}/api/jobs/${id}/cancel`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${localStorage.getItem("api_token")}` },
+      })
+      if (!res.ok) throw new Error("Cancel failed")
+      setActionDone("cancelled")
+      setTimeout(() => navigate(-1), 1500)
+    } catch (e) {
+      alert((e as Error).message)
+    } finally {
+      setCancelling(false)
+    }
   }
 
   if (isLoading) {
@@ -145,13 +164,25 @@ export default function JobDetail() {
           </div>
           <p className="text-sm font-label text-on-surface-variant font-mono">{job.id}</p>
         </div>
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-1 text-sm font-label text-on-surface-variant hover:text-primary transition-colors"
-        >
-          <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-          Back
-        </button>
+        <div className="flex items-center gap-3">
+          {!["delivered", "published", "failed", "cancelled"].includes(job.status) && !actionDone && (
+            <button
+              onClick={handleCancel}
+              disabled={cancelling}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-error/30 text-error text-xs font-label font-semibold hover:bg-error-container transition-colors disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-[14px]">cancel</span>
+              {cancelling ? "Cancelling…" : "Cancel Job"}
+            </button>
+          )}
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-1 text-sm font-label text-on-surface-variant hover:text-primary transition-colors"
+          >
+            <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+            Back
+          </button>
+        </div>
       </div>
 
       {/* Meta cards */}

@@ -6,21 +6,13 @@ dockerfilePath = "Dockerfile"
 # Railway selects this section for the "web" service.
 # Runs Alembic migrations before starting Uvicorn so schema is always current.
 [deploy]
-startCommand = "sh -c 'python -m alembic upgrade head && uvicorn aiplatform.webapp.main:app --host 0.0.0.0 --port ${PORT:-8000}'"
+startCommand = "sh start.sh"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
 
 # ── worker service ─────────────────────────────────────────────────────────────
-# In the Railway dashboard, create a second service pointing at this same repo.
-# Override its start command to the value below (Railway per-service overrides
-# take precedence over railway.toml [deploy] startCommand).
-#
-#   celery -A aiplatform.worker worker --loglevel=info --concurrency=2
-#
-# The [worker] section is read by Railway when a service is named "worker".
-[worker]
-startCommand = "celery -A aiplatform.worker worker --loglevel=info --concurrency=2"
-restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 5
+# The worker service uses railway.worker.toml as its config file.
+# In Railway dashboard → worker service → Settings → Config File Path:
+#   set to: railway.worker.toml

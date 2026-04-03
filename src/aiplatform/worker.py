@@ -139,8 +139,9 @@ def _get_job_id(order: dict, venture: str) -> str | None:
 #   Phase 1 — manual trigger (one-time theme research)
 #   Phase 2 — manual trigger (select theme) → auto-chains Phase 3 per subject
 #   Phase 3 — auto (image gen) → auto-chains Phase 4
-#   Phase 4 — auto (packaging) → sets job to review_pending, sends Phase 5 notification
-#   Phase 6 — triggered by POST /api/jobs/{id}/approve in the web UI
+#   Phase 4 — auto (packaging) → auto-chains Phase 6 directly
+#   Phase 5 — skipped (human review moved to Etsy draft approval in the shop)
+#   Phase 6 — auto-triggered by Phase 4; human reviews and publishes in Etsy
 #
 # Each phase stores its full result in output_data so downstream phases
 # can retrieve subject + phase3_result + phase4_result from the DB.
@@ -227,20 +228,24 @@ def run_etsy_phase(self, phase: int, params: dict) -> dict:
             run_etsy_phase.delay(4, {"subject": subject, "phase3_result": result})
             return {"phase": 3, "status": "completed", "job_id": job_id, "result": result}
 
-        # ── Phase 4 → set review_pending, queue Phase 5 notification ──────────
+        # ── Phase 4 → queue Phase 6 directly (Phase 5 review gate removed) ──────
         if phase == 4:
-            # Store subject + phase3_result alongside phase4 result so the
-            # approve endpoint can pass all three to Phase 6
             full_result = {
                 **result,
-                "subject":      params.get("subject"),
+                "subject":       params.get("subject"),
                 "phase3_result": params.get("phase3_result"),
             }
-            _etsy_update_job(job_id, "review_pending", full_result, now)
-            run_etsy_phase.delay(5, {"pending_subjects": [result]})
-            return {"phase": 4, "status": "review_pending", "job_id": job_id, "result": full_result}
+            _etsy_update_job(job_id, "completed", full_result, now)
+            subject      = params.get("subject", {})
+            phase3_result = params.get("phase3_result", {})
+            run_etsy_phase.delay(6, {
+                "subject":       subject,
+                "phase3_result": phase3_result,
+                "phase4_result": result,
+            })
+            return {"phase": 4, "status": "completed", "job_id": job_id, "result": full_result}
 
-        # ── Phase 5 — notification only, no DB job of its own ─────────────────
+        # ── Phase 5 — kept for manual invocation but no longer auto-chained ────
         if phase == 5:
             _etsy_update_job(job_id, "completed", result, now)
             return {"phase": 5, "status": "completed", "job_id": job_id, "result": result}

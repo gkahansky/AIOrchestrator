@@ -85,8 +85,7 @@ function PipelineTab() {
 
   const PHASES = [
     { phase: 1, title: "Theme Research", description: "Score all seed themes by demand, competition, and monetisation" },
-    { phase: 2, title: "Subject List Generation", description: "Generate 20 product subjects from a winning theme" },
-    { phase: 3, title: "Image Generation", description: "Generate artwork + 3 mockups for a subject" },
+    { phase: 2, title: "Subject List + Image Generation", description: "Generate 20 subjects from a theme, then automatically queue image generation for each" },
     { phase: 4, title: "Packaging", description: "Create delivery ZIP + review PDF for a subject" },
     { phase: 5, title: "Human Review Notification", description: "Email + Slack alert — pauses for approval" },
     { phase: 6, title: "Etsy Draft Upload", description: "Upload approved subject as a draft listing" },
@@ -95,7 +94,7 @@ function PipelineTab() {
   return (
     <div className="space-y-4">
       <p className="text-sm font-body text-on-surface-variant">
-        Trigger each phase individually. Phase 2 requires a theme from Phase 1 results. Phases 3–6 require a subject slug.
+        Phase 1 scores themes. Phase 2 generates subjects and automatically queues image generation (Phase 3) for all 20. Phases 4–6 require a subject slug.
       </p>
       {PHASES.map(({ phase, title, description }) => (
         <div key={phase} className="bg-surface-container-lowest rounded-xl p-5 shadow-float space-y-4">
@@ -188,7 +187,9 @@ function PipelineTab() {
             <div className="bg-surface-container-low rounded-lg px-3 py-2">
               <p className="text-[10px] font-label font-semibold uppercase tracking-wider text-on-surface-variant mb-1">Result</p>
               <p className="text-xs font-mono text-on-surface-variant break-all">
-                Task queued — celery_task_id: {(phases[phase].result!.celery_task_id ?? phases[phase].result!.job_id) as string ?? "—"}
+                {phase === 2
+                  ? "Subjects queued — image generation will start automatically for each subject"
+                  : `Task queued — celery_task_id: ${(phases[phase].result!.celery_task_id ?? phases[phase].result!.job_id) as string ?? "—"}`}
               </p>
             </div>
           )}

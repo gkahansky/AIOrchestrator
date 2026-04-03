@@ -195,6 +195,11 @@ def run_etsy_phase(self, phase: int, params: dict) -> dict:
         except Exception:
             pass
 
+        # Auto-chain: after Phase 2 completes, queue Phase 3 for each subject
+        if phase == 2 and result.get("subjects"):
+            for subject in result["subjects"]:
+                run_etsy_phase.delay(3, {"subject": subject})
+
         return {"phase": phase, "status": "completed", "job_id": job_id, "result": result}
 
     except Exception as exc:

@@ -82,6 +82,14 @@ export async function retryJob(id: string): Promise<{ message: string }> {
   return handleResponse<{ message: string }>(res)
 }
 
+export async function cancelJob(id: string): Promise<{ message: string }> {
+  const res = await fetch(`${BASE}/api/jobs/${id}/cancel`, {
+    method: "POST",
+    headers: getHeaders(),
+  })
+  return handleResponse<{ message: string }>(res)
+}
+
 export async function fetchDashboard(): Promise<DashboardStats> {
   const res = await fetch(`${BASE}/api/platform/dashboard`, { headers: getHeaders() })
   return handleResponse<DashboardStats>(res)

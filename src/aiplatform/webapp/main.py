@@ -95,10 +95,13 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
     )
 
+    origins = os.environ.get("CORS_ORIGINS", "*").split(",")
+    # allow_credentials cannot be used with wildcard origin (CORS spec)
+    allow_creds = origins != ["*"]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
-        allow_credentials=True,
+        allow_origins=origins,
+        allow_credentials=allow_creds,
         allow_methods=["*"],
         allow_headers=["*"],
     )

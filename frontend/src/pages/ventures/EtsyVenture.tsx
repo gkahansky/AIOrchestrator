@@ -61,7 +61,8 @@ function PipelineTab() {
     queryFn: fetchThemes,
   })
   const themes: Theme[] = themesData?.themes ?? []
-  const passingThemes = themes.filter((t) => t.proceed)
+  // Show all themes sorted by score; mark passing ones but don't hide others
+  const sortedThemes = [...themes].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
 
   const { data: subjectsData, refetch: refetchSubjects } = useQuery({
     queryKey: ["etsySubjects"],
@@ -169,25 +170,21 @@ function PipelineTab() {
               <label className="block text-[10px] font-label font-medium uppercase tracking-wider text-on-surface-variant mb-1">
                 Theme
               </label>
-              {passingThemes.length > 0 ? (
+              {sortedThemes.length > 0 ? (
                 <select
                   value={phases[2].params.theme}
                   onChange={(e) => setParams(2, { theme: e.target.value })}
                   className="w-full px-3 py-1.5 text-xs font-label bg-surface-container-low rounded-lg border border-transparent focus:border-primary/40 focus:outline-none text-on-surface"
                 >
                   <option value="">— select a theme —</option>
-                  {passingThemes
-                    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-                    .map((t) => (
-                      <option key={t.theme} value={t.theme}>
-                        {t.theme} {t.score != null ? `(score: ${Math.round(t.score)})` : ""}
-                      </option>
-                    ))}
+                  {sortedThemes.map((t) => (
+                    <option key={t.theme} value={t.theme}>
+                      {t.theme}
+                      {t.score != null ? ` (score: ${Math.round(t.score)})` : ""}
+                      {t.proceed ? " ✓" : ""}
+                    </option>
+                  ))}
                 </select>
-              ) : themes.length > 0 ? (
-                <p className="text-xs font-label text-on-surface-variant bg-surface-container-low px-3 py-2 rounded-lg">
-                  No themes scored ≥ 60 yet. Run Phase 1 first.
-                </p>
               ) : (
                 <p className="text-xs font-label text-on-surface-variant bg-surface-container-low px-3 py-2 rounded-lg">
                   No Phase 1 results found. Run Phase 1 first.

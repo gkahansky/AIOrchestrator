@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { fetchJobs, fetchJob, approveJob, rejectJob, retryJob } from "../api"
+import { fetchJobs, fetchJob, approveJob, rejectJob, retryJob, cancelJob } from "../api"
 
 export function useJobs(params?: { venture?: string; status?: string; page?: number; page_size?: number }) {
   return useQuery({
@@ -48,6 +48,18 @@ export function useRetryJob() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id }: { id: string }) => retryJob(id),
+    onSuccess: (_data, { id }) => {
+      void qc.invalidateQueries({ queryKey: ["job", id] })
+      void qc.invalidateQueries({ queryKey: ["jobs"] })
+      void qc.invalidateQueries({ queryKey: ["dashboard"] })
+    },
+  })
+}
+
+export function useCancelJob() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) => cancelJob(id),
     onSuccess: (_data, { id }) => {
       void qc.invalidateQueries({ queryKey: ["job", id] })
       void qc.invalidateQueries({ queryKey: ["jobs"] })

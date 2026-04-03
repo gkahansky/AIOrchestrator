@@ -4,6 +4,7 @@ Etsy venture router.
   POST /api/ventures/etsy/phase/{n}   — queue a pipeline phase via Celery
   GET  /api/ventures/etsy/listings    — list Etsy jobs from the DB
   GET  /api/ventures/etsy/themes      — scored themes from latest Phase 1 run
+  GET  /api/ventures/etsy/subjects    — subjects from latest Phase 2 run
 """
 
 from typing import Any
@@ -126,5 +127,56 @@ def get_etsy_themes(
                 "proceed": t.get("proceed", False),
             }
             for t in (themes or [])
+        ],
+    }
+
+
+@router.get("/subjects")
+def get_etsy_subjects(
+    _: str = Depends(require_auth),
+    db=Depends(get_db),
+) -> dict:
+    """Return subjects from the most recent completed Phase 2 job."""
+    job = (
+        db.query(Job)
+        .filter(
+            Job.venture == "etsy",
+            Job.status == "completed",
+            Job.phase_current == 2,
+        )
+        .order_by(Job.created_at.desc())
+        .first()
+    )
+
+    if not job:
+        candidates = (
+            db.query(Job)
+            .filter(Job.venture == "etsy", Job.status == "completed")
+            .order_by(Job.created_at.desc())
+            .limit(20)
+            .all()
+        )
+        for j in candidates:
+            if j.output_data and j.output_data.get("subjects"):
+                job = j
+                break
+
+    if not job or not job.output_data:
+        return {"subjects": [], "theme": None}
+
+    out = job.output_data
+    subjects = out.get("subjects", [])
+    return {
+        "theme": out.get("theme"),
+        "theme_slug": out.get("theme_slug"),
+        "subjects": [
+            {
+                "subject_id": s.get("subject_id"),
+                "title_draft": s.get("title_draft"),
+                "quality_tier": s.get("quality_tier"),
+                "price_usd": s.get("price_usd"),
+                "subject": s,  # full dict for passing to phase 3/4
+            }
+            for s in subjects
         ],
     }

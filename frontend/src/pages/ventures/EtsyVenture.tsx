@@ -32,10 +32,24 @@ async function fetchThemes() {
   return res.json()
 }
 
+async function fetchSubjects() {
+  const res = await fetch(`${BASE}/api/ventures/etsy/subjects`, { headers: getHeaders() })
+  if (!res.ok) throw new Error("Failed to load subjects")
+  return res.json()
+}
+
 interface Theme {
   theme: string
   score: number | null
   proceed: boolean
+}
+
+interface Subject {
+  subject_id: string
+  title_draft: string
+  quality_tier: string
+  price_usd: number
+  subject: Record<string, unknown>
 }
 
 
@@ -48,6 +62,18 @@ function PipelineTab() {
   })
   const themes: Theme[] = themesData?.themes ?? []
   const passingThemes = themes.filter((t) => t.proceed)
+
+  const { data: subjectsData, refetch: refetchSubjects } = useQuery({
+    queryKey: ["etsySubjects"],
+    queryFn: fetchSubjects,
+  })
+  const subjects: Subject[] = subjectsData?.subjects ?? []
+
+  const [selectedSubject3, setSelectedSubject3] = useState<Subject | null>(null)
+  const [selectedSubject4, setSelectedSubject4] = useState<Subject | null>(null)
+  const [testPending, setTestPending] = useState<Record<number, boolean>>({})
+  const [testResult, setTestResult] = useState<Record<number, string | null>>({})
+  const [testError, setTestError] = useState<Record<number, string | null>>({})
 
   type PhaseState = { params: Record<string, string>; result: Record<string, unknown> | null; error: string | null }
   const [phases, setPhases] = useState<Record<number, PhaseState>>({
@@ -77,6 +103,23 @@ function PipelineTab() {
 
   function setParams(phase: number, params: Record<string, string>) {
     setPhases((s) => ({ ...s, [phase]: { ...s[phase], params } }))
+  }
+
+  async function handleTestPhase(phase: number, subject: Subject | null) {
+    if (!subject) return
+    setTestPending((p) => ({ ...p, [phase]: true }))
+    setTestResult((r) => ({ ...r, [phase]: null }))
+    setTestError((e) => ({ ...e, [phase]: null }))
+    try {
+      const result = await triggerPhase(phase, { subject: subject.subject })
+      setTestResult((r) => ({ ...r, [phase]: result.celery_task_id ?? result.job_id ?? "queued" }))
+      void qc.invalidateQueries({ queryKey: ["etsyListings"] })
+      if (phase === 2) void refetchSubjects()
+    } catch (e) {
+      setTestError((err) => ({ ...err, [phase]: (e as Error).message }))
+    } finally {
+      setTestPending((p) => ({ ...p, [phase]: false }))
+    }
   }
 
   const PHASES = [
@@ -170,6 +213,55 @@ function PipelineTab() {
           )}
         </div>
       ))}
+
+      {/* ── Test section ── */}
+      {subjects.length > 0 && (
+        <div className="border-t border-outline-variant/20 pt-4 space-y-3">
+          <p className="text-xs font-label font-semibold uppercase tracking-wider text-on-surface-variant">
+            Test individual subject
+          </p>
+
+          {/* Phase 3 test */}
+          {[
+            { phase: 3, label: "Image Generation", selected: selectedSubject3, setSelected: setSelectedSubject3 },
+            { phase: 4, label: "Packaging", selected: selectedSubject4, setSelected: setSelectedSubject4 },
+          ].map(({ phase, label, selected, setSelected }) => (
+            <div key={phase} className="bg-surface-container-low rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-secondary-container flex items-center justify-center text-[10px] font-bold text-on-secondary-container">{phase}</span>
+                  <span className="text-xs font-label font-semibold text-on-surface">{label} — single subject test</span>
+                </div>
+                <button
+                  onClick={() => handleTestPhase(phase, selected)}
+                  disabled={(testPending[phase] ?? false) || !selected}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary text-on-secondary text-xs font-label font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 shrink-0"
+                >
+                  {testPending[phase] ? (
+                    <><div className="w-3 h-3 border border-on-secondary border-t-transparent rounded-full animate-spin" />Running…</>
+                  ) : (
+                    <><span className="material-symbols-outlined text-[14px]">science</span>Test</>
+                  )}
+                </button>
+              </div>
+              <select
+                value={selected?.subject_id ?? ""}
+                onChange={(e) => setSelected(subjects.find((s) => s.subject_id === e.target.value) ?? null)}
+                className="w-full px-3 py-1.5 text-xs font-label bg-surface-container-lowest rounded-lg border border-transparent focus:border-primary/40 focus:outline-none text-on-surface"
+              >
+                <option value="">— select a subject —</option>
+                {subjects.map((s) => (
+                  <option key={s.subject_id} value={s.subject_id}>
+                    {s.title_draft ?? s.subject_id}
+                  </option>
+                ))}
+              </select>
+              {testError[phase] && <p className="text-xs text-error">{testError[phase]}</p>}
+              {testResult[phase] && <p className="text-xs font-mono text-on-surface-variant">Queued — task: {testResult[phase]}</p>}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

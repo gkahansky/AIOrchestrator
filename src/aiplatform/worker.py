@@ -229,10 +229,16 @@ def run_etsy_phase(self, phase: int, params: dict) -> dict:
 
         # ── Phase 4 → set review_pending, queue Phase 5 notification ──────────
         if phase == 4:
-            _etsy_update_job(job_id, "review_pending", result, now)
-            # Phase 5 is a batch notification — queue it with this single subject
+            # Store subject + phase3_result alongside phase4 result so the
+            # approve endpoint can pass all three to Phase 6
+            full_result = {
+                **result,
+                "subject":      params.get("subject"),
+                "phase3_result": params.get("phase3_result"),
+            }
+            _etsy_update_job(job_id, "review_pending", full_result, now)
             run_etsy_phase.delay(5, {"pending_subjects": [result]})
-            return {"phase": 4, "status": "review_pending", "job_id": job_id, "result": result}
+            return {"phase": 4, "status": "review_pending", "job_id": job_id, "result": full_result}
 
         # ── Phase 5 — notification only, no DB job of its own ─────────────────
         if phase == 5:

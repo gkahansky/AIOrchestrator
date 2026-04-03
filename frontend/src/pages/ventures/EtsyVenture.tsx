@@ -53,10 +53,6 @@ function PipelineTab() {
   const [phases, setPhases] = useState<Record<number, PhaseState>>({
     1: { params: {}, result: null, error: null },
     2: { params: { theme: "" }, result: null, error: null },
-    3: { params: { subject_slug: "" }, result: null, error: null },
-    4: { params: { subject_slug: "" }, result: null, error: null },
-    5: { params: { subject_slug: "" }, result: null, error: null },
-    6: { params: { subject_slug: "" }, result: null, error: null },
   })
   const [pending, setPending] = useState<Record<number, boolean>>({})
 
@@ -85,16 +81,13 @@ function PipelineTab() {
 
   const PHASES = [
     { phase: 1, title: "Theme Research", description: "Score all seed themes by demand, competition, and monetisation" },
-    { phase: 2, title: "Subject List + Image Generation", description: "Generate 20 subjects from a theme, then automatically queue image generation for each" },
-    { phase: 4, title: "Packaging", description: "Create delivery ZIP + review PDF for a subject" },
-    { phase: 5, title: "Human Review Notification", description: "Email + Slack alert — pauses for approval" },
-    { phase: 6, title: "Etsy Draft Upload", description: "Upload approved subject as a draft listing" },
+    { phase: 2, title: "Start Pipeline", description: "Select a theme → automatically runs image generation, packaging, and sends for human review" },
   ]
 
   return (
     <div className="space-y-4">
       <p className="text-sm font-body text-on-surface-variant">
-        Phase 1 scores themes. Phase 2 generates subjects and automatically queues image generation (Phase 3) for all 20. Phases 4–6 require a subject slug.
+        Run Phase 1 once to score themes. Then select a theme to start the full pipeline — subjects → images → packaging → human review → Etsy upload runs automatically.
       </p>
       {PHASES.map(({ phase, title, description }) => (
         <div key={phase} className="bg-surface-container-lowest rounded-xl p-5 shadow-float space-y-4">
@@ -160,24 +153,6 @@ function PipelineTab() {
             </div>
           )}
 
-          {/* Phases 3–6 — subject_slug text input */}
-          {phase >= 3 && Object.keys(phases[phase].params).length > 0 && (
-            <div className="grid grid-cols-2 gap-2">
-              {Object.entries(phases[phase].params).map(([key, val]) => (
-                <div key={key}>
-                  <label className="block text-[10px] font-label font-medium uppercase tracking-wider text-on-surface-variant mb-1">
-                    {key.replace(/_/g, " ")}
-                  </label>
-                  <input
-                    type="text"
-                    value={val}
-                    onChange={(e) => setParams(phase, { ...phases[phase].params, [key]: e.target.value })}
-                    className="w-full px-3 py-1.5 text-xs font-label bg-surface-container-low rounded-lg border border-transparent focus:border-primary/40 focus:outline-none text-on-surface"
-                  />
-                </div>
-              ))}
-            </div>
-          )}
 
           {phases[phase].error && (
             <p className="text-xs font-label text-error bg-error-container px-3 py-2 rounded-lg">{phases[phase].error}</p>

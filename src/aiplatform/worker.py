@@ -134,17 +134,52 @@ def _get_job_id(order: dict, venture: str) -> str | None:
 
 
 # ── Etsy venture ───────────────────────────────────────────────────────────────
+#
+# Automated pipeline flow:
+#   Phase 1 — manual trigger (one-time theme research)
+#   Phase 2 — manual trigger (select theme) → auto-chains Phase 3 per subject
+#   Phase 3 — auto (image gen) → auto-chains Phase 4
+#   Phase 4 — auto (packaging) → sets job to review_pending, sends Phase 5 notification
+#   Phase 6 — triggered by POST /api/jobs/{id}/approve in the web UI
+#
+# Each phase stores its full result in output_data so downstream phases
+# can retrieve subject + phase3_result + phase4_result from the DB.
+
+def _etsy_update_job(job_id: str, status: str, result: dict, dt) -> None:
+    """Update Etsy job row status + output_data. Best-effort, never raises."""
+    try:
+        from aiplatform.database.models import Job
+        from aiplatform.database.session import get_session
+        with get_session() as db:
+            job = db.query(Job).filter(
+                Job.venture == "etsy",
+                Job.input_data["order_id"].astext == job_id,
+            ).first()
+            if job:
+                job.status = status
+                job.output_data = result
+                if status in ("completed", "review_pending", "failed") and not job.completed_at:
+                    job.completed_at = dt
+    except Exception:
+        pass
+
 
 @celery_app.task(bind=True, name="etsy.run_phase", max_retries=2)
 def run_etsy_phase(self, phase: int, params: dict) -> dict:
-    """Run a single Etsy pipeline phase and track it in the DB."""
+    """
+    Run a single Etsy pipeline phase.
+
+    Phases 1 & 2 are triggered manually from the UI.
+    Phases 3, 4, 5 are chained automatically.
+    Phase 6 is triggered by the /approve endpoint.
+    """
     import uuid
     from datetime import datetime, timezone
 
     job_id = params.get("job_id") or str(uuid.uuid4())
     params["job_id"] = job_id
+    now = datetime.now(timezone.utc)
 
-    # Build a minimal order dict for DB tracking
     order = {
         "order_id": job_id,
         "phase":    phase,
@@ -175,31 +210,37 @@ def run_etsy_phase(self, phase: int, params: dict) -> dict:
         if fn is None:
             raise ValueError(f"Unknown Etsy phase: {phase}")
 
-        # Strip internal tracking keys before passing to pipeline
-        pipeline_params = {k: v for k, v in params.items() if k != "job_id"}
+        pipeline_params = {k: v for k, v in params.items() if k not in ("job_id",)}
         result = fn(**pipeline_params)
 
-        # Update DB with completed status + output
-        try:
-            from aiplatform.database.models import Job
-            from aiplatform.database.session import get_session
-            with get_session() as db:
-                job = db.query(Job).filter(
-                    Job.venture == "etsy",
-                    Job.input_data["order_id"].astext == job_id,
-                ).first()
-                if job:
-                    job.status = "completed"
-                    job.output_data = result
-                    job.completed_at = datetime.now(timezone.utc)
-        except Exception:
-            pass
-
-        # Auto-chain: after Phase 2 completes, queue Phase 3 for each subject
+        # ── Phase 2 → queue Phase 3 for every subject ──────────────────────────
         if phase == 2 and result.get("subjects"):
+            _etsy_update_job(job_id, "completed", result, now)
             for subject in result["subjects"]:
                 run_etsy_phase.delay(3, {"subject": subject})
+            return {"phase": 2, "status": "completed", "job_id": job_id, "result": result}
 
+        # ── Phase 3 → queue Phase 4 for same subject ───────────────────────────
+        if phase == 3:
+            _etsy_update_job(job_id, "completed", result, now)
+            subject = params.get("subject", {})
+            run_etsy_phase.delay(4, {"subject": subject, "phase3_result": result})
+            return {"phase": 3, "status": "completed", "job_id": job_id, "result": result}
+
+        # ── Phase 4 → set review_pending, queue Phase 5 notification ──────────
+        if phase == 4:
+            _etsy_update_job(job_id, "review_pending", result, now)
+            # Phase 5 is a batch notification — queue it with this single subject
+            run_etsy_phase.delay(5, {"pending_subjects": [result]})
+            return {"phase": 4, "status": "review_pending", "job_id": job_id, "result": result}
+
+        # ── Phase 5 — notification only, no DB job of its own ─────────────────
+        if phase == 5:
+            _etsy_update_job(job_id, "completed", result, now)
+            return {"phase": 5, "status": "completed", "job_id": job_id, "result": result}
+
+        # ── All other phases (1, 6, 7) — complete normally ────────────────────
+        _etsy_update_job(job_id, "completed", result, now)
         return {"phase": phase, "status": "completed", "job_id": job_id, "result": result}
 
     except Exception as exc:

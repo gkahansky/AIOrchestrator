@@ -112,7 +112,7 @@ def approve_job(
     _redis_signal(str(job_id), "approve")
 
     # Re-dispatch Celery task with approved order state
-    from aiplatform.worker import run_audit_order, run_podcast_order
+    from aiplatform.worker import run_audit_order, run_podcast_order, run_etsy_phase
 
     order = dict(job.output_data or job.input_data)
     order["status"] = "approved"
@@ -123,6 +123,17 @@ def approve_job(
         task = run_audit_order.delay(order)
     elif job.venture == "content_studio":
         task = run_podcast_order.delay(order)
+    elif job.venture == "etsy":
+        # For Etsy, approval triggers Phase 6 (Etsy draft upload)
+        # output_data contains the Phase 4 result which has subject + phase3_result + phase4_result
+        phase4_result = job.output_data or {}
+        subject = phase4_result.get("subject") or order.get("subject", {})
+        phase3_result = phase4_result.get("phase3_result") or order.get("phase3_result")
+        task = run_etsy_phase.delay(6, {
+            "subject": subject,
+            "phase3_result": phase3_result,
+            "phase4_result": phase4_result,
+        })
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

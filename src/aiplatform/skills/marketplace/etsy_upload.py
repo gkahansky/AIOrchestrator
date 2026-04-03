@@ -112,6 +112,29 @@ _DIGITAL_PRINTS_TAXONOMY_ID = 2078
 
 # ─── Public API ───────────────────────────────────────────────────────────────
 
+def get_or_create_shop_section(title: str, shop_id: str | None = None) -> int | None:
+    """
+    Return the shop_section_id for a section whose title matches (case-insensitive).
+    Creates the section if it doesn't exist.
+    Returns None on any error so the caller can proceed without a section.
+    """
+    sid = shop_id or os.environ.get("ETSY_SHOP_ID", "")
+    if not sid:
+        return None
+    try:
+        resp = _get(f"/shops/{sid}/sections")
+        sections = resp.get("results", []) if isinstance(resp, dict) else []
+        for s in sections:
+            if s.get("title", "").lower() == title.lower():
+                return s["shop_section_id"]
+        # Create it
+        new_section = _post(f"/shops/{sid}/sections", {"title": title[:24]})
+        return new_section.get("shop_section_id")
+    except Exception as exc:
+        log.warning("get_or_create_shop_section failed: %s", exc)
+        return None
+
+
 def create_draft_listing(
     title: str,
     description: str,
@@ -119,6 +142,7 @@ def create_draft_listing(
     tags: list[str],
     taxonomy_id: int = _DIGITAL_PRINTS_TAXONOMY_ID,
     quantity: int = 999,
+    shop_section_id: int | None = None,
     shop_id: str | None = None,
 ) -> dict:
     """
@@ -143,19 +167,23 @@ def create_draft_listing(
         return {"error": "ETSY_SHOP_ID not set in environment."}
 
     payload = {
-        "title":           title[:140],
-        "description":     description[:2000],
-        "price":           round(price_usd, 2),
-        "quantity":        quantity,
-        "who_made":        "i_did",
-        "when_made":       "made_to_order",
-        "is_digital":      True,
-        "type":            "download",
-        "state":           "draft",          # ← NEVER "active"
-        "taxonomy_id":     taxonomy_id,
-        "tags":            tags[:13],
-        "is_supply":       False,
+        "title":                  title[:140],
+        "description":            description[:2000],
+        "price":                  round(price_usd, 2),
+        "quantity":               quantity,
+        "who_made":               "i_did",
+        "when_made":              "made_to_order",
+        "is_digital":             True,
+        "type":                   "download",
+        "state":                  "draft",   # ← NEVER "active"
+        "taxonomy_id":            taxonomy_id,
+        "tags":                   tags[:13],
+        "is_supply":              False,
+        "should_auto_renew":      True,
+        "is_created_with_ai":     True,      # Etsy AI disclosure requirement
     }
+    if shop_section_id:
+        payload["shop_section_id"] = shop_section_id
 
     resp = _post(f"/shops/{sid}/listings", payload)
     if "error" in resp:

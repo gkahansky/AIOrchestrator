@@ -203,6 +203,11 @@ def run_phase_2(
     print(f"Phase 2: generating 20 subjects for '{theme}'...")
     subjects = _generate_subjects_with_claude(theme)
 
+    # Stamp theme onto each subject so Phase 6 can set the correct shop section
+    for s in subjects:
+        s["theme"] = theme
+        s["theme_slug"] = theme_slug
+
     json_path = output_dir / f"subjects-{theme_slug}.json"
     json_path.write_text(json.dumps(subjects, indent=2))
     print(f"  Saved {len(subjects)} subjects -> {json_path}")
@@ -711,12 +716,22 @@ def run_phase_6(
             normalised.append(tag[:20])  # Etsy hard limit: 20 chars per tag
     tags = normalised
 
+    # ── Resolve shop section (= theme name, e.g. "Botanical Art") ─────────────
+    from aiplatform.skills.marketplace.etsy_upload import get_or_create_shop_section
+    theme_name = subject.get("theme") or meta.get("theme") or ""
+    shop_section_id = None
+    if theme_name:
+        shop_section_id = get_or_create_shop_section(theme_name)
+        if shop_section_id:
+            print(f"  Shop section '{theme_name}' → id {shop_section_id}")
+
     # ── Create draft listing ───────────────────────────────────────────────────
     listing_result = create_draft_listing(
         title=title,
         description=description,
         price_usd=float(price_usd),
         tags=tags,
+        shop_section_id=shop_section_id,
     )
     if "error" in listing_result:
         return {"error": f"create_draft_listing failed: {listing_result['error']}", "subject_id": slug}

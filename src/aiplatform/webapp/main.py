@@ -57,6 +57,17 @@ logger = logging.getLogger(__name__)
 # ── Google service account — materialise from env var at startup ───────────────
 
 def _materialise_service_account() -> None:
+    # OAuth user token — preferred for personal Drive writes
+    token_b64 = os.environ.get("GOOGLE_DRIVE_TOKEN_JSON", "")
+    if token_b64:
+        dest = Path(os.environ.get("GOOGLE_TOKEN_PATH", "./google_token.json"))
+        try:
+            dest.write_bytes(base64.b64decode(token_b64))
+            logger.info("Google OAuth token written to %s", dest)
+        except Exception as exc:
+            logger.warning("Failed to write Google OAuth token: %s", exc)
+
+    # Service account — fallback
     b64 = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
     if not b64:
         return

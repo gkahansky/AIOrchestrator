@@ -741,22 +741,41 @@ def run_phase_6(
     print(f"  [OK] Draft created: {draft_url}")
 
     # ── Upload mockup images ───────────────────────────────────────────────────
-    mockups_dir = Path(output_dir) / "images" / slug / "mockups"
+    from aiplatform.skills.storage.drive_read import drive_read
+    from aiplatform.skills.storage.drive_organise import list_folder
+
+    tmp_dir = Path(output_dir) / "_phase6_tmp" / slug
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+
     mockup_paths = []
 
-    # Prefer phase3_result mockup paths; accept any key names (product_shot /
-    # living_room / flat_lay / office / bedroom — depends on which mockup
-    # generation run produced the listing)
+    # 1. Try local paths from phase3_result (works when same container)
     if phase3_result and "mockups" in phase3_result:
-        m = phase3_result["mockups"]
-        for key, p in m.items():
+        for key, p in phase3_result["mockups"].items():
             if key == "cost":
                 continue
             if p and Path(str(p)).exists():
                 mockup_paths.append(str(p))
 
-    if not mockup_paths and mockups_dir.exists():
-        mockup_paths = sorted([str(p) for p in mockups_dir.glob("*.png")])[:3]
+    # 2. If not local, download from Drive using the phase3 folder
+    if not mockup_paths:
+        folder_id = (phase3_result or {}).get("drive_folder_id") or ""
+        if folder_id:
+            print(f"  Local mockups not found — downloading from Drive folder {folder_id}...")
+            try:
+                files = list_folder(folder_id)
+                mockup_files = sorted(
+                    [f for f in files if "mockup" in f["name"].lower() and
+                     f["name"].lower().endswith((".png", ".jpg", ".jpeg"))],
+                    key=lambda f: f["name"]
+                )[:3]
+                for f in mockup_files:
+                    dest = tmp_dir / f["name"]
+                    drive_read(f["file_id"], dest)
+                    mockup_paths.append(str(dest))
+                    print(f"  Downloaded mockup: {f['name']}")
+            except Exception as exc:
+                print(f"  [WARN] Could not download mockups from Drive: {exc}")
 
     images_uploaded = 0
     for rank, mp in enumerate(mockup_paths[:3], start=1):
@@ -770,11 +789,23 @@ def run_phase_6(
     # ── Attach delivery.zip ────────────────────────────────────────────────────
     file_uploaded = False
     zip_path = (phase4_result or {}).get("zip_path", "")
+
+    # 1. Check local path
+    if zip_path and not Path(zip_path).exists():
+        zip_path = ""
+
+    # 2. Download from Drive if not local
     if not zip_path:
-        # Try conventional location
-        zip_candidate = Path(output_dir) / "packages" / slug / f"{slug}-delivery.zip"
-        if zip_candidate.exists():
-            zip_path = str(zip_candidate)
+        drive_zip_id = (phase4_result or {}).get("drive_zip_id") or ""
+        if drive_zip_id:
+            print(f"  Local ZIP not found — downloading from Drive file {drive_zip_id}...")
+            try:
+                dest_zip = tmp_dir / f"{slug}-delivery.zip"
+                drive_read(drive_zip_id, dest_zip)
+                zip_path = str(dest_zip)
+                print(f"  Downloaded ZIP: {dest_zip.stat().st_size / (1024*1024):.2f} MB")
+            except Exception as exc:
+                print(f"  [WARN] Could not download ZIP from Drive: {exc}")
 
     if zip_path and Path(zip_path).exists():
         file_result = upload_listing_file(listing_id=listing_id, file_path=zip_path)
@@ -784,7 +815,7 @@ def run_phase_6(
             file_uploaded = True
             print(f"  [OK] delivery.zip uploaded ({file_result.get('filesize_bytes', '?')} bytes)")
     else:
-        print(f"  [!] delivery.zip not found -- attach manually before publishing")
+        print(f"  [!] delivery.zip not found in Drive or locally — attach manually before publishing")
 
     # ── Write draft record ─────────────────────────────────────────────────────
     draft_record = {

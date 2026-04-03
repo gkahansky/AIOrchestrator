@@ -10,6 +10,12 @@ interface PhaseStep {
   timestamp?: string
 }
 
+// Statuses where the current phase has actually finished (no spinner)
+const DONE_STATUSES = new Set([
+  "completed", "delivered", "published", "approved",
+  "review_pending", "rejected", "cancelled",
+])
+
 function buildPhaseSteps(
   status: JobStatus,
   phaseCurrent: number | null,
@@ -17,16 +23,14 @@ function buildPhaseSteps(
 ): PhaseStep[] {
   const total = phaseTotal ?? 0
   const current = phaseCurrent ?? 0
-  const isFailed = status === "failed"
 
   return Array.from({ length: total }, (_, i) => {
     const phaseNum = i + 1
     if (phaseNum < current) return { name: `Phase ${phaseNum}`, state: "complete" as const }
     if (phaseNum === current) {
-      return {
-        name: `Phase ${phaseNum}`,
-        state: isFailed ? ("failed" as const) : ("active" as const),
-      }
+      if (status === "failed") return { name: `Phase ${phaseNum}`, state: "failed" as const }
+      if (DONE_STATUSES.has(status)) return { name: `Phase ${phaseNum}`, state: "complete" as const }
+      return { name: `Phase ${phaseNum}`, state: "active" as const }
     }
     return { name: `Phase ${phaseNum}`, state: "pending" as const }
   })
@@ -165,7 +169,7 @@ export default function JobDetail() {
           <p className="text-sm font-label text-on-surface-variant font-mono">{job.id}</p>
         </div>
         <div className="flex items-center gap-3">
-          {!["delivered", "published", "failed", "cancelled"].includes(job.status) && !actionDone && (
+          {!["delivered", "published", "completed", "approved", "failed", "cancelled", "rejected"].includes(job.status) && !actionDone && (
             <button
               onClick={handleCancel}
               disabled={cancelling}
@@ -265,7 +269,7 @@ export default function JobDetail() {
               <h2 className="font-headline font-bold text-sm text-on-surface">Input Data</h2>
             </div>
             <div className="px-5 py-4">
-              <pre className="text-xs font-mono text-on-surface-variant bg-surface-container-low rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">
+              <pre className="text-xs font-mono text-on-surface-variant bg-surface-container-low rounded-lg p-3 overflow-x-auto overflow-y-auto whitespace-pre-wrap max-h-40">
                 {JSON.stringify(job.input_data, null, 2)}
               </pre>
             </div>
@@ -278,7 +282,7 @@ export default function JobDetail() {
                 <h2 className="font-headline font-bold text-sm text-on-surface">Output Data</h2>
               </div>
               <div className="px-5 py-4">
-                <pre className="text-xs font-mono text-on-surface-variant bg-surface-container-low rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">
+                <pre className="text-xs font-mono text-on-surface-variant bg-surface-container-low rounded-lg p-3 overflow-x-auto overflow-y-auto whitespace-pre-wrap max-h-72">
                   {JSON.stringify(job.output_data, null, 2)}
                 </pre>
               </div>

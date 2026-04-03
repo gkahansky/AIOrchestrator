@@ -84,49 +84,65 @@ def get_etsy_themes(
     _: str = Depends(require_auth),
     db=Depends(get_db),
 ) -> dict:
-    """Return scored themes from the most recent completed Phase 1 job."""
-    # Try phase_current == 1 first (new jobs), fall back to scanning output_data for themes key
-    job = (
+    """Return scored themes from the most recent Phase 1 job or Drive fallback."""
+    themes_raw = []
+    run_date = None
+
+    # 1. DB: prefer phase_current==1; status filter deliberately omitted so jobs
+    #    that stalled at "running" (silent _etsy_update_job failure) are still found.
+    candidates = (
         db.query(Job)
-        .filter(
-            Job.venture == "etsy",
-            Job.status == "completed",
-            Job.phase_current == 1,
-        )
+        .filter(Job.venture == "etsy")
         .order_by(Job.created_at.desc())
-        .first()
+        .limit(50)
+        .all()
     )
+    for j in candidates:
+        out = j.output_data or {}
+        raw = out.get("themes") or out.get("result", {}).get("themes")
+        if raw:
+            themes_raw = raw
+            run_date = out.get("run_date") or out.get("result", {}).get("run_date")
+            break
 
-    if not job:
-        # Fallback: find most recent completed etsy job whose output_data has a "themes" list
-        candidates = (
-            db.query(Job)
-            .filter(Job.venture == "etsy", Job.status == "completed")
-            .order_by(Job.created_at.desc())
-            .limit(20)
-            .all()
-        )
-        for j in candidates:
-            if j.output_data and j.output_data.get("themes"):
-                job = j
-                break
+    # 2. Drive fallback — scan /01-research/ for the most recent themes JSON file
+    if not themes_raw:
+        try:
+            import json as _json
+            import os as _os
+            from aiplatform.skills.storage.drive_organise import list_folder
+            from aiplatform.skills.storage.drive_read import drive_read
+            import tempfile
+            drive_folder = _os.environ.get("DRIVE_01_RESEARCH_ID", "")
+            if drive_folder:
+                files = list_folder(drive_folder)
+                json_files = sorted(
+                    [f for f in files if f["name"].endswith(".json")],
+                    key=lambda f: f["name"], reverse=True,
+                )
+                if json_files:
+                    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
+                        tmp_path = tmp.name
+                    drive_read(json_files[0]["file_id"], tmp_path)
+                    data = _json.loads(open(tmp_path).read())
+                    themes_raw = data.get("themes", [])
+                    run_date = data.get("run_date")
+        except Exception:
+            pass  # Drive unavailable — return empty
 
-    if not job or not job.output_data:
+    if not themes_raw:
         return {"themes": [], "run_date": None}
-
-    out = job.output_data
-    themes = out.get("themes") or out.get("result", {}).get("themes", [])
-    run_date = out.get("run_date") or out.get("result", {}).get("run_date")
 
     return {
         "run_date": run_date,
         "themes": [
             {
                 "theme": t.get("theme"),
-                "score": t.get("total_score") or t.get("score"),
+                "score": t.get("score") or t.get("total_score"),
                 "proceed": t.get("proceed", False),
             }
-            for t in (themes or [])
+            for t in themes_raw
+            if t.get("theme")
         ],
     }
 

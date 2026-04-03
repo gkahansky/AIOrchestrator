@@ -1,11 +1,9 @@
 # Venture A — MiroPrintStudio (Etsy Digital Image Shop)
 ## Claude Code Context File — Etsy Venture
 
-> ⏸️ **STATUS: ON HOLD**
-> Blocked on one external approval:
-> - **Etsy API key** — application submitted, awaiting approval
->
-> Gemini Imagen 4 is live and tested. Resume Sprint 1 once Etsy API key is confirmed.
+> ✅ **STATUS: PHASES 1–6 LIVE** — Pipeline fully automated from theme research through Etsy draft upload.
+> Phase 7 (promotion) is the only remaining phase.
+> Human review happens in Etsy's own draft approval flow — no separate gate in the admin UI.
 
 **Read the root `/CLAUDE_root.md` first for platform architecture rules.**
 **This file contains only what is specific to the Etsy venture.**
@@ -26,6 +24,9 @@ You are the assistant for the Etsy venture only.
 **MiroPrintStudio** — an automated Etsy shop selling AI-generated digital wall art. The pipeline takes a theme (e.g. "minimalist botanical line art"), researches demand, generates product images, packages them for sale, and gets them listed on Etsy — with two deliberate human checkpoints before anything goes live.
 
 **This is Venture A.** It is also the proving ground for the platform — every skill written here must be venture-agnostic so Venture B can reuse it without modification.
+
+**Automated flow (as of 2026-04-03):**
+Phase 2 (select theme) → Phase 3 per subject (image gen) → Phase 4 (packaging) → Phase 6 (Etsy draft upload). Human reviews and publishes directly in the Etsy shop. Phase 5 review gate removed — Etsy's own draft approval is the human gate.
 
 ---
 
@@ -258,13 +259,13 @@ pending
 
 | Phase | Description | Status | Notes |
 |---|---|---|---|
-| **Phase 1** | Theme research — SerpAPI + Google Trends, score & rank themes, save CSV/JSON to Drive | ✅ Done | Requires SERPAPI_KEY |
-| **Phase 2** | Subject list — Claude generates 20 subjects per theme (titles, prompts, tags, price) | ✅ Done | Requires ANTHROPIC_API_KEY |
-| **Phase 3** | Image gen → resize → mockups → metadata.json + Drive upload | ✅ Done | Gemini artwork + Gemini multimodal mockups (artwork as input) |
-| **Phase 4** | Packaging — delivery.zip (≤ 20 MB enforced) + review-sheet.pdf (auto-checks) | ✅ Done | — |
-| **Phase 5** | Human review notification — email + Slack alert, approval gate | 🔴 Not started | `send_email` + `send_slack` stubs; Etsy API key needed |
-| **Phase 6** | Etsy draft upload — creates listing, attaches images + ZIP. Never auto-publishes. | 🔴 Not started | Etsy API key + OAuth skill not written |
-| **Phase 7** | Promotion — Etsy Ads enrol, Buffer social queue (Instagram + Facebook), ROAS review | 🔴 Not started | Pinterest suspended by Etsy. Reddit deferred (AI ban on most target subreddits). Buffer + Etsy Ads API skills not written |
+| **Phase 1** | Theme research — SerpAPI + Google Trends, score & rank themes, save CSV/JSON to Drive | ✅ Done | Manual trigger from planBadmin.com |
+| **Phase 2** | Subject list — Claude generates 20 subjects per theme (titles, prompts, tags, price) | ✅ Done | Manual trigger; theme selected from dropdown populated from Phase 1 DB results |
+| **Phase 3** | Image gen → resize → mockups → metadata.json + Drive upload | ✅ Done | Auto-chained from Phase 2; Gemini Imagen 4 artwork + gemini-2.5-flash-image mockups |
+| **Phase 4** | Packaging — delivery.zip (≤ 20 MB enforced) + review-sheet.pdf | ✅ Done | Auto-chained from Phase 3 |
+| **Phase 5** | Human review gate | ⏭️ Skipped | Removed — human review happens in Etsy draft approval instead |
+| **Phase 6** | Etsy draft upload — creates listing with title/tags/price/section, attaches 3 mockups + ZIP | ✅ Done | Auto-chained from Phase 4; files downloaded from Drive if local paths gone (ephemeral container fix) |
+| **Phase 7** | Promotion — Etsy Ads enrol, Buffer social queue (Instagram + Facebook), ROAS review | 🔴 Not started | Pinterest suspended by Etsy. Buffer + Etsy Ads API skills not written |
 
 ---
 
@@ -275,51 +276,42 @@ pending
 | **Sprint 1 — Foundations** | Drive folder bootstrap, image gen, Pillow resize | ✅ Done |
 | **Sprint 2 — Research + subject list** | SerpAPI trends, Claude subject generation | ✅ Done |
 | **Sprint 3 — Full pipeline through packaging** | Gemini image gen → consistent mockups → ZIP → review PDF | ✅ Done |
-| **Sprint 4 — Human review gate + Etsy drafts** | Phase 5 email/Slack notification, Phase 6 Etsy draft API upload | 🔴 Blocked — Etsy API key pending |
-| **Sprint 5 — Promotion** | Etsy Ads, Buffer social queue (Instagram + Facebook), 30-day ROAS review | 🔴 Not started |
-| **Sprint 6 — LangGraph + observability** | Replace scripts with LangGraph graph, Redis pub/sub, LangSmith tracing | 🔴 Not started |
+| **Sprint 4 — Etsy upload + full automation** | Phase 6 Etsy draft API (title, tags, mockups, ZIP, shop section, AI disclosure); Phase 5 gate removed; full auto-chain 2→3→4→6 live via planBadmin.com | ✅ Done |
+| **Sprint 5 — Promotion** | Etsy Ads enrol at $1–2/day via Etsy Ads API; Buffer social queue (Instagram + Facebook); 30-day ROAS review | 🔴 Not started |
+| **Sprint 6 — LangGraph + observability** | Replace scripts with LangGraph graph, Redis pub/sub, LangSmith tracing | 🔴 Backlog |
 
 ---
 
 ## Current Status
 
-**Status: ON HOLD — waiting for Etsy API key (Sprint 4 blocker)**
+**Status: LIVE — Phases 1–6 automated. Only Phase 7 (promotion) remains.**
 
-Phases 1–4 fully implemented and tested end-to-end:
-- [x] Drive folder structure bootstrap: `scripts/setup_drive_folders.py`
-- [x] Phase 1 — theme research: `scripts/run_phase1.py`
-- [x] Phase 2 — subject list generation: `scripts/run_phase2.py`
-- [x] Phase 3 — Gemini artwork + Gemini multimodal mockups (artwork as input): `scripts/run_phase3.py`
-- [x] Phase 4 — delivery ZIP + review PDF: `scripts/run_phase4.py`
-- [x] Full Phase 3 tested: eucalyptus botanical-03, $0.10/listing total
+- [x] Phase 1 — theme research (manual trigger from planBadmin.com)
+- [x] Phase 2 — subject list generation with theme dropdown from Phase 1 DB
+- [x] Phase 3 — Gemini Imagen 4 artwork + gemini-2.5-flash-image multimodal mockups; auto-chained from Phase 2
+- [x] Phase 4 — delivery ZIP + review PDF; auto-chained from Phase 3
+- [x] Phase 5 — removed; Etsy draft approval is the human gate
+- [x] Phase 6 — Etsy draft: title, tags (truncated to 20 chars), price, shop section (= theme), AI disclosure, 3 mockup images, delivery ZIP; auto-chained from Phase 4; Drive fallback for ephemeral containers
+- [x] Full pipeline tested end-to-end: Fern Botanical theme, multiple subjects live as Etsy drafts
 
-**Blocked on Etsy API key:** Sprint 4 (phases 5 + 6) cannot proceed without it.
+**Only remaining:** Phase 7 — promotion (Etsy Ads + Buffer social queue)
 
 ---
 
 ## Build Plan — What Remains
 
-### Sprint 4 — unblocks when Etsy API key arrives
+### Sprint 5 — Promotion (Phase 7)
 
-1. `aiplatform/skills/comms/send_email.py` — implement Gmail send (currently a stub)
-2. `aiplatform/skills/comms/send_slack.py` — implement Slack webhook send (currently a stub)
-3. **Phase 5** — review gate: email + Slack alert with Drive links, poll for approval, auto-approve after 20 validated orders
-4. `aiplatform/skills/marketplace/etsy_upload.py` — Etsy OAuth2 client, create draft listing, attach images (3 mockups), attach delivery.zip
-5. **Phase 6** pipeline function — full Etsy draft flow; agent stops before publish; polls for human publish confirmation
+1. Etsy Ads auto-enrol at $1–2/day via Etsy Ads API on listing publish detection
+2. `aiplatform/skills/comms/schedule_social.py` — Buffer API: queue Instagram + Facebook posts
+3. **Phase 7** pipeline function — triggered when Etsy polling detects a draft going active
+4. Finance agent 30-day ROAS review: ROAS < 2× pause, 2–4× maintain, > 4× increase to $3–5/day
 
-### Sprint 5 — after first listings go live
+### Sprint 6 — scale optimisation (backlog)
 
-6. `aiplatform/skills/comms/create_pin.py` — Pinterest API v5: pin per listing (mockup 1, title, Etsy link)
-7. Etsy Ads auto-enrol at $1–2/day via Etsy Ads API
-8. `aiplatform/skills/comms/schedule_social.py` — Buffer API: queue Instagram + Facebook posts
-9. **Phase 7** pipeline function — orchestrates steps 6–8 on publish confirmation
-10. Finance agent 30-day ROAS review: ROAS < 2× pause, 2–4× maintain, > 4× increase to $3–5/day
-
-### Sprint 6 — scale optimisation
-
-11. Replace sequential script calls with LangGraph stateful graph (only when pipeline has > 5 branching phases)
-12. LangSmith tracing for all agent calls
-13. Redis pub/sub for parallel multi-listing runs (event: `phase3_complete` → triggers phase 4 without tight coupling)
+5. Replace sequential script calls with LangGraph stateful graph
+6. LangSmith tracing for all agent calls
+7. Redis pub/sub for parallel multi-listing runs
 
 ---
 
@@ -386,4 +378,4 @@ BUFFER_ACCESS_TOKEN=
 
 | Roadmap ID | Task | Status | Note | Updated |
 |---|---|---|---|---|
-| L-06 | Etsy Digital Image Shop — Venture A | 🔄 in-progress | Etsy access token received. Sprint 4 complete: send_email.py (SMTP), send_slack.py (bot token), etsy... | 2026-03-28 |
+| L-06 | Etsy Phase 7 — Promotion | ✅ done | Etsy pipeline Phases 1-6 fully automated and live. Phase 2→3→4→6 auto-chain. Phase 5 review gate rem... | 2026-04-03 |

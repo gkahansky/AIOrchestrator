@@ -45,6 +45,7 @@ _PHASE_MAPS: dict[str, dict[str, tuple[int, int]]] = {
     },
     "etsy": {
         "pending":           (0, 7),
+        "running":           (0, 7),  # phase_current overridden by order["phase"] in router
         "researching":       (1, 7),
         "researched":        (1, 7),
         "generating":        (2, 7),
@@ -57,6 +58,7 @@ _PHASE_MAPS: dict[str, dict[str, tuple[int, int]]] = {
         "approved":          (5, 7),
         "listing":           (6, 7),
         "listed":            (6, 7),
+        "completed":         (0, 7),  # phase_current overridden by order["phase"] in router
         "published":         (7, 7),
         "failed":            (None, 7),
     },
@@ -117,6 +119,14 @@ def upsert_job(order: dict, venture: str, *, celery_task_id: str | None = None) 
     phase_map = _PHASE_MAPS.get(venture, {})
     status = order.get("status", "pending")
     phase_current, phase_total = phase_map.get(status, (None, None))
+
+    # For Etsy, the phase number is explicit in the order dict — use it directly
+    if venture == "etsy" and order.get("phase"):
+        try:
+            phase_current = int(order["phase"])
+            phase_total = 7
+        except (ValueError, TypeError):
+            pass
     now = datetime.now(timezone.utc)
 
     try:

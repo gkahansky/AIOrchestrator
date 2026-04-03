@@ -348,7 +348,10 @@ def _post(path: str, payload: dict) -> dict:
         time.sleep(0.2)
         data = r.json()
         if r.status_code not in (200, 201):
-            err = data.get("error", data.get("message", str(data)))
+            if isinstance(data, dict):
+                err = data.get("error", data.get("message", str(data)))
+            else:
+                err = str(data)  # Etsy sometimes returns a list of validation errors
             log.error("Etsy POST %s → %s: %s", path, r.status_code, err)
             return {"error": err, "status_code": r.status_code}
         return data

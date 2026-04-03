@@ -26,95 +26,28 @@ async function fetchListings() {
   return res.json()
 }
 
-function PhaseCard({
-  phase,
-  title,
-  description,
-  params,
-  setParams,
-  onTrigger,
-  isPending,
-  result,
-  error,
-}: {
-  phase: number
-  title: string
-  description: string
-  params: Record<string, string>
-  setParams: (p: Record<string, string>) => void
-  onTrigger: () => void
-  isPending: boolean
-  result: Record<string, unknown> | null
-  error: string | null
-}) {
-  return (
-    <div className="bg-surface-container-lowest rounded-xl p-5 shadow-float space-y-4">
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center shrink-0">
-            <span className="text-xs font-label font-bold text-on-primary-fixed-variant">{phase}</span>
-          </div>
-          <div>
-            <h3 className="font-label font-semibold text-sm text-on-surface">{title}</h3>
-            <p className="text-xs font-body text-on-surface-variant">{description}</p>
-          </div>
-        </div>
-        <button
-          onClick={onTrigger}
-          disabled={isPending}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-label font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 shrink-0"
-        >
-          {isPending ? (
-            <>
-              <div className="w-3 h-3 border border-on-primary border-t-transparent rounded-full animate-spin" />
-              Running…
-            </>
-          ) : (
-            <>
-              <span className="material-symbols-outlined text-[14px]">play_arrow</span>
-              Run
-            </>
-          )}
-        </button>
-      </div>
-
-      {/* Optional param inputs */}
-      {Object.keys(params).length > 0 && (
-        <div className="grid grid-cols-2 gap-2">
-          {Object.entries(params).map(([key, val]) => (
-            <div key={key}>
-              <label className="block text-[10px] font-label font-medium uppercase tracking-wider text-on-surface-variant mb-1">
-                {key.replace(/_/g, " ")}
-              </label>
-              <input
-                type="text"
-                value={val}
-                onChange={(e) => setParams({ ...params, [key]: e.target.value })}
-                className="w-full px-3 py-1.5 text-xs font-label bg-surface-container-low rounded-lg border border-transparent focus:border-primary/40 focus:outline-none text-on-surface"
-              />
-            </div>
-          ))}
-        </div>
-      )}
-
-      {error && (
-        <p className="text-xs font-label text-error bg-error-container px-3 py-2 rounded-lg">{error}</p>
-      )}
-
-      {result && (
-        <div className="bg-surface-container-low rounded-lg px-3 py-2">
-          <p className="text-[10px] font-label font-semibold uppercase tracking-wider text-on-surface-variant mb-1">Result</p>
-          <p className="text-xs font-mono text-on-surface-variant break-all">
-            Task queued — celery_task_id: {(result.celery_task_id ?? result.job_id) as string ?? "—"}
-          </p>
-        </div>
-      )}
-    </div>
-  )
+async function fetchThemes() {
+  const res = await fetch(`${BASE}/api/ventures/etsy/themes`, { headers: getHeaders() })
+  if (!res.ok) throw new Error("Failed to load themes")
+  return res.json()
 }
+
+interface Theme {
+  theme: string
+  score: number | null
+  proceed: boolean
+}
+
 
 function PipelineTab() {
   const qc = useQueryClient()
+
+  const { data: themesData } = useQuery({
+    queryKey: ["etsyThemes"],
+    queryFn: fetchThemes,
+  })
+  const themes: Theme[] = themesData?.themes ?? []
+  const passingThemes = themes.filter((t) => t.proceed)
 
   type PhaseState = { params: Record<string, string>; result: Record<string, unknown> | null; error: string | null }
   const [phases, setPhases] = useState<Record<number, PhaseState>>({
@@ -131,7 +64,6 @@ function PipelineTab() {
     setPending((p) => ({ ...p, [phase]: true }))
     setPhases((s) => ({ ...s, [phase]: { ...s[phase], error: null, result: null } }))
     try {
-      // Filter out empty params
       const rawParams = phases[phase].params
       const cleanParams = Object.fromEntries(
         Object.entries(rawParams).filter(([, v]) => v.trim() !== "")
@@ -139,6 +71,7 @@ function PipelineTab() {
       const result = await triggerPhase(phase, cleanParams)
       setPhases((s) => ({ ...s, [phase]: { ...s[phase], result } }))
       void qc.invalidateQueries({ queryKey: ["etsyListings"] })
+      if (phase === 1) void qc.invalidateQueries({ queryKey: ["etsyThemes"] })
     } catch (e) {
       setPhases((s) => ({ ...s, [phase]: { ...s[phase], error: (e as Error).message } }))
     } finally {
@@ -162,21 +95,104 @@ function PipelineTab() {
   return (
     <div className="space-y-4">
       <p className="text-sm font-body text-on-surface-variant">
-        Trigger each phase individually. Phases 2–6 require a theme or subject slug from the previous phase output.
+        Trigger each phase individually. Phase 2 requires a theme from Phase 1 results. Phases 3–6 require a subject slug.
       </p>
       {PHASES.map(({ phase, title, description }) => (
-        <PhaseCard
-          key={phase}
-          phase={phase}
-          title={title}
-          description={description}
-          params={phases[phase].params}
-          setParams={(p) => setParams(phase, p)}
-          onTrigger={() => handleTrigger(phase)}
-          isPending={pending[phase] ?? false}
-          result={phases[phase].result}
-          error={phases[phase].error}
-        />
+        <div key={phase} className="bg-surface-container-lowest rounded-xl p-5 shadow-float space-y-4">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center shrink-0">
+                <span className="text-xs font-label font-bold text-on-primary-fixed-variant">{phase}</span>
+              </div>
+              <div>
+                <h3 className="font-label font-semibold text-sm text-on-surface">{title}</h3>
+                <p className="text-xs font-body text-on-surface-variant">{description}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => handleTrigger(phase)}
+              disabled={pending[phase] ?? false}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-label font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 shrink-0"
+            >
+              {pending[phase] ? (
+                <>
+                  <div className="w-3 h-3 border border-on-primary border-t-transparent rounded-full animate-spin" />
+                  Running…
+                </>
+              ) : (
+                <>
+                  <span className="material-symbols-outlined text-[14px]">play_arrow</span>
+                  Run
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Phase 2 — theme dropdown */}
+          {phase === 2 && (
+            <div>
+              <label className="block text-[10px] font-label font-medium uppercase tracking-wider text-on-surface-variant mb-1">
+                Theme
+              </label>
+              {passingThemes.length > 0 ? (
+                <select
+                  value={phases[2].params.theme}
+                  onChange={(e) => setParams(2, { theme: e.target.value })}
+                  className="w-full px-3 py-1.5 text-xs font-label bg-surface-container-low rounded-lg border border-transparent focus:border-primary/40 focus:outline-none text-on-surface"
+                >
+                  <option value="">— select a theme —</option>
+                  {passingThemes
+                    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+                    .map((t) => (
+                      <option key={t.theme} value={t.theme}>
+                        {t.theme} {t.score != null ? `(score: ${Math.round(t.score)})` : ""}
+                      </option>
+                    ))}
+                </select>
+              ) : themes.length > 0 ? (
+                <p className="text-xs font-label text-on-surface-variant bg-surface-container-low px-3 py-2 rounded-lg">
+                  No themes scored ≥ 60 yet. Run Phase 1 first.
+                </p>
+              ) : (
+                <p className="text-xs font-label text-on-surface-variant bg-surface-container-low px-3 py-2 rounded-lg">
+                  No Phase 1 results found. Run Phase 1 first.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Phases 3–6 — subject_slug text input */}
+          {phase >= 3 && Object.keys(phases[phase].params).length > 0 && (
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(phases[phase].params).map(([key, val]) => (
+                <div key={key}>
+                  <label className="block text-[10px] font-label font-medium uppercase tracking-wider text-on-surface-variant mb-1">
+                    {key.replace(/_/g, " ")}
+                  </label>
+                  <input
+                    type="text"
+                    value={val}
+                    onChange={(e) => setParams(phase, { ...phases[phase].params, [key]: e.target.value })}
+                    className="w-full px-3 py-1.5 text-xs font-label bg-surface-container-low rounded-lg border border-transparent focus:border-primary/40 focus:outline-none text-on-surface"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {phases[phase].error && (
+            <p className="text-xs font-label text-error bg-error-container px-3 py-2 rounded-lg">{phases[phase].error}</p>
+          )}
+
+          {phases[phase].result && (
+            <div className="bg-surface-container-low rounded-lg px-3 py-2">
+              <p className="text-[10px] font-label font-semibold uppercase tracking-wider text-on-surface-variant mb-1">Result</p>
+              <p className="text-xs font-mono text-on-surface-variant break-all">
+                Task queued — celery_task_id: {(phases[phase].result!.celery_task_id ?? phases[phase].result!.job_id) as string ?? "—"}
+              </p>
+            </div>
+          )}
+        </div>
       ))}
     </div>
   )

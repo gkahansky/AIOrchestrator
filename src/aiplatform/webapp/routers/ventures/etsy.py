@@ -3,6 +3,7 @@ Etsy venture router.
 
   POST /api/ventures/etsy/phase/{n}   — queue a pipeline phase via Celery
   GET  /api/ventures/etsy/listings    — list Etsy jobs from the DB
+  GET  /api/ventures/etsy/themes      — scored themes from latest Phase 1 run
 """
 
 from typing import Any
@@ -75,3 +76,41 @@ def get_etsy_listings(
         )
 
     return EtsyListingsResponse(items=listings, total=len(listings))
+
+
+@router.get("/themes")
+def get_etsy_themes(
+    _: str = Depends(require_auth),
+    db=Depends(get_db),
+) -> dict:
+    """Return scored themes from the most recent completed Phase 1 job."""
+    from sqlalchemy import cast
+    from sqlalchemy.dialects.postgresql import JSONB
+
+    job = (
+        db.query(Job)
+        .filter(
+            Job.venture == "etsy",
+            Job.status == "completed",
+            cast(Job.input_data["phase"].astext, type_=None).isnot(None),
+        )
+        .filter(Job.input_data["phase"].astext == "1")
+        .order_by(Job.created_at.desc())
+        .first()
+    )
+
+    if not job or not job.output_data:
+        return {"themes": [], "run_date": None}
+
+    themes = job.output_data.get("themes", [])
+    return {
+        "run_date": job.output_data.get("run_date"),
+        "themes": [
+            {
+                "theme": t.get("theme"),
+                "score": t.get("total_score") or t.get("score"),
+                "proceed": t.get("proceed", False),
+            }
+            for t in themes
+        ],
+    }

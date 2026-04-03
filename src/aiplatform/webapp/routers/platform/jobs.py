@@ -193,7 +193,7 @@ def retry_job(
             detail="Only failed jobs can be retried",
         )
 
-    from aiplatform.worker import run_audit_order, run_podcast_order
+    from aiplatform.worker import run_audit_order, run_podcast_order, run_etsy_phase
 
     order = dict(job.output_data or job.input_data)
     order["status"] = "pending"
@@ -202,6 +202,12 @@ def retry_job(
         task = run_audit_order.delay(order)
     elif job.venture == "content_studio":
         task = run_podcast_order.delay(order)
+    elif job.venture == "etsy":
+        # Re-run the same phase with the same params stored in input_data
+        phase = job.phase_current or order.get("phase", 1)
+        inp = dict(job.input_data or {})
+        inp.pop("order_id", None)
+        task = run_etsy_phase.delay(phase, inp)
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

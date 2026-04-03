@@ -84,30 +84,35 @@ def get_etsy_themes(
     db=Depends(get_db),
 ) -> dict:
     """Return scored themes from the most recent completed Phase 1 job."""
-    # Fetch the most recent completed etsy job and check phase in Python
-    # (avoids JSONB integer vs string casting issues)
-    jobs = (
+    # Try phase_current == 1 first (new jobs), fall back to scanning output_data for themes key
+    job = (
         db.query(Job)
-        .filter(Job.venture == "etsy", Job.status == "completed")
+        .filter(
+            Job.venture == "etsy",
+            Job.status == "completed",
+            Job.phase_current == 1,
+        )
         .order_by(Job.created_at.desc())
-        .limit(50)
-        .all()
+        .first()
     )
 
-    job = None
-    for j in jobs:
-        inp = j.input_data or {}
-        try:
-            if int(inp.get("phase", 0)) == 1:
+    if not job:
+        # Fallback: find most recent completed etsy job whose output_data has a "themes" list
+        candidates = (
+            db.query(Job)
+            .filter(Job.venture == "etsy", Job.status == "completed")
+            .order_by(Job.created_at.desc())
+            .limit(20)
+            .all()
+        )
+        for j in candidates:
+            if j.output_data and j.output_data.get("themes"):
                 job = j
                 break
-        except (TypeError, ValueError):
-            continue
 
     if not job or not job.output_data:
         return {"themes": [], "run_date": None}
 
-    # output_data may be the raw order dict (with nested "result") or the pipeline result directly
     out = job.output_data
     themes = out.get("themes") or out.get("result", {}).get("themes", [])
     run_date = out.get("run_date") or out.get("result", {}).get("run_date")

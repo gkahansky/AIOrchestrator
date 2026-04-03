@@ -52,7 +52,7 @@ export default function Dashboard() {
   const { data: health } = useHealth()
 
   // Compute KPI values from the ventures[] array the backend actually returns
-  const activeJobs    = dash?.ventures.reduce((s, v) => s + v.in_progress, 0) ?? 0
+  const activeJobs    = dash?.ventures.reduce((s, v) => s + v.in_progress + v.pending, 0) ?? 0
   const pendingReview = dash?.ventures.reduce((s, v) => s + v.pending_review, 0) ?? 0
 
   const kpis = [

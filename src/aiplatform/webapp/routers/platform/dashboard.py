@@ -11,6 +11,7 @@ from aiplatform.webapp.routers.health import _redis_ping
 router = APIRouter()
 
 _IN_PROGRESS_STATUSES = {
+    "running",
     "scraping", "scraped", "auditing", "audited", "generating_report",
     "transcribing", "transcribed", "generating", "generated",
     "packaging", "packaged", "delivering",

@@ -699,6 +699,11 @@ def run_phase_6(
     tags        = subject.get("etsy_tags", meta.get("etsy_tags", []))
     price_usd   = subject.get("price_usd",  meta.get("price_usd", config.DEFAULT_PRICE_USD))
 
+    # Flatten tags in case Claude returned a list of lists or nested structure
+    if tags and isinstance(tags[0], list):
+        tags = [t for sublist in tags for t in sublist]
+    tags = [str(t) for t in tags]  # ensure all tags are strings
+
     # ── Create draft listing ───────────────────────────────────────────────────
     listing_result = create_draft_listing(
         title=title,

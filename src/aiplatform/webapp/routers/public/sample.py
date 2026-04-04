@@ -35,6 +35,7 @@ def _check_rate_limit(email: str, venture: str, db) -> None:
         .filter(
             Job.venture == venture,
             Job.created_at >= cutoff,
+            Job.input_data["sample_email"].astext != None,  # noqa: E711 — only sample jobs
         )
         .all()
     )
@@ -104,7 +105,7 @@ async def request_podcast_sample(
     from io import BytesIO
     audio.file = BytesIO(content)
 
-    _check_rate_limit(email, "sample_podcast", db)
+    _check_rate_limit(email, "content_studio", db)
 
     order_id = f"sample-pod-{uuid.uuid4().hex[:10]}"
 
@@ -129,12 +130,12 @@ async def request_podcast_sample(
 
     # Persist job record
     from aiplatform.database.job_ops import upsert_job
-    upsert_job(order, "sample_podcast")
+    upsert_job(order, "content_studio")
 
     # Queue Celery task
     from aiplatform.worker import run_podcast_sample as celery_task
     task = celery_task.delay(order)
-    upsert_job(order, "sample_podcast", celery_task_id=task.id)
+    upsert_job(order, "content_studio", celery_task_id=task.id)
 
     return {
         "message": "Your sample is being generated — check your inbox in 5–10 minutes.",
@@ -158,7 +159,7 @@ def request_audit_sample(
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
 
-    _check_rate_limit(email, "sample_audit", db)
+    _check_rate_limit(email, "marketing_audit", db)
 
     order_id = f"sample-aud-{uuid.uuid4().hex[:10]}"
     order: dict = {
@@ -172,11 +173,11 @@ def request_audit_sample(
     }
 
     from aiplatform.database.job_ops import upsert_job
-    upsert_job(order, "sample_audit")
+    upsert_job(order, "marketing_audit")
 
     from aiplatform.worker import run_audit_sample as celery_task
     task = celery_task.delay(order)
-    upsert_job(order, "sample_audit", celery_task_id=task.id)
+    upsert_job(order, "marketing_audit", celery_task_id=task.id)
 
     return {
         "message": "Your audit sample is being generated — check your inbox in 10–20 minutes.",

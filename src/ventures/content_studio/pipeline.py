@@ -244,12 +244,16 @@ def _run_phase3_package(order: dict, content: dict, work_dir: Path) -> dict:
     folder_id = _get_or_create_order_folder(order["order_id"])
 
     # Upload transcript + PDFs to Drive
+    # Full order files → order folder; sample PDFs → dedicated samples folder
     transcript_path = work_dir / "transcript.txt"
+    samples_folder = config.DRIVE_PODCAST_SAMPLES_ID or folder_id
     if folder_id:
         if transcript_path.exists():
             drive_write(transcript_path, folder_id, filename=f"{order['order_id']}-transcript.txt")
         drive_write(full_pdf_path, folder_id, filename=full_pdf_path.name)
-        drive_write(sample_pdf_path, folder_id, filename=sample_pdf_path.name)
+    if samples_folder and sample_pdf_path.exists():
+        res = drive_write(sample_pdf_path, samples_folder, filename=sample_pdf_path.name)
+        order["drive_sample_pdf_link"] = res.get("web_view_link", "")
 
     doc_title = (
         f"{order.get('show_name', 'Podcast')} — "

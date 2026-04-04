@@ -15,9 +15,10 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 # ─── Google Drive folder IDs ──────────────────────────────────────────────────
 # Set after running scripts/setup_drive_folders.py (or create manually)
-DRIVE_PODCAST_ROOT_ID = os.getenv("DRIVE_PODCAST_ROOT_ID")
-DRIVE_PODCAST_ORDERS_ID = os.getenv("DRIVE_PODCAST_ORDERS_ID")
-DRIVE_PODCAST_REVIEW_ID = os.getenv("DRIVE_PODCAST_REVIEW_ID")
+DRIVE_PODCAST_ROOT_ID    = os.getenv("DRIVE_PODCAST_ROOT_ID")
+DRIVE_PODCAST_ORDERS_ID  = os.getenv("DRIVE_PODCAST_ORDERS_ID")
+DRIVE_PODCAST_SAMPLES_ID = os.getenv("DRIVE_PODCAST_SAMPLES_ID")   # free sample PDFs
+DRIVE_PODCAST_REVIEW_ID  = os.getenv("DRIVE_PODCAST_REVIEW_ID")
 DRIVE_PODCAST_DELIVERED_ID = os.getenv("DRIVE_PODCAST_DELIVERED_ID")
 
 # ─── Drive folder structure ───────────────────────────────────────────────────

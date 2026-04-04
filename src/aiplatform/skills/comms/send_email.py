@@ -50,9 +50,9 @@ def send_email(
     from_addr = os.environ.get("EMAIL_FROM", "")
 
     if not api_key:
-        return {"error": "RESEND_API_KEY must be set in environment."}
+        raise RuntimeError("RESEND_API_KEY is not set — email cannot be sent.")
     if not from_addr:
-        return {"error": "EMAIL_FROM must be set in environment."}
+        raise RuntimeError("EMAIL_FROM is not set — email cannot be sent.")
 
     recipients = [r.strip() for r in to.split(",")]
 

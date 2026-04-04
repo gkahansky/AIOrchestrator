@@ -47,10 +47,17 @@ def create_podcast_order(
     upsert_job(order, "content_studio")
 
     task = celery_task.delay(order)
-    # Update the job row with the Celery task ID now that we have it.
     upsert_job(order, "content_studio", celery_task_id=task.id)
 
-    return PodcastOrderResponse(order_id=order_id, celery_task_id=task.id)
+    from sqlalchemy.orm import Session
+    db_sess: Session = next(get_db())
+    job = db_sess.query(Job).filter(
+        Job.venture == "content_studio",
+        Job.input_data["order_id"].astext == order_id,
+    ).first()
+    job_id = str(job.id) if job else order_id
+
+    return PodcastOrderResponse(job_id=job_id, order_id=order_id, celery_task_id=task.id)
 
 
 @router.get("/orders", response_model=JobListResponse)

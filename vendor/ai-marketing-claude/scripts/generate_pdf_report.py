@@ -121,6 +121,19 @@ def create_bar_chart(categories, scores, width=450, height=180):
 
 def generate_report(data, output_path):
     """Generate a professional marketing PDF report."""
+    # Register Unicode font once so non-Latin scripts render correctly
+    try:
+        import sys, os
+        _here = os.path.dirname(os.path.abspath(__file__))
+        if _here not in sys.path:
+            sys.path.insert(0, _here)
+        from pdf_unicode import setup_unicode_fonts, rt as _rt
+    except Exception:
+        def setup_unicode_fonts(): return ("Helvetica", "Helvetica-Bold")
+        def _rt(t): return t
+
+    _font_reg, _font_bold = setup_unicode_fonts()
+
     doc = SimpleDocTemplate(
         output_path,
         pagesize=letter,
@@ -139,7 +152,7 @@ def generate_report(data, output_path):
         fontSize=28,
         textColor=COLORS["primary"],
         spaceAfter=6,
-        fontName="Helvetica-Bold"
+        fontName=_font_bold,
     )
 
     subtitle_style = ParagraphStyle(
@@ -148,7 +161,7 @@ def generate_report(data, output_path):
         fontSize=14,
         textColor=COLORS["text_light"],
         spaceAfter=20,
-        fontName="Helvetica"
+        fontName=_font_reg,
     )
 
     heading_style = ParagraphStyle(
@@ -158,7 +171,7 @@ def generate_report(data, output_path):
         textColor=COLORS["primary"],
         spaceBefore=20,
         spaceAfter=10,
-        fontName="Helvetica-Bold"
+        fontName=_font_bold,
     )
 
     subheading_style = ParagraphStyle(
@@ -168,7 +181,7 @@ def generate_report(data, output_path):
         textColor=COLORS["accent"],
         spaceBefore=14,
         spaceAfter=8,
-        fontName="Helvetica-Bold"
+        fontName=_font_bold,
     )
 
     body_style = ParagraphStyle(
@@ -177,8 +190,8 @@ def generate_report(data, output_path):
         fontSize=10,
         textColor=COLORS["text"],
         spaceAfter=6,
-        fontName="Helvetica",
-        leading=14
+        fontName=_font_reg,
+        leading=14,
     )
 
     # Build document elements
@@ -204,7 +217,7 @@ def generate_report(data, output_path):
     elements.append(Paragraph(f"Overall Marketing Score: {int(overall_score)}/100 (Grade: {grade})", heading_style))
 
     exec_summary = data.get("executive_summary", "This report provides a comprehensive analysis of the website's marketing effectiveness across content, conversion, SEO, competitive positioning, brand trust, and growth strategy.")
-    elements.append(Paragraph(exec_summary, body_style))
+    elements.append(Paragraph(_rt(exec_summary), body_style))
 
     elements.append(PageBreak())
 
@@ -266,7 +279,7 @@ def generate_report(data, output_path):
     for f in findings:
         severity = f.get("severity", "Medium")
         finding = f.get("finding", "")
-        findings_data.append([severity, Paragraph(finding, body_style)])
+        findings_data.append([severity, Paragraph(_rt(finding), body_style)])
 
     findings_table = Table(findings_data, colWidths=[70, 400])
     severity_colors = {
@@ -308,7 +321,7 @@ def generate_report(data, output_path):
         "Add meta descriptions to top 5 landing pages",
     ])
     for i, win in enumerate(quick_wins, 1):
-        elements.append(Paragraph(f"{i}. {win}", body_style))
+        elements.append(Paragraph(f"{i}. {_rt(win)}", body_style))
 
     elements.append(Spacer(1, 0.2 * inch))
 
@@ -321,7 +334,7 @@ def generate_report(data, output_path):
         "Implement blog content strategy targeting high-intent keywords",
     ])
     for i, action in enumerate(medium_term, 1):
-        elements.append(Paragraph(f"{i}. {action}", body_style))
+        elements.append(Paragraph(f"{i}. {_rt(action)}", body_style))
 
     elements.append(Spacer(1, 0.2 * inch))
 
@@ -334,7 +347,7 @@ def generate_report(data, output_path):
         "Develop pricing optimization based on value metrics",
     ])
     for i, action in enumerate(strategic, 1):
-        elements.append(Paragraph(f"{i}. {action}", body_style))
+        elements.append(Paragraph(f"{i}. {_rt(action)}", body_style))
 
     elements.append(PageBreak())
 

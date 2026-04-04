@@ -386,32 +386,38 @@ def run_audit_sample(self, order: dict) -> dict:
 
         result = audit_pipeline.run_order(order)
 
-        sample_pdf = result.get("sample_pdf_path", "")
-        if not sample_pdf or not Path(sample_pdf).exists():
-            # Fallback: reconstruct path
-            from ventures.marketing_audit import config as audit_config
-            import glob
-            matches = list(Path(audit_config.OUTPUT_DIR, order["order_id"]).glob("*-sample.pdf"))
-            sample_pdf = str(matches[0]) if matches else ""
+        sample_pdf   = result.get("sample_pdf_path", "")
+        drive_link   = result.get("drive_sample_PDF_link", "") or result.get("drive_sample_pdf_link", "")
 
-        if sample_pdf and sample_email:
-            url = order.get("url", "your website")
+        if sample_email:
+            url = result.get("url", order.get("url", "your website"))
+
+            # Include Drive link in body if we have one (works even if local file is gone)
+            drive_section = (
+                f'<p><a href="{drive_link}">View your sample report in Google Drive &rarr;</a></p>'
+                if drive_link else ""
+            )
             body = (
                 f"<p>Hi there,</p>"
                 f"<p>Here's your free marketing audit sample for <b>{url}</b>.</p>"
                 f"<p>The sample shows your overall score and a selection of findings. "
                 f"The full audit includes all findings, a complete action plan, competitor benchmarking, "
                 f"and before/after copy examples.</p>"
+                f"{drive_section}"
                 f"<p><b>Interested in the full report?</b> Visit "
                 f'<a href="https://echoforge.biz">echoforge.biz</a> to order.</p>'
                 f"<p>— EchoForge</p>"
             )
-            send_email(
+            # Attach PDF if local file is still available; fall back to link-only
+            attachments = [sample_pdf] if (sample_pdf and Path(sample_pdf).exists()) else []
+            result_send = send_email(
                 to=sample_email,
                 subject=f"Your Free Marketing Audit Sample — {url}",
                 body_html=body,
-                attachments=[sample_pdf],
+                attachments=attachments,
             )
+            if isinstance(result_send, dict) and result_send.get("error"):
+                raise RuntimeError(f"send_email failed: {result_send['error']}")
 
             # Schedule nurture follow-ups
             from datetime import datetime, timezone, timedelta
@@ -488,32 +494,38 @@ def run_podcast_sample(self, order: dict) -> dict:
 
         result = podcast_pipeline.run_order(order)
 
-        sample_pdf = result.get("sample_pdf_path", "")
-        if not sample_pdf or not Path(sample_pdf).exists():
-            from ventures.content_studio import config as cs_config
-            matches = list(Path(cs_config.OUTPUT_DIR, order["order_id"]).glob("*-sample.pdf"))
-            sample_pdf = str(matches[0]) if matches else ""
+        sample_pdf  = result.get("sample_pdf_path", "")
+        drive_link  = result.get("drive_sample_pdf_link", "")
 
-        if sample_pdf and sample_email:
-            show = order.get("show_name", "your podcast")
-            episode = order.get("episode_title", "your episode")
+        if sample_email:
+            show    = result.get("show_name", order.get("show_name", "your podcast"))
+            episode = result.get("episode_title", order.get("episode_title", "your episode"))
+
+            drive_section = (
+                f'<p><a href="{drive_link}">View your sample package in Google Drive &rarr;</a></p>'
+                if drive_link else ""
+            )
             body = (
                 f"<p>Hi there,</p>"
                 f"<p>Here's your free content package sample for <b>{episode}</b> "
                 f"from <b>{show}</b>.</p>"
                 f"<p>The sample includes full timestamps and guest bio, plus a preview "
                 f"of show notes, social captions, and more.</p>"
+                f"{drive_section}"
                 f"<p><b>Want the complete package?</b> Visit "
                 f'<a href="https://echoforge.biz">echoforge.biz</a> to order — '
                 f"delivered within 24 hours.</p>"
                 f"<p>— EchoForge</p>"
             )
-            send_email(
+            attachments = [sample_pdf] if (sample_pdf and Path(sample_pdf).exists()) else []
+            result_send = send_email(
                 to=sample_email,
                 subject=f"Your Free Podcast Sample — {episode}",
                 body_html=body,
-                attachments=[sample_pdf],
+                attachments=attachments,
             )
+            if isinstance(result_send, dict) and result_send.get("error"):
+                raise RuntimeError(f"send_email failed: {result_send['error']}")
 
             # Schedule nurture follow-ups
             from datetime import datetime, timezone, timedelta

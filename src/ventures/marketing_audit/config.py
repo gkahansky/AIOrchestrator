@@ -53,7 +53,8 @@ DIMENSION_WEIGHT_LABELS = {
 }
 
 # ─── Google Drive ─────────────────────────────────────────────────────────────
-DRIVE_AUDIT_ROOT_ID = os.getenv("DRIVE_AUDIT_ROOT_ID")
+DRIVE_AUDIT_ROOT_ID    = os.getenv("DRIVE_AUDIT_ROOT_ID")       # full client reports
+DRIVE_SAMPLES_FOLDER_ID = os.getenv("DRIVE_SAMPLES_FOLDER_ID")  # watermarked sample PDFs
 
 # ─── Review & delivery ────────────────────────────────────────────────────────
 HUMAN_REVIEW_EMAIL = os.getenv("HUMAN_REVIEW_EMAIL", "")

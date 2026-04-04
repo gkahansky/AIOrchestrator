@@ -128,6 +128,7 @@ class AuditOrderRequest(BaseModel):
 
 
 class AuditOrderResponse(BaseModel):
+    job_id: str          # DB UUID — use this for /api/jobs/{job_id} navigation
     order_id: str
     celery_task_id: str
     status: str = "queued"
@@ -150,6 +151,7 @@ class PodcastOrderRequest(BaseModel):
 
 
 class PodcastOrderResponse(BaseModel):
+    job_id: str          # DB UUID — use this for /api/jobs/{job_id} navigation
     order_id: str
     celery_task_id: str
     status: str = "queued"

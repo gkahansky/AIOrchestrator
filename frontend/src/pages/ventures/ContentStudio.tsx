@@ -88,7 +88,7 @@ function NewOrderForm() {
   const mutation = useMutation({
     mutationFn: createPodcastOrder,
     onSuccess: (data) => {
-      navigate(`/jobs/${data.order_id}`)
+      navigate(`/jobs/${data.job_id}`)
     },
   })
 

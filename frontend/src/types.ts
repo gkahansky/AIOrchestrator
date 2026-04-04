@@ -129,6 +129,7 @@ export interface PodcastOrderRequest {
 }
 
 export interface OrderResponse {
+  job_id: string        // DB UUID — use for /jobs/{job_id} navigation
   order_id: string
   celery_task_id: string
   status: string

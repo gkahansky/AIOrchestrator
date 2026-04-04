@@ -120,14 +120,16 @@ def run_order(order: dict, output_dir: str | None = None) -> dict:
             order["status"] = "delivered"
             order["delivered_at"] = datetime.utcnow().isoformat()
             _save_order(order, work_dir)
+            # Only log revenue for paid orders — skip free samples
             tier_info = config.TIERS.get(order.get("tier", "starter"), {})
-            log_revenue(
-                venture="content_studio",
-                source=order.get("source", "direct"),
-                amount_usd=tier_info.get("price_usd", 0),
-                job_id=order.get("job_id"),
-                description=f"{order.get('tier','starter')} — {order.get('show_name','')[:80]}",
-            )
+            if order.get("client_email"):
+                log_revenue(
+                    venture="content_studio",
+                    source=order.get("source", "direct"),
+                    amount_usd=tier_info.get("price_usd", 0),
+                    job_id=order.get("job_id"),
+                    description=f"{order.get('tier','starter')} — {order.get('show_name','')[:80]}",
+                )
             print(f"\n✓ Order {order['order_id']} delivered.")
 
     except Exception as exc:

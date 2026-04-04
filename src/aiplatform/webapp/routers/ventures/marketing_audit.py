@@ -44,13 +44,23 @@ def create_audit_order(
     # Write initial job record immediately — ensures the job is visible in the
     # jobs list even if the worker hasn't picked up the task yet or fails.
     from aiplatform.database.job_ops import upsert_job
+    from aiplatform.database.models import Job
     upsert_job(order, "marketing_audit")
 
     task = celery_task.delay(order)
     # Update the job row with the Celery task ID now that we have it.
     upsert_job(order, "marketing_audit", celery_task_id=task.id)
 
-    return AuditOrderResponse(order_id=order_id, celery_task_id=task.id)
+    # Retrieve the DB UUID so the frontend can navigate to /jobs/{uuid}
+    from sqlalchemy.orm import Session
+    db: Session = next(get_db())
+    job = db.query(Job).filter(
+        Job.venture == "marketing_audit",
+        Job.input_data["order_id"].astext == order_id,
+    ).first()
+    job_id = str(job.id) if job else order_id
+
+    return AuditOrderResponse(job_id=job_id, order_id=order_id, celery_task_id=task.id)
 
 
 @router.get("/orders", response_model=JobListResponse)

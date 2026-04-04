@@ -26,7 +26,15 @@ async function handleResponse<T>(res: Response): Promise<T> {
     let message = `HTTP ${res.status}: ${res.statusText}`
     try {
       const body = await res.json()
-      message = body.detail ?? body.message ?? message
+      const detail = body.detail ?? body.message
+      // FastAPI validation errors return detail as an array of error objects
+      if (Array.isArray(detail)) {
+        message = detail.map((e: { msg?: string; loc?: string[] }) =>
+          [e.loc?.slice(1).join("."), e.msg].filter(Boolean).join(": ")
+        ).join("; ")
+      } else if (typeof detail === "string") {
+        message = detail
+      }
     } catch {
       // ignore parse errors
     }

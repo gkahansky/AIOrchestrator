@@ -136,14 +136,16 @@ def run_order(order: dict, output_dir: str | None = None) -> dict:
             order["status"] = "delivered"
             order["delivered_at"] = datetime.utcnow().isoformat()
             _save_order(order, work_dir)
+            # Only log revenue for paid orders — skip free samples
             tier_info = config.TIERS.get(order.get("tier", "snapshot"), {})
-            log_revenue(
-                venture="marketing_audit",
-                source=order.get("source", "direct"),
-                amount_usd=tier_info.get("price_usd", 0),
-                job_id=order.get("job_id"),
-                description=f"{order.get('tier','snapshot')} audit — {order.get('url','')[:80]}",
-            )
+            if order.get("client_email"):
+                log_revenue(
+                    venture="marketing_audit",
+                    source=order.get("source", "direct"),
+                    amount_usd=tier_info.get("price_usd", 0),
+                    job_id=order.get("job_id"),
+                    description=f"{order.get('tier','snapshot')} audit — {order.get('url','')[:80]}",
+                )
             print(f"\nOK Audit {order['order_id']} delivered.")
 
     except Exception as exc:
@@ -274,22 +276,25 @@ def _run_phase6_deliver(
     print(f"  Phase 6: Delivering to client...")
     report_type = order.get("report_type", "both")
 
-    # Upload to Drive
-    if config.DRIVE_AUDIT_ROOT_ID:
-        for label, path in [
-            ("full PDF", pdf_path),
-            ("full MD", md_path),
-            ("sample PDF", sample_pdf_path),
-            ("sample MD", sample_md_path),
-        ]:
-            if path and Path(path).exists():
-                try:
-                    res = drive_write(path, config.DRIVE_AUDIT_ROOT_ID)
-                    if "pdf" in label.lower():
-                        order[f"drive_{label.replace(' ', '_')}_link"] = res["web_view_link"]
-                    print(f"    OK {label} on Drive: {res['web_view_link']}")
-                except Exception as exc:
-                    print(f"    WARN  Drive upload failed ({label}): {exc}")
+    # Upload to Drive — full reports → DRIVE_AUDIT_ROOT_ID, samples → DRIVE_SAMPLES_FOLDER_ID
+    full_folder   = config.DRIVE_AUDIT_ROOT_ID
+    sample_folder = config.DRIVE_SAMPLES_FOLDER_ID or config.DRIVE_AUDIT_ROOT_ID  # fallback
+
+    upload_targets = []
+    if full_folder:
+        upload_targets += [("full PDF", pdf_path, full_folder), ("full MD", md_path, full_folder)]
+    if sample_folder:
+        upload_targets += [("sample PDF", sample_pdf_path, sample_folder), ("sample MD", sample_md_path, sample_folder)]
+
+    for label, path, folder_id in upload_targets:
+        if path and Path(path).exists() and folder_id:
+            try:
+                res = drive_write(path, folder_id)
+                if "pdf" in label.lower():
+                    order[f"drive_{label.replace(' ', '_')}_link"] = res["web_view_link"]
+                print(f"    OK {label} on Drive: {res['web_view_link']}")
+            except Exception as exc:
+                print(f"    WARN  Drive upload failed ({label}): {exc}")
 
     # Determine which PDF to attach for client delivery
     # Client always gets the full report; sample is for outreach only

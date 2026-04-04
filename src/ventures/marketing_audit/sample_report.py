@@ -129,6 +129,19 @@ def generate_sample_pdf(report_data: dict, output_path: str) -> str:
     cf = censored["_censored_findings"]
     ca = censored["_censored_actions"]
 
+    # Unicode font support for Arabic / Hebrew / non-Latin scripts
+    try:
+        import sys, os
+        _scripts = os.environ.get("AI_MARKETING_CLAUDE_PATH", "")
+        _scripts = os.path.join(_scripts, "scripts") if _scripts else ""
+        if _scripts and _scripts not in sys.path:
+            sys.path.insert(0, _scripts)
+        from pdf_unicode import setup_unicode_fonts, rt as _rt
+        _font_reg, _font_bold = setup_unicode_fonts()
+    except Exception:
+        def _rt(t): return t
+        _font_reg, _font_bold = "Helvetica", "Helvetica-Bold"
+
     COLORS = {
         "primary":    HexColor("#1B2A4A"),
         "accent":     HexColor("#2D5BFF"),
@@ -180,39 +193,39 @@ def generate_sample_pdf(report_data: dict, output_path: str) -> str:
     title_style = ParagraphStyle(
         "STitle", parent=styles["Title"],
         fontSize=24, textColor=COLORS["primary"],
-        spaceAfter=4, spaceBefore=0, fontName="Helvetica-Bold",
+        spaceAfter=4, spaceBefore=0, fontName=_font_bold,
         alignment=0, leftIndent=12, rightIndent=0,
     )
     subtitle_style = ParagraphStyle(
         "SSub", parent=styles["Normal"],
         fontSize=11, textColor=COLORS["text_light"],
-        spaceAfter=16, spaceBefore=0, fontName="Helvetica",
+        spaceAfter=16, spaceBefore=0, fontName=_font_reg,
         leftIndent=12,
     )
     heading_style = ParagraphStyle(
         "SHeading", parent=styles["Heading1"],
         fontSize=16, textColor=COLORS["primary"],
-        spaceBefore=18, spaceAfter=8, fontName="Helvetica-Bold",
+        spaceBefore=18, spaceAfter=8, fontName=_font_bold,
     )
     subheading_style = ParagraphStyle(
         "SSubheading", parent=styles["Heading2"],
         fontSize=12, textColor=COLORS["text"],
-        spaceBefore=12, spaceAfter=4, fontName="Helvetica-Bold",
+        spaceBefore=12, spaceAfter=4, fontName=_font_bold,
     )
     body_style = ParagraphStyle(
         "SBody", parent=styles["Normal"],
         fontSize=9, textColor=COLORS["text"],
-        spaceAfter=4, fontName="Helvetica", leading=13,
+        spaceAfter=4, fontName=_font_reg, leading=13,
     )
     cta_style = ParagraphStyle(
         "SCTA", parent=styles["Normal"],
         fontSize=10, textColor=white,
-        spaceAfter=4, fontName="Helvetica-Bold",
+        spaceAfter=4, fontName=_font_bold,
     )
     small_style = ParagraphStyle(
         "SSmall", parent=styles["Normal"],
         fontSize=8, textColor=COLORS["text_light"],
-        fontName="Helvetica",
+        fontName=_font_reg,
     )
 
     brand = report_data.get("brand_name", report_data.get("url", "Site"))
@@ -245,9 +258,9 @@ def generate_sample_pdf(report_data: dict, output_path: str) -> str:
     elements.append(Spacer(1, 0.2 * inch))
 
     # ── Header ────────────────────────────────────────────────────────────────
-    elements.append(Paragraph(f"Marketing Audit: {brand}", title_style))
+    elements.append(Paragraph(_rt(f"Marketing Audit: {brand}"), title_style))
     elements.append(Paragraph(
-        f"URL: {url}  ·  Date: {date_str}  ·  Business type: {report_data.get('business_type', '—')}",
+        f"URL: {url}  ·  Date: {date_str}  ·  Business type: {_rt(report_data.get('business_type', '—'))}",
         subtitle_style,
     ))
 
@@ -297,11 +310,11 @@ def generate_sample_pdf(report_data: dict, output_path: str) -> str:
         # Wrap key finding to ~45 chars
         kf_wrapped = textwrap.shorten(kf, width=55, placeholder="…")
         score_rows.append([
-            Paragraph(dim, body_style),
+            Paragraph(_rt(dim), body_style),
             f"{s}/100",
             cat.get("weight", ""),
             status,
-            Paragraph(kf_wrapped, body_style),
+            Paragraph(_rt(kf_wrapped), body_style),
         ])
 
     score_table = Table(score_rows, colWidths=[135, 55, 45, 70, 207])
@@ -383,7 +396,7 @@ def generate_sample_pdf(report_data: dict, output_path: str) -> str:
                 Paragraph(sev, ParagraphStyle("FS", parent=styles["Normal"],
                           fontSize=8, fontName="Helvetica-Bold",
                           textColor=severity_colors_map.get(sev, COLORS["text"]))),
-                Paragraph(f.get("finding", ""), body_style),
+                Paragraph(_rt(f.get("finding", "")), body_style),
             ])
         vis_table = Table(vis_rows, colWidths=[65, 447])
         vis_table.setStyle(TableStyle([
@@ -435,7 +448,7 @@ def generate_sample_pdf(report_data: dict, output_path: str) -> str:
 
         if section["visible"]:
             elements.append(Paragraph(
-                f"1. {section['visible'][0]}", body_style,
+                f"1. {_rt(section['visible'][0])}", body_style,
             ))
 
         redacted = section["redacted_count"]

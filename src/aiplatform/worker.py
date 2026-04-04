@@ -138,6 +138,75 @@ def _slack_alert_failure(venture: str, order_id: str | None, exc: Exception, pha
         pass
 
 
+def _slack_alert_new_order(venture: str, order_id: str, detail: str = "") -> None:
+    """Post a new-order alert to Slack. Best-effort — never raises."""
+    try:
+        from aiplatform.skills.comms.send_slack import send_slack
+        channel = os.environ.get("SLACK_ALERTS_CHANNEL", "#platform-alerts")
+        label = venture.replace("_", " ").title()
+        blocks = [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f":new: *New order* — `{label}`\n"
+                        f"*Order:* `{order_id}`"
+                        + (f"\n{detail}" if detail else "")
+                    ),
+                },
+            },
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Open Dashboard"},
+                        "url": "https://planBadmin.com",
+                    }
+                ],
+            },
+        ]
+        send_slack(channel=channel, text=f"New order — {label} · {order_id}", blocks=blocks)
+    except Exception:
+        pass
+
+
+def _slack_alert_review_needed(venture: str, order_id: str, detail: str = "") -> None:
+    """Post a review-needed alert to Slack. Best-effort — never raises."""
+    try:
+        from aiplatform.skills.comms.send_slack import send_slack
+        channel = os.environ.get("SLACK_ALERTS_CHANNEL", "#platform-alerts")
+        label = venture.replace("_", " ").title()
+        blocks = [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f":eyes: *Review needed* — `{label}`\n"
+                        f"*Order:* `{order_id}`"
+                        + (f"\n{detail}" if detail else "")
+                    ),
+                },
+            },
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Review in Dashboard"},
+                        "url": "https://planBadmin.com",
+                        "style": "primary",
+                    }
+                ],
+            },
+        ]
+        send_slack(channel=channel, text=f"Review needed — {label} · {order_id}", blocks=blocks)
+    except Exception:
+        pass
+
+
 def _mark_failed(order_id: str | None, venture: str, error: str) -> None:
     """Write a failure status to the DB — best-effort, never raises."""
     if not order_id:
@@ -238,6 +307,10 @@ def run_etsy_phase(self, phase: int, params: dict) -> dict:
         "status":   "running",
         **{k: v for k, v in params.items() if k != "job_id"},
     }
+
+    # Alert on new order (phase 1 first attempt only)
+    if phase == 1 and self.request.retries == 0:
+        _slack_alert_new_order("etsy", job_id)
 
     try:
         from aiplatform.database.job_ops import upsert_job
@@ -340,28 +413,40 @@ def run_audit_order(self, order: dict) -> dict:
     On re-dispatch from POST /api/jobs/{id}/approve, the order arrives with
     status="approved" and the pipeline continues directly to delivery.
     """
+    order_id = order.get("order_id", "")
+    # Only alert on first attempt (not retries)
+    if self.request.retries == 0:
+        _slack_alert_new_order(
+            "marketing_audit", order_id,
+            detail=f"URL: {order.get('url', '')}  ·  Tier: {order.get('tier', '')}",
+        )
+
     try:
         from ventures.marketing_audit import pipeline as audit_pipeline
 
         result = audit_pipeline.run_order(order)
 
-        # If pipeline paused at review gate, signal Redis
+        # If pipeline paused at review gate, signal Redis + alert Slack
         if result.get("status") == "review_pending":
             job_id = _get_job_id(order, "marketing_audit")
             if job_id:
                 _set_approval_gate(job_id, "pending")
+            _slack_alert_review_needed(
+                "marketing_audit", order_id,
+                detail=f"URL: {order.get('url', '')}  ·  Tier: {order.get('tier', '')}",
+            )
 
         return {
-            "order_id": order.get("order_id"),
+            "order_id": order_id,
             "status":   result.get("status"),
             "result":   result,
         }
 
     except Exception as exc:
-        _mark_failed(order.get("order_id"), "marketing_audit", str(exc))
+        _mark_failed(order_id, "marketing_audit", str(exc))
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc, countdown=120)
-        _slack_alert_failure("marketing_audit", order.get("order_id"), exc)
+        _slack_alert_failure("marketing_audit", order_id, exc)
         raise
 
 
@@ -449,6 +534,13 @@ def run_podcast_order(self, order: dict) -> dict:
 
     Same approval gate pattern as run_audit_order.
     """
+    order_id = order.get("order_id", "")
+    if self.request.retries == 0:
+        _slack_alert_new_order(
+            "content_studio", order_id,
+            detail=f"Show: {order.get('show_name', '')}  ·  Tier: {order.get('tier', '')}",
+        )
+
     try:
         from ventures.content_studio import pipeline as podcast_pipeline
 
@@ -458,9 +550,13 @@ def run_podcast_order(self, order: dict) -> dict:
             job_id = _get_job_id(order, "content_studio")
             if job_id:
                 _set_approval_gate(job_id, "pending")
+            _slack_alert_review_needed(
+                "content_studio", order_id,
+                detail=f"Show: {order.get('show_name', '')}  ·  Tier: {order.get('tier', '')}",
+            )
 
         return {
-            "order_id": order.get("order_id"),
+            "order_id": order_id,
             "status":   result.get("status"),
             "result":   result,
         }

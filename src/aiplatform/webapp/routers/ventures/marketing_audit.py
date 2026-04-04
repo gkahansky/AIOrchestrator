@@ -38,7 +38,8 @@ def create_audit_order(
         "url":          req.url,
         "tier":         req.tier,
         "report_type":  req.report_type,
-        "client_email": req.client_email,
+        "client_email": req.client_email if not req.is_testing else None,
+        "is_testing":   req.is_testing,
         "status":       "pending",
     }
     # Write initial job record immediately — ensures the job is visible in the

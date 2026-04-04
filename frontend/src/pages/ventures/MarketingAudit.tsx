@@ -73,6 +73,7 @@ function NewOrderForm() {
     tier: "snapshot",
     client_email: "",
     report_type: "both",
+    is_testing: false,
   })
   const [errors, setErrors] = useState<Partial<Record<keyof AuditOrderRequest, string>>>({})
 
@@ -93,9 +94,11 @@ function NewOrderForm() {
         e.url = "Must be a valid URL"
       }
     }
-    if (!(form.client_email ?? "").trim()) e.client_email = "Client email is required"
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.client_email ?? ""))
-      e.client_email = "Must be a valid email"
+    if (!form.is_testing) {
+      if (!(form.client_email ?? "").trim()) e.client_email = "Client email is required"
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.client_email ?? ""))
+        e.client_email = "Must be a valid email"
+    }
     return e
   }
 
@@ -162,24 +165,39 @@ function NewOrderForm() {
         </div>
       </div>
 
-      {/* Client Email */}
-      <div>
-        <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
-          Client Email <span className="text-error">*</span>
-        </label>
+      {/* Testing toggle */}
+      <label className="flex items-center gap-3 cursor-pointer select-none">
         <input
-          type="email"
-          value={form.client_email}
-          onChange={(e) => setForm({ ...form, client_email: e.target.value })}
-          placeholder="client@example.com"
-          className={`w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border ${
-            errors.client_email ? "border-error" : "border-transparent"
-          } focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors`}
+          type="checkbox"
+          checked={form.is_testing ?? false}
+          onChange={(e) => setForm({ ...form, is_testing: e.target.checked, client_email: e.target.checked ? "" : form.client_email })}
+          className="w-4 h-4 accent-primary"
         />
-        {errors.client_email && (
-          <p className="text-xs text-error mt-1 font-label">{errors.client_email}</p>
-        )}
-      </div>
+        <span className="text-sm font-label text-on-surface-variant">
+          Testing — demo run, no revenue logged
+        </span>
+      </label>
+
+      {/* Client Email */}
+      {!form.is_testing && (
+        <div>
+          <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
+            Client Email <span className="text-error">*</span>
+          </label>
+          <input
+            type="email"
+            value={form.client_email}
+            onChange={(e) => setForm({ ...form, client_email: e.target.value })}
+            placeholder="client@example.com"
+            className={`w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border ${
+              errors.client_email ? "border-error" : "border-transparent"
+            } focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors`}
+          />
+          {errors.client_email && (
+            <p className="text-xs text-error mt-1 font-label">{errors.client_email}</p>
+          )}
+        </div>
+      )}
 
       {/* Report Type */}
       <div>
@@ -280,13 +298,13 @@ function OrdersList() {
                     className="hover:bg-surface-container-low/40 transition-colors"
                   >
                     <td className="px-4 py-3 font-mono text-xs text-on-surface-variant">
-                      {job.id.slice(0, 8)}…
+                      {job.id?.slice(0, 8) ?? "—"}…
                     </td>
                     <td className="px-4 py-3 text-sm font-label text-on-surface max-w-[200px] truncate">
-                      {(job.input_data.url as string) ?? "—"}
+                      {(job.input_data?.url as string) ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-sm font-label text-on-surface capitalize">
-                      {(job.input_data.tier as string)?.replace(/_/g, " ") ?? "—"}
+                      {((job.input_data?.tier as string) ?? "—").replace(/_/g, " ")}
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={job.status} />
@@ -295,11 +313,11 @@ function OrdersList() {
                       <PhaseBar current={job.phase_current} total={job.phase_total} />
                     </td>
                     <td className="px-4 py-3 text-xs font-label text-on-surface-variant">
-                      {formatDate(job.created_at)}
+                      {job.created_at ? formatDate(job.created_at) : "—"}
                     </td>
                     <td className="px-4 py-3">
                       <button
-                        onClick={() => navigate(`/jobs/${job.id}`)}
+                        onClick={() => job.id && navigate(`/jobs/${job.id}`)}
                         className="text-xs font-label font-semibold text-primary hover:underline"
                       >
                         View

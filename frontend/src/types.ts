@@ -119,6 +119,7 @@ export interface AuditOrderRequest {
   tier: "snapshot" | "full" | "premium"
   report_type: "both" | "full" | "sample"
   client_email?: string
+  is_testing?: boolean
 }
 
 export interface PodcastOrderRequest {

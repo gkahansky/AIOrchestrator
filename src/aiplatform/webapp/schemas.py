@@ -29,6 +29,7 @@ class JobSummary(BaseModel):
     phase_current: int | None
     phase_total: int | None
     environment: str
+    input_data: dict = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
     started_at: datetime | None
@@ -125,6 +126,7 @@ class AuditOrderRequest(BaseModel):
     report_type: str = Field("both", pattern="^(both|full|sample)$")
     client_email: str | None = None
     order_id: str | None = None
+    is_testing: bool = False
 
 
 class AuditOrderResponse(BaseModel):

@@ -243,26 +243,32 @@ def _summarise_scraped(target: dict, competitors: list) -> str:
     trust = analysis.get("trust", {})
     tracking = analysis.get("tracking", {})
     content = analysis.get("content", {})
+    crawl = analysis.get("crawl", {})
+
+    pages_fetched = crawl.get("pages_fetched", target.get("pages_crawled", 1))
+    page_urls = crawl.get("page_urls", [target.get("url", "")])
 
     lines = [
         f"--- TARGET SITE ---",
+        f"Pages crawled: {pages_fetched} — all metrics below are aggregated across all pages",
+        f"Pages: {page_urls[:20]}",  # show up to 20 so Claude knows which subpages were seen
         f"Title: {seo.get('title', 'N/A')} (length {seo.get('title_length', 0)},"
         f" ok={seo.get('title_ok', False)})",
         f"Meta description: {seo.get('meta_description', 'MISSING')[:120]}",
         f"H1 tags: {seo.get('headings', {}).get('h1', [])}",
         f"H2 tags (first 5): {(seo.get('headings') or {}).get('h2', [])[:5]}",
         f"Heading issues: {seo.get('heading_issues', [])}",
-        f"Word count: {content.get('word_count', 0)}",
-        f"CTAs found ({conv.get('cta_count', 0)}): "
-        f"{[c.get('text') for c in conv.get('ctas', [])[:5]]}",
-        f"Forms: {conv.get('form_count', 0)}",
+        f"Word count (all pages combined): {content.get('word_count', 0)}",
+        f"CTAs found ({conv.get('cta_count', 0)} across all pages): "
+        f"{[c.get('text') for c in conv.get('ctas', [])[:8]]}",
+        f"Forms found (all pages): {conv.get('form_count', 0)}",
         f"Social links: {[s.get('platform') for s in trust.get('social_links', [])]}",
         f"Tracking tools: {tracking.get('tools_detected', [])}",
         f"Schema types: {tracking.get('schema_types', [])}",
         f"Images without alt: {seo.get('images_without_alt', 0)}/{seo.get('images_total', 0)}",
         f"Has viewport meta: {seo.get('has_viewport', False)}",
-        f"Robots.txt: {target.get('analysis', {}).get('robots', {}).get('exists', False)}",
-        f"Sitemap: {target.get('analysis', {}).get('sitemap', {}).get('exists', False)}",
+        f"Robots.txt: {analysis.get('robots', {}).get('exists', False)}",
+        f"Sitemap: {analysis.get('sitemap', {}).get('exists', False)}",
         f"OG tags: {list(seo.get('og_tags', {}).keys())}",
     ]
 

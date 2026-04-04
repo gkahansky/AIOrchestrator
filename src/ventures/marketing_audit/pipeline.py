@@ -102,41 +102,34 @@ def run_order(order: dict, output_dir: str | None = None) -> dict:
         sample_pdf_path = paths.get("sample_pdf", Path(""))
         sample_md_path  = paths.get("sample_md", Path(""))
 
-        # -- Phase 5: Human review ----------------------------------------------
+        # -- Phase 5: Drive upload + human review -------------------------------
         if order["status"] in ("report_ready", "review_pending"):
+            # Upload to Drive first so reviewer has links before approving
+            if order["status"] == "report_ready":
+                _run_phase5_upload(order, pdf_path, md_path, sample_pdf_path, sample_md_path)
+                _save_order(order, work_dir)
+
             order["status"] = "review_pending"
             _save_order(order, work_dir)
-            _run_phase5_review(order, pdf_path, sample_pdf_path)
+            _run_phase5_notify(order)
 
             if config.AUTO_APPROVE or order.get("auto_approve"):
                 order["status"] = "approved"
                 _save_order(order, work_dir)
             else:
                 print(f"\nPipeline paused at review gate.")
-                print(f"Set status to 'approved' in {work_dir / 'order.json'} to continue.\n")
+                print(f"Approve via dashboard or set status to 'approved' in {work_dir / 'order.json'}.\n")
                 return order
-        elif order["status"] == "approved":
-            # Re-dispatched from API after human approval — reload paths from order
-            paths = {
-                "pdf":        Path(order.get("pdf_path", "")),
-                "md":         Path(order.get("md_path", "")),
-                "sample_pdf": Path(order.get("sample_pdf_path", "")),
-                "sample_md":  Path(order.get("sample_md_path", "")),
-            }
-            pdf_path        = paths["pdf"]
-            md_path         = paths["md"]
-            sample_pdf_path = paths["sample_pdf"]
-            sample_md_path  = paths["sample_md"]
 
-        # -- Phase 6: Delivery --------------------------------------------------
+        # -- Phase 6: Delivery (email only — Drive upload already done) ---------
         if order["status"] == "approved":
             order["status"] = "delivering"
             _save_order(order, work_dir)
-            _run_phase6_deliver(order, pdf_path, md_path, sample_pdf_path, sample_md_path, work_dir)
+            _run_phase6_deliver(order)
             order["status"] = "delivered"
             order["delivered_at"] = datetime.utcnow().isoformat()
             _save_order(order, work_dir)
-            # Only log revenue for paid orders — skip free samples
+            # Only log revenue for paid orders — skip free samples / testing
             tier_info = config.TIERS.get(order.get("tier", "snapshot"), {})
             if order.get("client_email"):
                 log_revenue(
@@ -238,47 +231,17 @@ def _run_phase4_generate(order: dict, report_data: dict, work_dir: Path) -> dict
     return paths
 
 
-def _run_phase5_review(order: dict, pdf_path, sample_pdf_path) -> None:
-    print(f"  Phase 5: Review notification...")
-
-    review_email = config.HUMAN_REVIEW_EMAIL
-    attachments = [str(p) for p in [pdf_path, sample_pdf_path] if p and Path(p).exists()]
-
-    if review_email:
-        subject = f"[Review] Audit — {order.get('brand_name', order['url'])} ({order['tier'].title()})"
-        body = _review_email_html(order, pdf_path, sample_pdf_path)
-        try:
-            send_email(to=review_email, subject=subject, body_html=body, attachments=attachments)
-            print(f"    OK Review email sent to {review_email}")
-        except NotImplementedError:
-            pass
-
-    print(f"\n{'-' * 60}")
-    print(f"REVIEW REQUIRED — Order: {order['order_id']}")
-    print(f"URL:         {order['url']}")
-    print(f"Tier:        {order['tier'].upper()}")
-    print(f"Report type: {order.get('report_type', 'both')}")
-    if pdf_path and Path(pdf_path).exists():
-        print(f"Full PDF:    {pdf_path}")
-    if sample_pdf_path and Path(sample_pdf_path).exists():
-        print(f"Sample PDF:  {sample_pdf_path}")
-    print(f"{'-' * 60}\n")
-
-
-def _run_phase6_deliver(
+def _run_phase5_upload(
     order: dict,
     pdf_path,
     md_path,
     sample_pdf_path,
     sample_md_path,
-    work_dir: Path,
 ) -> None:
-    print(f"  Phase 6: Delivering to client...")
-    report_type = order.get("report_type", "both")
-
-    # Upload to Drive — full reports → DRIVE_AUDIT_ROOT_ID, samples → DRIVE_SAMPLES_FOLDER_ID
+    """Upload reports to Drive and store view links on the order dict."""
+    print(f"  Phase 5a: Uploading to Drive...")
     full_folder   = config.DRIVE_AUDIT_ROOT_ID
-    sample_folder = config.DRIVE_SAMPLES_FOLDER_ID or config.DRIVE_AUDIT_ROOT_ID  # fallback
+    sample_folder = config.DRIVE_SAMPLES_FOLDER_ID or config.DRIVE_AUDIT_ROOT_ID
 
     upload_targets = []
     if full_folder:
@@ -290,28 +253,54 @@ def _run_phase6_deliver(
         if path and Path(path).exists() and folder_id:
             try:
                 res = drive_write(path, folder_id)
-                if "pdf" in label.lower():
-                    order[f"drive_{label.replace(' ', '_')}_link"] = res["web_view_link"]
-                print(f"    OK {label} on Drive: {res['web_view_link']}")
+                link = res["web_view_link"]
+                order[f"drive_{label.replace(' ', '_')}_link"] = link
+                print(f"    OK {label} on Drive: {link}")
             except Exception as exc:
                 print(f"    WARN  Drive upload failed ({label}): {exc}")
 
-    # Determine which PDF to attach for client delivery
-    # Client always gets the full report; sample is for outreach only
-    client_email = order.get("client_email", "")
-    deliver_pdf = pdf_path if (pdf_path and Path(pdf_path).exists()) else sample_pdf_path
 
-    if client_email:
-        subject = f"Your Marketing Audit — {order.get('brand_name', order['url'])}"
-        body = _delivery_email_html(order)
-        attachments = [str(deliver_pdf)] if deliver_pdf and Path(deliver_pdf).exists() else []
+def _run_phase5_notify(order: dict) -> None:
+    """Send review notification email with Drive links."""
+    print(f"  Phase 5b: Review notification...")
+
+    review_email = config.HUMAN_REVIEW_EMAIL
+    if review_email:
+        subject = f"[Review] Audit — {order.get('brand_name', order['url'])} ({order['tier'].title()})"
+        body = _review_email_html(order)
         try:
-            send_email(to=client_email, subject=subject, body_html=body, attachments=attachments)
-            print(f"    OK Delivery email sent to {client_email}")
-        except NotImplementedError:
-            print(f"    WARN  Email skill not yet active")
+            send_email(to=review_email, subject=subject, body_html=body)
+            print(f"    OK Review email sent to {review_email}")
+        except Exception as exc:
+            print(f"    WARN  Review email failed: {exc}")
 
-    print(f"    Output directory: {work_dir}")
+    print(f"\n{'-' * 60}")
+    print(f"REVIEW REQUIRED — Order: {order['order_id']}")
+    print(f"URL:         {order['url']}")
+    print(f"Tier:        {order['tier'].upper()}")
+    if order.get("drive_full_PDF_link"):
+        print(f"Full PDF:    {order['drive_full_PDF_link']}")
+    if order.get("drive_sample_PDF_link"):
+        print(f"Sample PDF:  {order['drive_sample_PDF_link']}")
+    print(f"{'-' * 60}\n")
+
+
+def _run_phase6_deliver(order: dict) -> None:
+    """Send delivery email to client. Drive upload already completed in Phase 5."""
+    print(f"  Phase 6: Delivering to client...")
+
+    client_email = order.get("client_email", "")
+    if not client_email:
+        print(f"    No client email — skipping delivery email.")
+        return
+
+    subject = f"Your Marketing Audit — {order.get('brand_name', order['url'])}"
+    body = _delivery_email_html(order)
+    try:
+        send_email(to=client_email, subject=subject, body_html=body)
+        print(f"    OK Delivery email sent to {client_email}")
+    except Exception as exc:
+        print(f"    WARN  Delivery email failed: {exc}")
 
 
 # --- PDF generator ------------------------------------------------------------
@@ -468,15 +457,20 @@ def _build_markdown(d: dict) -> str:
 
 # --- Email templates ----------------------------------------------------------
 
-def _review_email_html(order: dict, pdf_path, sample_pdf_path) -> str:
-    work_dir = Path(pdf_path).parent if pdf_path else Path(".")
-    attachments_note = ""
-    if pdf_path and Path(pdf_path).exists():
-        attachments_note += "<li>Full report PDF attached</li>"
-    if sample_pdf_path and Path(sample_pdf_path).exists():
-        attachments_note += "<li>Sample/censored PDF attached (for outreach)</li>"
+def _review_email_html(order: dict) -> str:
+    full_link   = order.get("drive_full_PDF_link", "")
+    sample_link = order.get("drive_sample_PDF_link", "")
+    drive_links = ""
+    if full_link:
+        drive_links += f'<li><a href="{full_link}">Full report (Google Drive)</a></li>'
+    if sample_link:
+        drive_links += f'<li><a href="{sample_link}">Sample/censored report (Google Drive)</a></li>'
+    if not drive_links:
+        drive_links = "<li>Drive upload failed — check worker logs</li>"
+
+    dashboard_url = os.environ.get("RAILWAY_PUBLIC_URL", "https://planBadmin.com")
     return f"""
-<p>Marketing audit report ready for review.</p>
+<p>Marketing audit report is ready for your review.</p>
 <table>
   <tr><td><b>Order</b></td><td>{order['order_id']}</td></tr>
   <tr><td><b>URL</b></td><td>{order['url']}</td></tr>
@@ -484,21 +478,26 @@ def _review_email_html(order: dict, pdf_path, sample_pdf_path) -> str:
   <tr><td><b>Report type</b></td><td>{order.get('report_type', 'both')}</td></tr>
   <tr><td><b>Client</b></td><td>{order.get('client_email', 'N/A')}</td></tr>
 </table>
-<ul>{attachments_note}</ul>
-<p>Approve by setting status to "approved" in {work_dir}/order.json.</p>
+<p><b>Reports on Google Drive:</b></p>
+<ul>{drive_links}</ul>
+<p><a href="{dashboard_url}">Approve or reject in the dashboard &rarr;</a></p>
 """
 
 
 def _delivery_email_html(order: dict) -> str:
     tier_desc = config.TIERS[order["tier"]]["description"]
-    drive_link = order.get("drive_pdf_link", "")
-    drive_section = f'<p><a href="{drive_link}">View report in Google Drive &rarr;</a></p>' if drive_link else ""
+    drive_link = order.get("drive_full_PDF_link", "")
+    drive_section = (
+        f'<p><a href="{drive_link}" style="font-size:16px;font-weight:bold;">View your report in Google Drive &rarr;</a></p>'
+        if drive_link else
+        "<p>Your report is being prepared — we'll follow up shortly with the link.</p>"
+    )
     return f"""
 <p>Hi,</p>
 <p>Your marketing audit for <b>{order.get('brand_name', order['url'])}</b> is ready.</p>
 <p><b>Package:</b> {tier_desc}</p>
-<p>The full PDF report is attached to this email.{drive_section}</p>
-<p>If you have questions or would like to discuss the findings, reply to this email.</p>
+{drive_section}
+<p>If you have questions or would like to discuss the findings, just reply to this email.</p>
 <p>Thanks,<br>EchoForge Marketing Audit<br>echoforge.biz</p>
 """
 

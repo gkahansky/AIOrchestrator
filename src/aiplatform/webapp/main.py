@@ -49,6 +49,7 @@ from aiplatform.webapp.routers.platform import settings as platform_settings
 from aiplatform.webapp.routers.ventures import etsy as ventures_etsy
 from aiplatform.webapp.routers.ventures import marketing_audit as ventures_audit
 from aiplatform.webapp.routers.ventures import content_studio as ventures_podcast
+from aiplatform.webapp.routers.public import sample as public_sample
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -122,6 +123,9 @@ def create_app() -> FastAPI:
     app.include_router(ventures_etsy.router,    prefix="/api/ventures/etsy",              tags=["etsy"])
     app.include_router(ventures_audit.router,   prefix="/api/ventures/marketing-audit",   tags=["marketing-audit"])
     app.include_router(ventures_podcast.router, prefix="/api/ventures/content-studio",    tags=["content-studio"])
+
+    # Public (no auth) — free sample requests from echoforge.biz
+    app.include_router(public_sample.router,    prefix="/api/sample",                     tags=["public"])
 
     @app.on_event("startup")
     async def _startup() -> None:

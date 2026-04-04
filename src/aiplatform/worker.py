@@ -82,10 +82,61 @@ celery_app.conf.update(
     task_acks_late=True,           # re-queue if worker dies mid-task
     worker_prefetch_multiplier=1,  # one task at a time per worker thread
     result_expires=86400,          # 24 hours
+    beat_schedule={
+        # Every Monday at 08:00 UTC
+        "weekly-finance-digest": {
+            "task": "platform.weekly_digest",
+            "schedule": 604800,          # 7 days in seconds — use crontab in prod
+            "options": {"expires": 3600},
+        },
+        # Check for new Fiverr order emails every 15 minutes
+        "fiverr-email-check": {
+            "task": "platform.check_fiverr_emails",
+            "schedule": 900,
+            "options": {"expires": 300},
+        },
+    },
+    beat_schedule_filename="/tmp/celerybeat-schedule",
 )
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────
+
+def _slack_alert_failure(venture: str, order_id: str | None, exc: Exception, phase: int | None = None) -> None:
+    """Post a failure alert to Slack. Best-effort — never raises."""
+    try:
+        from aiplatform.skills.comms.send_slack import send_slack
+        channel = os.environ.get("SLACK_ALERTS_CHANNEL") or os.environ.get("SLACK_REVIEW_CHANNEL", "#platform-alerts")
+        phase_str = f" · Phase {phase}" if phase else ""
+        order_str = order_id or "unknown"
+        admin_url = f"https://planBadmin.com"
+        blocks = [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f":rotating_light: *Pipeline failure* — `{venture}`{phase_str}\n"
+                        f"*Order:* `{order_str}`\n"
+                        f"*Error:* {str(exc)[:300]}"
+                    ),
+                },
+            },
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Open Dashboard"},
+                        "url": admin_url,
+                    }
+                ],
+            },
+        ]
+        send_slack(channel=channel, text=f"Pipeline failure — {venture} · {order_str}", blocks=blocks)
+    except Exception:
+        pass
+
 
 def _mark_failed(order_id: str | None, venture: str, error: str) -> None:
     """Write a failure status to the DB — best-effort, never raises."""
@@ -271,6 +322,7 @@ def run_etsy_phase(self, phase: int, params: dict) -> dict:
 
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc, countdown=60)
+        _slack_alert_failure("etsy", job_id, exc, phase=phase)
         raise
 
 
@@ -309,6 +361,76 @@ def run_audit_order(self, order: dict) -> dict:
         _mark_failed(order.get("order_id"), "marketing_audit", str(exc))
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc, countdown=120)
+        _slack_alert_failure("marketing_audit", order.get("order_id"), exc)
+        raise
+
+
+# ── Marketing Audit — free sample (public website) ────────────────────────────
+
+@celery_app.task(bind=True, name="audit.run_sample", max_retries=1)
+def run_audit_sample(self, order: dict) -> dict:
+    """
+    Run a marketing audit sample for a website visitor (no payment, no review gate).
+    Generates the censored sample PDF and emails it to order["sample_email"].
+    """
+    sample_email = order.get("sample_email", "")
+    try:
+        from ventures.marketing_audit import pipeline as audit_pipeline
+        from aiplatform.skills.comms.send_email import send_email
+        from pathlib import Path
+
+        # Force sample-only mode and skip human review
+        order["report_type"] = "sample"
+        order["auto_approve"] = True
+        order["client_email"] = ""   # pipeline must not send a client delivery email
+
+        result = audit_pipeline.run_order(order)
+
+        sample_pdf = result.get("sample_pdf_path", "")
+        if not sample_pdf or not Path(sample_pdf).exists():
+            # Fallback: reconstruct path
+            from ventures.marketing_audit import config as audit_config
+            import glob
+            matches = list(Path(audit_config.OUTPUT_DIR, order["order_id"]).glob("*-sample.pdf"))
+            sample_pdf = str(matches[0]) if matches else ""
+
+        if sample_pdf and sample_email:
+            url = order.get("url", "your website")
+            body = (
+                f"<p>Hi there,</p>"
+                f"<p>Here's your free marketing audit sample for <b>{url}</b>.</p>"
+                f"<p>The sample shows your overall score and a selection of findings. "
+                f"The full audit includes all findings, a complete action plan, competitor benchmarking, "
+                f"and before/after copy examples.</p>"
+                f"<p><b>Interested in the full report?</b> Visit "
+                f'<a href="https://echoforge.biz">echoforge.biz</a> to order.</p>'
+                f"<p>— EchoForge</p>"
+            )
+            send_email(
+                to=sample_email,
+                subject=f"Your Free Marketing Audit Sample — {url}",
+                body_html=body,
+                attachments=[sample_pdf],
+            )
+
+            # Schedule nurture follow-ups
+            from datetime import datetime, timezone, timedelta
+            run_nurture_email.apply_async(
+                args=[sample_email, "audit", order.get("order_id", ""), 3],
+                eta=datetime.now(timezone.utc) + timedelta(days=3),
+            )
+            run_nurture_email.apply_async(
+                args=[sample_email, "audit", order.get("order_id", ""), 7],
+                eta=datetime.now(timezone.utc) + timedelta(days=7),
+            )
+
+        return {"order_id": order.get("order_id"), "status": "sample_delivered"}
+
+    except Exception as exc:
+        _mark_failed(order.get("order_id"), "marketing_audit", str(exc))
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=60)
+        _slack_alert_failure("audit_sample", order.get("order_id"), exc)
         raise
 
 
@@ -341,4 +463,304 @@ def run_podcast_order(self, order: dict) -> dict:
         _mark_failed(order.get("order_id"), "content_studio", str(exc))
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc, countdown=120)
+        _slack_alert_failure("content_studio", order.get("order_id"), exc)
+        raise
+
+
+# ── Content Studio — free sample (public website) ─────────────────────────────
+
+@celery_app.task(bind=True, name="podcast.run_sample", max_retries=1)
+def run_podcast_sample(self, order: dict) -> dict:
+    """
+    Run a podcast sample for a website visitor (no payment, no review gate).
+    Transcribes the uploaded audio (stored in Drive), generates content,
+    and emails the watermarked sample PDF to order["sample_email"].
+    """
+    sample_email = order.get("sample_email", "")
+    try:
+        from ventures.content_studio import pipeline as podcast_pipeline
+        from aiplatform.skills.comms.send_email import send_email
+        from pathlib import Path
+
+        # Skip human review; pipeline must not send a client delivery email
+        order["auto_approve"] = True
+        order["client_email"] = ""
+
+        result = podcast_pipeline.run_order(order)
+
+        sample_pdf = result.get("sample_pdf_path", "")
+        if not sample_pdf or not Path(sample_pdf).exists():
+            from ventures.content_studio import config as cs_config
+            matches = list(Path(cs_config.OUTPUT_DIR, order["order_id"]).glob("*-sample.pdf"))
+            sample_pdf = str(matches[0]) if matches else ""
+
+        if sample_pdf and sample_email:
+            show = order.get("show_name", "your podcast")
+            episode = order.get("episode_title", "your episode")
+            body = (
+                f"<p>Hi there,</p>"
+                f"<p>Here's your free content package sample for <b>{episode}</b> "
+                f"from <b>{show}</b>.</p>"
+                f"<p>The sample includes full timestamps and guest bio, plus a preview "
+                f"of show notes, social captions, and more.</p>"
+                f"<p><b>Want the complete package?</b> Visit "
+                f'<a href="https://echoforge.biz">echoforge.biz</a> to order — '
+                f"delivered within 24 hours.</p>"
+                f"<p>— EchoForge</p>"
+            )
+            send_email(
+                to=sample_email,
+                subject=f"Your Free Podcast Sample — {episode}",
+                body_html=body,
+                attachments=[sample_pdf],
+            )
+
+            # Schedule nurture follow-ups
+            from datetime import datetime, timezone, timedelta
+            run_nurture_email.apply_async(
+                args=[sample_email, "podcast", order.get("order_id", ""), 3],
+                eta=datetime.now(timezone.utc) + timedelta(days=3),
+            )
+            run_nurture_email.apply_async(
+                args=[sample_email, "podcast", order.get("order_id", ""), 7],
+                eta=datetime.now(timezone.utc) + timedelta(days=7),
+            )
+
+        return {"order_id": order.get("order_id"), "status": "sample_delivered"}
+
+    except Exception as exc:
+        _mark_failed(order.get("order_id"), "content_studio", str(exc))
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=60)
+        _slack_alert_failure("podcast_sample", order.get("order_id"), exc)
+        raise
+
+
+# ── Sample nurture emails ──────────────────────────────────────────────────────
+
+@celery_app.task(bind=True, name="platform.nurture_email", max_retries=1)
+def run_nurture_email(self, email: str, service: str, order_id: str, day: int) -> dict:
+    """
+    Send a nurture follow-up to someone who received a free sample.
+    Dispatched with an ETA of day 3 and day 7 after sample delivery.
+
+    service: "podcast" | "audit"
+    day:     3 | 7
+    """
+    try:
+        from aiplatform.skills.comms.send_email import send_email
+
+        if service == "podcast":
+            if day == 3:
+                subject = "Did you see your free podcast sample?"
+                body = (
+                    "<p>Hi,</p>"
+                    "<p>Just checking in — we sent you a free podcast content package sample a few days ago.</p>"
+                    "<p>If you liked what you saw, the full package includes complete show notes, "
+                    "social captions, newsletter excerpt, and SEO metadata — delivered within 24 hours.</p>"
+                    '<p><a href="https://echoforge.biz"><b>Order your full package →</b></a></p>'
+                    "<p>— EchoForge</p>"
+                )
+            else:  # day 7
+                subject = "Last chance — 20% off your first podcast package"
+                body = (
+                    "<p>Hi,</p>"
+                    "<p>It's been a week since we sent your free sample. "
+                    "If you're still on the fence, here's a one-time offer:</p>"
+                    "<p><b>20% off your first full content package.</b> "
+                    "Reply to this email with code <b>SAMPLE20</b> when placing your order.</p>"
+                    '<p><a href="https://echoforge.biz"><b>Claim your discount →</b></a></p>'
+                    "<p>— EchoForge</p>"
+                )
+        else:  # audit
+            if day == 3:
+                subject = "Your marketing audit sample — did you check your score?"
+                body = (
+                    "<p>Hi,</p>"
+                    "<p>A few days ago we sent you a free marketing audit sample for your website.</p>"
+                    "<p>The sample shows your overall score and a few key findings. "
+                    "The full audit unlocks all findings, a complete action plan, and competitor benchmarking.</p>"
+                    '<p><a href="https://echoforge.biz"><b>Order the full audit →</b></a></p>'
+                    "<p>— EchoForge</p>"
+                )
+            else:  # day 7
+                subject = "Last chance — 20% off your full marketing audit"
+                body = (
+                    "<p>Hi,</p>"
+                    "<p>Your free audit sample has been sitting in your inbox for a week. "
+                    "We want to make it easy to act on it.</p>"
+                    "<p><b>20% off your first full audit.</b> "
+                    "Reply with code <b>AUDIT20</b> when ordering.</p>"
+                    '<p><a href="https://echoforge.biz"><b>Claim your discount →</b></a></p>'
+                    "<p>— EchoForge</p>"
+                )
+
+        send_email(to=email, subject=subject, body_html=body)
+        return {"email": email, "service": service, "day": day, "status": "sent"}
+
+    except Exception as exc:
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=3600)  # retry in 1 hour
+        return {"error": str(exc)}
+
+
+# ── Weekly finance digest ──────────────────────────────────────────────────────
+
+@celery_app.task(bind=True, name="platform.weekly_digest", max_retries=1)
+def run_weekly_digest(self) -> dict:
+    """
+    Send weekly finance digests — one per venture + one combined platform summary.
+
+    Per-venture recipients (set any combination):
+        DIGEST_EMAIL_ETSY      → MiroPrintStudio digest
+        DIGEST_EMAIL_PODCAST   → Podcast Notes / Content Studio digest
+        DIGEST_EMAIL_AUDIT     → Marketing Audit digest
+        DIGEST_EMAIL_PLATFORM  → Combined all-ventures summary
+    """
+    # Venture → env var name → friendly label
+    _VENTURE_MAP = {
+        "etsy":          ("DIGEST_EMAIL_ETSY",     "MiroPrintStudio"),
+        "content_studio":("DIGEST_EMAIL_PODCAST",  "Podcast Notes"),
+        "marketing_audit":("DIGEST_EMAIL_AUDIT",   "Marketing Audit"),
+    }
+
+    try:
+        from datetime import datetime, timezone, timedelta
+        from aiplatform.database.models import Job, CostEvent, RevenueEvent
+        from aiplatform.database.session import get_session
+        from aiplatform.skills.comms.send_email import send_email
+
+        since = datetime.now(timezone.utc) - timedelta(days=7)
+        week_str = since.strftime("%b %d") + " – " + datetime.now(timezone.utc).strftime("%b %d, %Y")
+        emails_sent = []
+
+        with get_session() as db:
+            all_completed = [
+                j for j in db.query(Job).filter(Job.completed_at >= since).all()
+                if j.status in ("completed", "delivered", "published")
+            ]
+            all_revenue = db.query(RevenueEvent).filter(RevenueEvent.created_at >= since).all()
+            all_costs   = db.query(CostEvent).filter(CostEvent.created_at >= since).all()
+
+        # Build per-venture data
+        ventures: dict[str, dict] = {}
+        for j in all_completed:
+            v = j.venture or "unknown"
+            ventures.setdefault(v, {"jobs": 0, "revenue": 0.0, "cost": 0.0})
+            ventures[v]["jobs"] += 1
+        for r in all_revenue:
+            v = r.venture or "unknown"
+            ventures.setdefault(v, {"jobs": 0, "revenue": 0.0, "cost": 0.0})
+            ventures[v]["revenue"] += float(r.amount_usd)
+        for c in all_costs:
+            v = c.venture or "unknown"
+            ventures.setdefault(v, {"jobs": 0, "revenue": 0.0, "cost": 0.0})
+            ventures[v]["cost"] += float(c.cost_usd)
+
+        # ── Send per-venture digest ────────────────────────────────────────────
+        for venture_key, (env_var, label) in _VENTURE_MAP.items():
+            recipient = os.environ.get(env_var, "")
+            if not recipient:
+                continue
+            d = ventures.get(venture_key, {"jobs": 0, "revenue": 0.0, "cost": 0.0})
+            roas = (d["revenue"] / d["cost"]) if d["cost"] > 0 else 0
+            body = _digest_html(label, week_str, d["jobs"], d["revenue"], d["cost"], roas, {label: d})
+            send_email(
+                to=recipient,
+                subject=f"{label} Weekly — {d['jobs']} jobs · ${d['revenue']:.2f}",
+                body_html=body,
+            )
+            emails_sent.append(f"{label} → {recipient}")
+
+        # ── Send combined platform digest ──────────────────────────────────────
+        platform_email = os.environ.get("DIGEST_EMAIL_PLATFORM", "")
+        if platform_email:
+            total_jobs    = sum(d["jobs"]    for d in ventures.values())
+            total_revenue = sum(d["revenue"] for d in ventures.values())
+            total_cost    = sum(d["cost"]    for d in ventures.values())
+            roas = (total_revenue / total_cost) if total_cost > 0 else 0
+            # Rename keys to friendly labels for the table
+            named = {_VENTURE_MAP.get(k, (None, k))[1]: v for k, v in ventures.items()}
+            body = _digest_html("Platform", week_str, total_jobs, total_revenue, total_cost, roas, named)
+            send_email(
+                to=platform_email,
+                subject=f"Platform Weekly — {total_jobs} jobs · ${total_revenue:.2f} revenue",
+                body_html=body,
+            )
+            emails_sent.append(f"Platform → {platform_email}")
+
+        if not emails_sent:
+            return {"skipped": "No DIGEST_EMAIL_* vars set"}
+
+        return {"emails_sent": emails_sent, "ventures": list(ventures.keys())}
+
+    except Exception as exc:
+        _slack_alert_failure("platform", "weekly_digest", exc)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=3600)
+        raise
+
+
+def _digest_html(
+    title: str, week_str: str,
+    jobs: int, revenue: float, cost: float, roas: float,
+    ventures: dict,
+) -> str:
+    roas_color = "#00C853" if roas >= 3 else "#FF6B35"
+    venture_rows = "".join(
+        f"<tr>"
+        f"<td style='padding:6px 12px;border-bottom:1px solid #eee'>{v}</td>"
+        f"<td style='padding:6px 12px;border-bottom:1px solid #eee;text-align:center'>{d.get('jobs',0)}</td>"
+        f"<td style='padding:6px 12px;border-bottom:1px solid #eee;text-align:right'>${d.get('revenue',0):.2f}</td>"
+        f"<td style='padding:6px 12px;border-bottom:1px solid #eee;text-align:right'>${d.get('cost',0):.4f}</td>"
+        f"</tr>"
+        for v, d in sorted(ventures.items())
+    )
+    return f"""
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <h2 style="color:#1B2A4A">{title} — Weekly Digest</h2>
+      <p style="color:#666">{week_str}</p>
+      <table style="width:100%;border-collapse:collapse;margin:20px 0">
+        <tr style="background:#f5f7fa">
+          <td style="padding:12px;font-weight:bold">Jobs completed</td>
+          <td style="padding:12px;text-align:right;font-size:1.4em;font-weight:bold">{jobs}</td>
+        </tr>
+        <tr>
+          <td style="padding:12px;font-weight:bold">Revenue</td>
+          <td style="padding:12px;text-align:right;font-size:1.4em;font-weight:bold;color:#00C853">${revenue:.2f}</td>
+        </tr>
+        <tr style="background:#f5f7fa">
+          <td style="padding:12px;font-weight:bold">API costs</td>
+          <td style="padding:12px;text-align:right;font-size:1.4em">${cost:.4f}</td>
+        </tr>
+        <tr>
+          <td style="padding:12px;font-weight:bold">ROAS</td>
+          <td style="padding:12px;text-align:right;font-size:1.4em;font-weight:bold;color:{roas_color}">{roas:.1f}x</td>
+        </tr>
+      </table>
+      {"<h3 style='color:#1B2A4A'>By Venture</h3><table style='width:100%;border-collapse:collapse'><tr style='background:#1B2A4A;color:white'><th style='padding:8px 12px;text-align:left'>Venture</th><th style='padding:8px 12px'>Jobs</th><th style='padding:8px 12px;text-align:right'>Revenue</th><th style='padding:8px 12px;text-align:right'>Cost</th></tr>" + venture_rows + "</table>" if len(ventures) > 1 else ""}
+      <p style="margin-top:24px;font-size:0.8em;color:#999">
+        <a href="https://planBadmin.com">Open Dashboard</a>
+      </p>
+    </div>
+    """
+
+
+# ── Fiverr email parser ────────────────────────────────────────────────────────
+
+@celery_app.task(bind=True, name="platform.check_fiverr_emails", max_retries=1)
+def check_fiverr_emails(self) -> dict:
+    """
+    Poll Gmail for unread Fiverr order notification emails.
+    Parse each email with Claude and create orders in the system.
+    Requires: GMAIL_FIVERR_LABEL env var (Gmail label applied to processed emails).
+    """
+    try:
+        from aiplatform.skills.marketplace.fiverr_email_parser import parse_fiverr_inbox
+        results = parse_fiverr_inbox()
+        return results
+    except Exception as exc:
+        _slack_alert_failure("platform", "fiverr_email_check", exc)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=300)
         raise

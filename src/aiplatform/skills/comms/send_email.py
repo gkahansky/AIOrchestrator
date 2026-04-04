@@ -1,31 +1,29 @@
 """
 Skill: send_email
-Send an email via Gmail using SMTP with an app password.
+Send an email via the Resend API (https://resend.com).
 
 Requires env vars:
-    GMAIL_ADDRESS       — sender address (e.g. you@gmail.com)
-    GMAIL_APP_PASSWORD  — 16-char Google App Password (not your account password)
+    RESEND_API_KEY   — API key from resend.com dashboard
+    EMAIL_FROM       — verified sender address (e.g. noreply@yourdomain.com)
+                       or use the Resend sandbox address for testing:
+                       onboarding@resend.dev
 
-To create a Gmail App Password:
-    Google Account → Security → 2-Step Verification → App Passwords
+Resend is used instead of SMTP because Railway blocks outbound port 587.
 """
 
 from __future__ import annotations
 
+import base64
 import logging
 import mimetypes
 import os
-import smtplib
-from email import encoders
-from email.mime.base import MIMEBase
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from pathlib import Path
+
+import requests
 
 log = logging.getLogger(__name__)
 
-_SMTP_HOST = "smtp.gmail.com"
-_SMTP_PORT = 587
+_RESEND_URL = "https://api.resend.com/emails"
 
 
 def send_email(
@@ -36,7 +34,7 @@ def send_email(
     body_text: str | None = None,
 ) -> dict:
     """
-    Send an email via Gmail SMTP.
+    Send an email via the Resend HTTP API.
 
     Args:
         to:           Recipient address (or comma-separated list)
@@ -48,46 +46,62 @@ def send_email(
     Returns:
         {message_id, to, subject} on success, {error} on failure.
     """
-    sender  = os.environ.get("GMAIL_ADDRESS", "")
-    app_pwd = os.environ.get("GMAIL_APP_PASSWORD", "")
+    api_key   = os.environ.get("RESEND_API_KEY", "")
+    from_addr = os.environ.get("EMAIL_FROM", "")
 
-    if not sender or not app_pwd:
-        return {"error": "GMAIL_ADDRESS and GMAIL_APP_PASSWORD must be set in environment."}
+    if not api_key:
+        return {"error": "RESEND_API_KEY must be set in environment."}
+    if not from_addr:
+        return {"error": "EMAIL_FROM must be set in environment."}
 
-    try:
-        msg = MIMEMultipart("alternative") if not attachments else MIMEMultipart("mixed")
-        msg["From"]    = sender
-        msg["To"]      = to
-        msg["Subject"] = subject
+    recipients = [r.strip() for r in to.split(",")]
 
-        # Plain-text fallback
-        plain = body_text or _strip_html(body_html)
-        msg.attach(MIMEText(plain, "plain", "utf-8"))
-        msg.attach(MIMEText(body_html, "html", "utf-8"))
+    payload: dict = {
+        "from":    from_addr,
+        "to":      recipients,
+        "subject": subject,
+        "html":    body_html,
+    }
 
-        # Attachments
-        for path_str in (attachments or []):
+    if body_text:
+        payload["text"] = body_text
+
+    # Attachments — Resend accepts base64-encoded content
+    if attachments:
+        encoded = []
+        for path_str in attachments:
             path = Path(path_str)
             if not path.exists():
                 log.warning("Attachment not found, skipping: %s", path)
                 continue
             ctype, _ = mimetypes.guess_type(str(path))
-            maintype, subtype = (ctype or "application/octet-stream").split("/", 1)
             with open(path, "rb") as f:
-                part = MIMEBase(maintype, subtype)
-                part.set_payload(f.read())
-            encoders.encode_base64(part)
-            part.add_header("Content-Disposition", "attachment", filename=path.name)
-            msg.attach(part)
+                encoded.append({
+                    "filename":     path.name,
+                    "content":      base64.b64encode(f.read()).decode(),
+                    "content_type": ctype or "application/octet-stream",
+                })
+        if encoded:
+            payload["attachments"] = encoded
 
-        with smtplib.SMTP(_SMTP_HOST, _SMTP_PORT) as smtp:
-            smtp.ehlo()
-            smtp.starttls()
-            smtp.login(sender, app_pwd)
-            smtp.sendmail(sender, [r.strip() for r in to.split(",")], msg.as_string())
+    try:
+        resp = requests.post(
+            _RESEND_URL,
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type":  "application/json",
+            },
+            timeout=30,
+        )
+        data = resp.json()
+        if resp.status_code not in (200, 201):
+            err = data.get("message") or data.get("error") or str(data)
+            log.error("send_email failed (%s): %s", resp.status_code, err)
+            return {"error": err}
 
-        message_id = msg.get("Message-ID", "")
-        log.info("Email sent to %s — subject: %s", to, subject)
+        message_id = data.get("id", "")
+        log.info("Email sent to %s — subject: %s  id: %s", to, subject, message_id)
         return {"message_id": message_id, "to": to, "subject": subject}
 
     except Exception as exc:

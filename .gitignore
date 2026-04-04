@@ -6,6 +6,8 @@
 # Google credentials
 google_credentials.json
 oauth_client_secret.json
+google_oauth_client_web.json
+google_oauth_client_desktop.json
 drive_folder_ids.txt
 service_account.json
 *.json.key

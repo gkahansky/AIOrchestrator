@@ -101,7 +101,7 @@ def run_order(order: dict, output_dir: str | None = None) -> dict:
             _run_phase4_review(order, gdoc)
             # Pipeline pauses here — approval sets status to "approved" externally
             # or AUTO_APPROVE bypasses the gate
-            if config.AUTO_APPROVE:
+            if config.AUTO_APPROVE or order.get("auto_approve"):
                 order["status"] = "approved"
                 _save_order(order, work_dir)
             else:
@@ -143,6 +143,15 @@ def run_order(order: dict, output_dir: str | None = None) -> dict:
 
 def _run_phase1_transcribe(order: dict, work_dir: Path) -> dict:
     audio_path = order.get("audio_path")
+
+    # Sample requests upload audio to Drive — download from Drive file ID.
+    if not audio_path and order.get("drive_audio_id"):
+        from aiplatform.skills.storage.drive_read import drive_read
+        suffix = order.get("audio_filename_suffix", ".mp3")
+        audio_path = str(work_dir / f"audio{suffix}")
+        print(f"  Phase 1: Downloading audio from Drive...")
+        drive_read(order["drive_audio_id"], audio_path)
+        order["audio_path"] = audio_path
 
     # Web UI orders supply audio_url instead of a local path — download it first.
     if not audio_path and order.get("audio_url"):
@@ -226,6 +235,7 @@ def _run_phase3_package(order: dict, content: dict, work_dir: Path) -> dict:
     # Sample PDF — watermarked, for outreach / demos
     sample_pdf_path = work_dir / f"{order['order_id']}-sample.pdf"
     generate_sample_pdf(order, content, sample_pdf_path)
+    order["sample_pdf_path"] = str(sample_pdf_path)
     print(f"    ✓ Sample PDF: {sample_pdf_path.name}")
 
     # Create per-order folder in Drive if configured

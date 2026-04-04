@@ -108,7 +108,7 @@ def run_order(order: dict, output_dir: str | None = None) -> dict:
             _save_order(order, work_dir)
             _run_phase5_review(order, pdf_path, sample_pdf_path)
 
-            if config.AUTO_APPROVE:
+            if config.AUTO_APPROVE or order.get("auto_approve"):
                 order["status"] = "approved"
                 _save_order(order, work_dir)
             else:

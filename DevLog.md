@@ -34,3 +34,4 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-05 10:53 | AII-137 | 3642e14 | Fixed create_gdoc and drive_organise — both were hardcoded to service account, bypassing OAuth token |
 | 2026-04-05 12:04 | AII-138 | 8aba884 | Added episode_title and host_name to podcast order form; fixed Google Doc sharing to be public link |
 | 2026-04-05 12:20 | AII-138 | 5330919 | Added guest name and special instructions fields to podcast order form |
+| 2026-04-05 14:00 | | 707cbb5 | Added DevLog.md, updated ROADMAP and CLAUDE.md files for D-20/D-21; added DevLog commit directive to root CLAUDE.md |

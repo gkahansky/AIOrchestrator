@@ -487,7 +487,12 @@ def _review_email_html(order: dict) -> str:
 
 def _delivery_email_html(order: dict) -> str:
     tier_desc = config.TIERS[order["tier"]]["description"]
-    drive_link = order.get("drive_full_PDF_link", "")
+    # Full PDF preferred; fall back to sample PDF for sample-only orders
+    drive_link = (
+        order.get("drive_full_PDF_link")
+        or order.get("drive_sample_PDF_link")
+        or ""
+    )
     drive_section = (
         f'<p><a href="{drive_link}" style="font-size:16px;font-weight:bold;">View your report in Google Drive &rarr;</a></p>'
         if drive_link else

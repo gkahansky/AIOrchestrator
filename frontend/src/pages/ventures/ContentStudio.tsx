@@ -79,10 +79,12 @@ const ALLOWED_AUDIO = ".mp3,.mp4,.m4a,.wav,.webm,.mpeg,.mpga,.ogg,.flac"
 function NewOrderForm() {
   const navigate = useNavigate()
   const [tier, setTier] = useState<"starter" | "standard" | "premium">("starter")
+  const [clientEmail, setClientEmail] = useState("")
   const [showName, setShowName] = useState("")
   const [episodeTitle, setEpisodeTitle] = useState("")
   const [hostName, setHostName] = useState("")
-  const [clientEmail, setClientEmail] = useState("")
+  const [guestName, setGuestName] = useState("")
+  const [specialInstructions, setSpecialInstructions] = useState("")
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -110,7 +112,7 @@ function NewOrderForm() {
       return
     }
     setErrors({})
-    mutation.mutate({ audio: audioFile!, tier, show_name: showName, episode_title: episodeTitle, host_name: hostName, client_email: clientEmail })
+    mutation.mutate({ audio: audioFile!, tier, client_email: clientEmail, show_name: showName, episode_title: episodeTitle, host_name: hostName, guest_name: guestName, special_instructions: specialInstructions })
   }
 
   return (
@@ -174,6 +176,25 @@ function NewOrderForm() {
         </div>
       </div>
 
+      {/* Customer Email */}
+      <div>
+        <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
+          Customer Email <span className="text-error">*</span>
+        </label>
+        <input
+          type="email"
+          value={clientEmail}
+          onChange={(e) => setClientEmail(e.target.value)}
+          placeholder="client@example.com"
+          className={`w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border ${
+            errors.client_email ? "border-error" : "border-transparent"
+          } focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors`}
+        />
+        {errors.client_email && (
+          <p className="text-xs text-error mt-1 font-label">{errors.client_email}</p>
+        )}
+      </div>
+
       {/* Show Name */}
       <div>
         <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
@@ -216,23 +237,32 @@ function NewOrderForm() {
         />
       </div>
 
-      {/* Client Email */}
+      {/* Guest Name */}
       <div>
         <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
-          Client Email <span className="text-error">*</span>
+          Guest Name
         </label>
         <input
-          type="email"
-          value={clientEmail}
-          onChange={(e) => setClientEmail(e.target.value)}
-          placeholder="client@example.com"
-          className={`w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border ${
-            errors.client_email ? "border-error" : "border-transparent"
-          } focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors`}
+          type="text"
+          value={guestName}
+          onChange={(e) => setGuestName(e.target.value)}
+          placeholder="John Doe (leave blank if no guest)"
+          className="w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors"
         />
-        {errors.client_email && (
-          <p className="text-xs text-error mt-1 font-label">{errors.client_email}</p>
-        )}
+      </div>
+
+      {/* Special Instructions */}
+      <div>
+        <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
+          Special Instructions
+        </label>
+        <textarea
+          value={specialInstructions}
+          onChange={(e) => setSpecialInstructions(e.target.value)}
+          placeholder="Any specific focus areas, tone preferences, or sections to emphasise…"
+          rows={3}
+          className="w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors resize-none"
+        />
       </div>
 
       {mutation.error && (

@@ -125,10 +125,12 @@ export interface AuditOrderRequest {
 export interface PodcastOrderRequest {
   audio: File
   tier: "starter" | "standard" | "premium"
+  client_email?: string
   show_name?: string
   episode_title?: string
   host_name?: string
-  client_email?: string
+  guest_name?: string
+  special_instructions?: string
 }
 
 export interface OrderResponse {

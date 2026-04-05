@@ -512,3 +512,7 @@ Add to `/platform/registry/skills.json`:
 | H-05 | Human Review Gate | ✅ done | /api/jobs/{id}/approve + /api/jobs/{id}/reject endpoints live. Review queue in dashboard UI. | 2026-03-31 |
 | M-09 | Dashboard Endpoint | ✅ done | GET /api/platform/dashboard live. Covered by H-09 Management App. | 2026-03-31 |
 | D-15 | Database Foundation | ✅ done | SQLAlchemy models + Alembic migrations. job_ops.py upsert. | 2026-03-29 |
+| D-16 | Etsy Pipeline Phases 1–6 | ✅ done | Full auto-chain Phase 2→3→4→6 live. Phase 5 gate removed. Etsy drafts created via API. | 2026-04-03 |
+| D-17 | Marketing Audit Multi-Page Crawler | ✅ done | BFS crawler in analyze_page.py — 20 pages, sitemap seeding, merges findings. | 2026-04-05 |
+| D-18 | Public Sample Endpoints | ✅ done | POST /api/sample/podcast + /api/sample/audit — rate-limited, demo mode, email delivery. | 2026-04-05 |
+| D-19 | Pipeline + Email Fixes | ✅ done | Drive upload before review gate; delivery email recipient fallback; Drive link fallback chain; openai in requirements. | 2026-04-05 |

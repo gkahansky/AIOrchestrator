@@ -53,14 +53,26 @@ Add-ons: +$20/30 min over limit · 10% off for 4+/month · $399/month retainer
 
 ---
 
-## Pipeline — Core (existing, unchanged)
+## Public Sample Endpoint
 
-1. Order detection (Upwork API / Fiverr Gmail polling)
-2. Transcription — GPT-4o Mini Transcribe ($0.003/min)
+Unauthenticated endpoint for lead generation: `POST /api/sample/podcast`
+
+- Rate-limited: 1 request per email per 24 hours (enforced via DB)
+- Inputs: `email`, `show_name`, `episode_title`, `host_name` (Form); `audio` (optional file upload)
+- If no audio file: sets `demo: True` on order → pipeline uses canned demo transcript (skips Whisper)
+- If file provided: validates extension (.mp3, .mp4, .m4a, .wav, .webm, etc.), max 200 MB, uploads to Drive
+- Runs standard pipeline → emails sample (watermarked/redacted) PDF to requester
+
+---
+
+## Pipeline — Core
+
+1. Order detection — UI trigger (`POST /api/ventures/content-studio/orders`), CLI, or sample endpoint
+2. Transcription — OpenAI Whisper (`openai>=1.30.0`, `$0.003/min`). Demo mode: skips Whisper, uses canned transcript.
 3. Content generation — Claude API, tier-aware
-4. Packaging — Google Doc creation + PDF backup
+4. Packaging — Google Doc creation + full PDF + sample PDF
 5. Human review gate (30-min window; auto-approve after 20 validated orders)
-6. Delivery — view-only Google Doc link
+6. Delivery — view-only Google Doc link + PDF emailed to `client_email` or `sample_email`
 
 ---
 
@@ -196,10 +208,19 @@ EMAIL_SEQUENCE_LENGTH=5
 
 Run these after core pipeline Sprints 1–3 are stable.
 
-### Sprint 3b — Brand Voice + Promo Copy
-- Build `generate_brand_voice.py` + caching
-- Build `generate_promo_copy.py`
-- Test: 2 episodes → brand voice guide → promo copy using that guide
+### Sprint 3b — Brand Voice + Promo Copy ✅ DONE (2026-03-25)
+- [x] `generate_brand_voice.py` — analyses 2–3 transcripts, produces structured Brand Voice Guide; cached as JSON per show (`{show-slug}-brand-voice.json`) for reuse across orders
+- [x] `generate_promo_copy.py` — platform description, audiogram caption, newsletter teaser, LinkedIn post; injects brand voice when cached
+- [x] Add-on runner wired into `content_studio/pipeline.py` Phase 3b; `--addons brand-voice promo-copy` CLI flags
+- [x] Tested end-to-end: real 60-min episode → full premium pipeline; brand voice + promo copy outputs saved alongside order
+- [x] Premium truncation fix: `CLAUDE_MAX_TOKENS_PREMIUM = 16000` in `config.py`
+
+### Sprint 3c — Public Sample Endpoint ✅ DONE (2026-04-05)
+- [x] `POST /api/sample/podcast` — optional audio upload; demo mode when no file provided
+- [x] Demo transcript fallback in `_run_phase1_transcribe()` — checks `demo` flag before raising ValueError
+- [x] Rate limiting (1 req/email/24h via DB), Drive upload for real files, Resend email delivery
+- [x] Fixed field name mismatch in echoforge-site JS (`file` → `audio`)
+- [x] `openai` added to `requirements.txt`
 
 ### Sprint 4b — Social Calendar + Email Sequence
 - Integrate `market-social/SKILL.md` with podcast context prefix

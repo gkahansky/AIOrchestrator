@@ -145,7 +145,8 @@ class AuditApproveRequest(BaseModel):
 # ── Venture — Content Studio ───────────────────────────────────────────────────
 
 class PodcastOrderRequest(BaseModel):
-    audio_url: str
+    # audio_url kept for backward-compat (CLI / direct API callers)
+    audio_url: str | None = None
     tier: str = Field("standard", pattern="^(starter|standard|premium)$")
     show_name: str | None = None
     client_email: str | None = None

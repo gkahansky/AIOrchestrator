@@ -4,7 +4,6 @@ import { useQuery, useMutation } from "@tanstack/react-query"
 import { fetchPodcastOrders, createPodcastOrder } from "../../api"
 import StatusBadge from "../../components/StatusBadge"
 import PhaseBar from "../../components/PhaseBar"
-import type { PodcastOrderRequest } from "../../types"
 
 type Tab = "overview" | "new_order" | "orders"
 
@@ -75,15 +74,15 @@ function Overview() {
   )
 }
 
+const ALLOWED_AUDIO = ".mp3,.mp4,.m4a,.wav,.webm,.mpeg,.mpga,.ogg,.flac"
+
 function NewOrderForm() {
   const navigate = useNavigate()
-  const [form, setForm] = useState<PodcastOrderRequest>({
-    audio_url: "",
-    tier: "starter",
-    show_name: "",
-    client_email: "",
-  })
-  const [errors, setErrors] = useState<Partial<Record<keyof PodcastOrderRequest, string>>>({})
+  const [tier, setTier] = useState<"starter" | "standard" | "premium">("starter")
+  const [showName, setShowName] = useState("")
+  const [clientEmail, setClientEmail] = useState("")
+  const [audioFile, setAudioFile] = useState<File | null>(null)
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   const mutation = useMutation({
     mutationFn: createPodcastOrder,
@@ -93,17 +92,10 @@ function NewOrderForm() {
   })
 
   function validate() {
-    const e: typeof errors = {}
-    if (!form.audio_url.trim()) e.audio_url = "Audio URL is required"
-    else {
-      try {
-        new URL(form.audio_url)
-      } catch {
-        e.audio_url = "Must be a valid URL"
-      }
-    }
-    if (!(form.client_email ?? "").trim()) e.client_email = "Client email is required"
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.client_email ?? ""))
+    const e: Record<string, string> = {}
+    if (!audioFile) e.audio = "An audio file is required"
+    if (!clientEmail.trim()) e.client_email = "Client email is required"
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail))
       e.client_email = "Must be a valid email"
     return e
   }
@@ -116,27 +108,34 @@ function NewOrderForm() {
       return
     }
     setErrors({})
-    mutation.mutate(form)
+    mutation.mutate({ audio: audioFile!, tier, show_name: showName, client_email: clientEmail })
   }
 
   return (
     <form onSubmit={handleSubmit} className="max-w-xl space-y-6">
-      {/* Audio URL */}
+      {/* Audio file upload */}
       <div>
         <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
-          Audio URL <span className="text-error">*</span>
+          Audio File <span className="text-error">*</span>
         </label>
-        <input
-          type="text"
-          value={form.audio_url}
-          onChange={(e) => setForm({ ...form, audio_url: e.target.value })}
-          placeholder="https://example.com/episode.mp3"
-          className={`w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border ${
-            errors.audio_url ? "border-error" : "border-transparent"
-          } focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors`}
-        />
-        {errors.audio_url && (
-          <p className="text-xs text-error mt-1 font-label">{errors.audio_url}</p>
+        <label
+          className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border cursor-pointer transition-colors ${
+            errors.audio ? "border-error bg-error-container/10" : "border-transparent bg-surface-container-low hover:bg-surface-container"
+          }`}
+        >
+          <span className="material-symbols-outlined text-[20px] text-on-surface-variant">upload_file</span>
+          <span className="text-sm font-label text-on-surface-variant flex-1 truncate">
+            {audioFile ? audioFile.name : "Choose file — MP3, M4A, WAV, WebM, FLAC…"}
+          </span>
+          <input
+            type="file"
+            accept={ALLOWED_AUDIO}
+            className="hidden"
+            onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)}
+          />
+        </label>
+        {errors.audio && (
+          <p className="text-xs text-error mt-1 font-label">{errors.audio}</p>
         )}
       </div>
 
@@ -150,7 +149,7 @@ function NewOrderForm() {
             <label
               key={t.id}
               className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
-                form.tier === t.id
+                tier === t.id
                   ? "bg-tertiary-fixed border border-tertiary/20"
                   : "bg-surface-container-low border border-transparent hover:bg-surface-container"
               }`}
@@ -159,8 +158,8 @@ function NewOrderForm() {
                 type="radio"
                 name="tier"
                 value={t.id}
-                checked={form.tier === t.id}
-                onChange={() => setForm({ ...form, tier: t.id })}
+                checked={tier === t.id}
+                onChange={() => setTier(t.id)}
                 className="accent-tertiary"
               />
               <div className="flex-1">
@@ -180,8 +179,8 @@ function NewOrderForm() {
         </label>
         <input
           type="text"
-          value={form.show_name}
-          onChange={(e) => setForm({ ...form, show_name: e.target.value })}
+          value={showName}
+          onChange={(e) => setShowName(e.target.value)}
           placeholder="My Podcast"
           className="w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors"
         />
@@ -194,8 +193,8 @@ function NewOrderForm() {
         </label>
         <input
           type="email"
-          value={form.client_email}
-          onChange={(e) => setForm({ ...form, client_email: e.target.value })}
+          value={clientEmail}
+          onChange={(e) => setClientEmail(e.target.value)}
           placeholder="client@example.com"
           className={`w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border ${
             errors.client_email ? "border-error" : "border-transparent"
@@ -245,7 +244,7 @@ function OrdersList() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-surface-container-low border-b border-outline-variant/10">
-              {["Job ID", "Audio URL", "Show", "Tier", "Status", "Phase", "Created", "Actions"].map(
+              {["Job ID", "Audio File", "Show", "Tier", "Status", "Phase", "Created", "Actions"].map(
                 (h) => (
                   <th
                     key={h}
@@ -281,7 +280,9 @@ function OrdersList() {
                       {job.id.slice(0, 8)}…
                     </td>
                     <td className="px-4 py-3 text-sm font-label text-on-surface max-w-[160px] truncate">
-                      {(job.input_data.audio_url as string) ?? "—"}
+                      {(job.input_data.audio_filename_suffix as string)
+                        ? `audio${job.input_data.audio_filename_suffix as string}`
+                        : (job.input_data.audio_url as string) ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-sm font-label text-on-surface">
                       {(job.input_data.show_name as string) || "—"}

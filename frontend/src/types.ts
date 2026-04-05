@@ -123,7 +123,7 @@ export interface AuditOrderRequest {
 }
 
 export interface PodcastOrderRequest {
-  audio_url: string
+  audio: File
   tier: "starter" | "standard" | "premium"
   show_name?: string
   client_email?: string

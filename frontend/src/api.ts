@@ -123,10 +123,16 @@ export async function createAuditOrder(data: AuditOrderRequest): Promise<OrderRe
 }
 
 export async function createPodcastOrder(data: PodcastOrderRequest): Promise<OrderResponse> {
+  const token = localStorage.getItem("api_token") ?? "test"
+  const formData = new FormData()
+  formData.append("audio", data.audio)
+  formData.append("tier", data.tier)
+  if (data.show_name) formData.append("show_name", data.show_name)
+  if (data.client_email) formData.append("client_email", data.client_email)
   const res = await fetch(`${BASE}/api/ventures/content-studio/orders`, {
     method: "POST",
-    headers: getHeaders(),
-    body: JSON.stringify(data),
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
   })
   return handleResponse<OrderResponse>(res)
 }

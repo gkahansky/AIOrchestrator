@@ -61,6 +61,7 @@ def generate_gig(
             packages: [{name, price, delivery_days, revisions, description, features: [str]}],
             faq: [{question: str, answer: str}],
             tags: [str],
+            image_prompt: str,
             output_path: str,
         }
     """
@@ -135,7 +136,8 @@ Return ONLY valid JSON matching this exact structure — no markdown fences, no 
     {{"question": "...", "answer": "..."}},
     {{"question": "...", "answer": "..."}}
   ],
-  "tags": ["<tag1>", "<tag2>", "<tag3>", "<tag4>", "<tag5>"]
+  "tags": ["<tag1>", "<tag2>", "<tag3>", "<tag4>", "<tag5>"],
+  "image_prompt": "<detailed midjourney-style image prompt for a 16:9 gig cover image showing a minimal, professional, abstract visual representation of the service, WITHOUT text or typography>"
 }}
 
 Rules:

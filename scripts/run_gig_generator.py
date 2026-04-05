@@ -29,6 +29,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from aiplatform.skills.marketplace.generate_fiverr_gig import generate_gig
+from aiplatform.skills.media.generate_image import generate_image
 
 
 # ─── Venture service definitions ──────────────────────────────────────────────
@@ -226,6 +227,25 @@ def main():
     print(f"  FAQ ({len(result['faq'])} items):")
     for item in result["faq"]:
         print(f"    Q: {item['question'][:70]}")
+    print()
+
+    if "image_prompt" in result and result["image_prompt"]:
+        print(f"  Generating cover image (16:9)...")
+        print(f"    Prompt: {result['image_prompt'][:70]}...")
+        try:
+            image_result = generate_image(
+                prompt=result["image_prompt"],
+                aspect_ratio="16:9",
+                quality_tier="standard",
+                output_dir=Path(result["output_path"]).parent,
+                filename=f"{Path(result['output_path']).stem}-cover"
+            )
+            print(f"  Cover image saved to: {image_result['image_path']}")
+        except Exception as e:
+            print(f"  Image generation failed: {e}")
+    else:
+        print("  No image_prompt returned, skipping image generation.")
+
     print()
     print(f"  Saved to: {result['output_path']}")
     print()

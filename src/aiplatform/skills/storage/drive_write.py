@@ -32,6 +32,7 @@ def drive_write(
     folder_id: str,
     mime_type: Optional[str] = None,
     filename: Optional[str] = None,
+    share_anyone_with_link: bool = False,
 ) -> dict:
     local_path = Path(local_path)
 
@@ -58,6 +59,13 @@ def drive_write(
         )
         .execute()
     )
+
+    if share_anyone_with_link:
+        service.permissions().create(
+            fileId=file["id"],
+            body={"type": "anyone", "role": "reader"},
+            fields="id",
+        ).execute()
 
     return {
         "file_id": file["id"],

@@ -131,7 +131,6 @@ Complete inventory of every third-party tool, service, API, and library used acr
 | Tool | Purpose | Use Cases |
 |---|---|---|
 | **Railway** | Cloud compute platform | Hosts FastAPI web service + Celery worker service; PostgreSQL plugin; staging and production environments |
-| **Vercel** | Frontend hosting | Serves the React SPA at `planBadmin.com`; zero-config deploys from `frontend/` on every push |
 | **Docker** | Container image | Reproducible Railway builds; includes system deps for psycopg2, Pillow, arabic text libs |
 | **GitHub Actions** | CI/CD | Runs pytest on every PR; gates merges to main; PostgreSQL service container for integration tests |
 | **Cloudflare** | DNS + CDN | DNS management for `echoforge.biz` and `planBadmin.com`; DDoS protection; SSL |

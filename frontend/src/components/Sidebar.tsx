@@ -9,6 +9,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: "Dashboard", to: "/", icon: "dashboard" },
   { label: "Ventures", to: "/ventures", icon: "account_tree" },
+  { label: "Gig Generator", to: "/gigs", icon: "storefront" },
   { label: "Finance", to: "/finance", icon: "payments" },
   { label: "Settings", to: "/settings", icon: "settings" },
 ]

@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import Layout from "./components/Layout"
 import Login from "./pages/Login"
 import Dashboard from "./pages/Dashboard"
+import GigGenerator from "./pages/GigGenerator"
 import JobDetail from "./pages/JobDetail"
 import Ventures from "./pages/Ventures"
 import MarketingAudit from "./pages/ventures/MarketingAudit"
@@ -41,6 +42,7 @@ export default function App() {
           >
             <Route index element={<Dashboard />} />
             <Route path="jobs/:id" element={<JobDetail />} />
+            <Route path="gigs" element={<GigGenerator />} />
             <Route path="ventures" element={<Ventures />} />
             <Route path="ventures/marketing-audit" element={<MarketingAudit />} />
             <Route path="ventures/content-studio" element={<ContentStudio />} />

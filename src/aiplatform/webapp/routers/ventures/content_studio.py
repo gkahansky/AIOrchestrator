@@ -73,13 +73,23 @@ async def create_podcast_order(
     tmp_path = tmp_dir / f"audio{suffix}"
     tmp_path.write_bytes(content)
 
-    # Upload to Drive so the worker (separate container) can access it
+    # Upload to Drive — required because web + worker are separate containers.
     drive_folder = os.environ.get("DRIVE_PODCAST_ROOT_ID", "") or os.environ.get("DRIVE_SAMPLES_FOLDER_ID", "")
-    drive_audio_id = ""
-    if drive_folder:
+    if not drive_folder:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google Drive is not configured (DRIVE_PODCAST_ROOT_ID missing). Cannot accept file uploads.",
+        )
+
+    try:
         from aiplatform.skills.storage.drive_write import drive_write
         result = drive_write(str(tmp_path), drive_folder, filename=f"{order_id}{suffix}")
         drive_audio_id = result["file_id"]
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Failed to upload audio to Google Drive: {exc}",
+        )
 
     order = {
         "order_id":              order_id,
@@ -90,10 +100,6 @@ async def create_podcast_order(
         "drive_audio_id":        drive_audio_id,
         "audio_filename_suffix": suffix,
     }
-    # Fallback: if Drive upload didn't happen, keep local path.
-    # Only works if web + worker share a filesystem (not Railway).
-    if not drive_audio_id:
-        order["audio_path"] = str(tmp_path)
     # Write initial job record immediately — ensures the job is visible in the
     # jobs list even if the worker hasn't picked up the task yet or fails.
     from aiplatform.database.job_ops import upsert_job

@@ -146,7 +146,13 @@ def run_order(order: dict, output_dir: str | None = None) -> dict:
 def _run_phase1_transcribe(order: dict, work_dir: Path) -> dict:
     audio_path = order.get("audio_path")
 
-    # Sample requests upload audio to Drive — download from Drive file ID.
+    # If audio_path is set but file is gone (e.g. ephemeral /tmp on web container),
+    # fall through to drive_audio_id if available.
+    if audio_path and not Path(audio_path).exists():
+        print(f"  Phase 1: audio_path {audio_path} not found — trying drive_audio_id fallback")
+        audio_path = None
+
+    # Download from Drive file ID if available.
     if not audio_path and order.get("drive_audio_id"):
         from aiplatform.skills.storage.drive_read import drive_read
         suffix = order.get("audio_filename_suffix", ".mp3")

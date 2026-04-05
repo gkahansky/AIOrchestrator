@@ -17,21 +17,11 @@ Output:
 """
 
 import io
-import os
 from typing import Optional
 
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
-
-SCOPES = ["https://www.googleapis.com/auth/drive"]
-
-
-def _get_service():
-    creds_path = os.environ.get("GOOGLE_CREDENTIALS_PATH", "./google_credentials.json")
-    creds = service_account.Credentials.from_service_account_file(creds_path, scopes=SCOPES)
-    return build("drive", "v3", credentials=creds, cache_discovery=False)
+from aiplatform.skills.storage._drive_auth import get_drive_service
 
 
 def create_gdoc(
@@ -44,7 +34,7 @@ def create_gdoc(
     Create a Google Doc from HTML content.
     Uploads to Drive with MIME type conversion — Google handles the HTML → Doc transform.
     """
-    service = _get_service()
+    service = get_drive_service()
 
     file_metadata = {
         "name": title,

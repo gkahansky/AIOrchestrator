@@ -8,21 +8,12 @@ Functions:
     list_folder(folder_id)          → [{ file_id, name, mime_type }]
 """
 
-import os
 from typing import Optional
 
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
+from aiplatform.skills.storage._drive_auth import get_drive_service
 
 
-SCOPES = ["https://www.googleapis.com/auth/drive"]
 FOLDER_MIME = "application/vnd.google-apps.folder"
-
-
-def _get_service():
-    creds_path = os.environ.get("GOOGLE_CREDENTIALS_PATH", "./google_credentials.json")
-    creds = service_account.Credentials.from_service_account_file(creds_path, scopes=SCOPES)
-    return build("drive", "v3", credentials=creds, cache_discovery=False)
 
 
 def create_folder(name: str, parent_id: Optional[str] = None) -> dict:
@@ -36,7 +27,7 @@ def create_folder(name: str, parent_id: Optional[str] = None) -> dict:
     Returns:
         { folder_id, name, web_view_link }
     """
-    service = _get_service()
+    service = get_drive_service()
 
     body = {"name": name, "mimeType": FOLDER_MIME}
     if parent_id:
@@ -66,7 +57,7 @@ def move_file(file_id: str, dest_folder_id: str) -> dict:
     Returns:
         { file_id, name }
     """
-    service = _get_service()
+    service = get_drive_service()
 
     # Retrieve current parents so we can remove them
     file = service.files().get(fileId=file_id, fields="id,name,parents").execute()
@@ -93,7 +84,7 @@ def list_folder(folder_id: str) -> list[dict]:
     Returns:
         [{ file_id, name, mime_type }]
     """
-    service = _get_service()
+    service = get_drive_service()
 
     results = (
         service.files()

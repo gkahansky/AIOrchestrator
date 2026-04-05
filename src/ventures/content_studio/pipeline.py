@@ -166,6 +166,33 @@ def _run_phase1_transcribe(order: dict, work_dir: Path) -> dict:
         order["audio_path"] = audio_path
 
     if not audio_path:
+        if order.get("demo"):
+            # No audio provided — use built-in demo transcript so the pipeline
+            # can still generate a real-looking sample output.
+            demo_transcript = (
+                "Welcome to the show. Today we're exploring the latest discoveries in exoplanet research "
+                "with a leading astrophysicist. We discuss the James Webb Space Telescope's findings, "
+                "what makes a planet potentially habitable, and how machine learning is transforming the "
+                "search for life beyond Earth. Our guest shares insights on the most promising exoplanet "
+                "candidates, the challenges of detecting biosignatures across light-years, and what the "
+                "next decade of space exploration holds. Whether you're a science enthusiast or a curious "
+                "newcomer, this episode breaks down complex concepts into clear, engaging ideas. "
+                "Key topics include: transit photometry, the habitable zone, atmospheric spectroscopy, "
+                "TRAPPIST-1 system, and the Fermi paradox. Timestamps: [00:00] Introduction and guest "
+                "background. [04:30] How the James Webb Telescope changed everything. [12:15] What makes "
+                "a planet habitable? [21:00] Machine learning in the search for exoplanets. [33:45] "
+                "Most promising candidates for life. [44:20] The Fermi paradox revisited. [52:00] "
+                "What's next for space exploration. [58:30] Closing thoughts and resources."
+            )
+            demo_result = {
+                "transcript": demo_transcript,
+                "duration_seconds": 3600,
+                "cost_usd": 0.0,
+                "model": "demo",
+            }
+            (work_dir / "transcript.txt").write_text(demo_transcript, encoding="utf-8")
+            _save_json(demo_result, work_dir / "transcript_data.json")
+            return demo_result
         raise ValueError("Order must have either 'audio_path' or 'audio_url'")
 
     print(f"  Phase 1: Transcribing {Path(audio_path).name}...")

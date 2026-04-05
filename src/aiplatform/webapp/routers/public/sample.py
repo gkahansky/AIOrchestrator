@@ -75,58 +75,70 @@ def _upload_audio_to_drive(file: UploadFile, order_id: str) -> tuple[str, str]:
 
 @router.post("/podcast", status_code=status.HTTP_202_ACCEPTED)
 async def request_podcast_sample(
-    email:         str        = Form(...),
-    show_name:     str        = Form(default=""),
-    episode_title: str        = Form(default="Sample Episode"),
-    host_name:     str        = Form(default=""),
-    audio:         UploadFile = File(...),
+    email:         str                  = Form(...),
+    show_name:     str                  = Form(default=""),
+    episode_title: str                  = Form(default="Sample Episode"),
+    host_name:     str                  = Form(default=""),
+    audio:         UploadFile | None    = File(default=None),
     db=Depends(get_db),
 ) -> dict:
     """
-    Accept an audio/video upload and email a watermarked sample content package.
+    Accept an audio/video upload (or use demo audio) and email a watermarked sample.
     One request per email per 24 hours.
     """
-    # Validate file type
-    suffix = Path(audio.filename or "").suffix.lower()
-    if suffix not in _ALLOWED_AUDIO_EXTS:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Unsupported file type '{suffix}'. Accepted: mp3, mp4, m4a, wav, webm.",
-        )
-
-    # Read and check size
-    content = await audio.read()
-    if len(content) > _MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="File too large. Maximum 200 MB.",
-        )
-    # Put bytes back so _upload_audio_to_drive can re-read
-    from io import BytesIO
-    audio.file = BytesIO(content)
-
     _check_rate_limit(email, "content_studio", db)
 
     order_id = f"sample-pod-{uuid.uuid4().hex[:10]}"
+    use_demo = audio is None or not audio.filename
 
-    # Upload to Drive (or keep local)
-    drive_audio_id, audio_suffix = _upload_audio_to_drive(audio, order_id)
+    if use_demo:
+        # No file uploaded — run in demo mode (uses built-in demo transcript)
+        drive_audio_id, audio_suffix = "", ".mp3"
+        order: dict = {
+            "order_id":              order_id,
+            "sample_email":          email,
+            "show_name":             show_name or "My Podcast",
+            "episode_title":         episode_title or "Sample Episode",
+            "host_name":             host_name,
+            "tier":                  "standard",
+            "status":                "pending",
+            "demo":                  True,
+            "drive_audio_id":        "",
+            "audio_filename_suffix": audio_suffix,
+        }
+    else:
+        # Validate file type
+        suffix = Path(audio.filename or "").suffix.lower()
+        if suffix not in _ALLOWED_AUDIO_EXTS:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Unsupported file type '{suffix}'. Accepted: mp3, mp4, m4a, wav, webm.",
+            )
 
-    order: dict = {
-        "order_id":              order_id,
-        "sample_email":          email,
-        "show_name":             show_name or "My Podcast",
-        "episode_title":         episode_title or "Sample Episode",
-        "host_name":             host_name,
-        "tier":                  "standard",
-        "status":                "pending",
-        "drive_audio_id":        drive_audio_id,
-        "audio_filename_suffix": audio_suffix,
-    }
+        # Read and check size
+        content = await audio.read()
+        if len(content) > _MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="File too large. Maximum 200 MB.",
+            )
+        from io import BytesIO
+        audio.file = BytesIO(content)
 
-    # If Drive upload failed, fall back to the local temp path
-    if not drive_audio_id:
-        order["audio_path"] = str(Path("/tmp") / order_id / f"audio{audio_suffix}")
+        drive_audio_id, audio_suffix = _upload_audio_to_drive(audio, order_id)
+        order = {
+            "order_id":              order_id,
+            "sample_email":          email,
+            "show_name":             show_name or "My Podcast",
+            "episode_title":         episode_title or "Sample Episode",
+            "host_name":             host_name,
+            "tier":                  "standard",
+            "status":                "pending",
+            "drive_audio_id":        drive_audio_id,
+            "audio_filename_suffix": audio_suffix,
+        }
+        if not drive_audio_id:
+            order["audio_path"] = str(Path("/tmp") / order_id / f"audio{audio_suffix}")
 
     # Persist job record
     from aiplatform.database.job_ops import upsert_job

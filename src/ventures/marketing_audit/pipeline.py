@@ -289,7 +289,8 @@ def _run_phase6_deliver(order: dict) -> None:
     """Send delivery email to client. Drive upload already completed in Phase 5."""
     print(f"  Phase 6: Delivering to client...")
 
-    client_email = order.get("client_email", "")
+    # Paid orders use client_email; free sample orders use sample_email
+    client_email = order.get("client_email") or order.get("sample_email", "")
     if not client_email:
         print(f"    No client email — skipping delivery email.")
         return

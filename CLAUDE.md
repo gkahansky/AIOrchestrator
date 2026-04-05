@@ -141,7 +141,7 @@ Scripts add `src/` to `sys.path` explicitly. Pytest uses `conftest.py` for the s
 | Image processing | Pillow (Python) | Resize to any required aspect ratios |
 | Storage | Google Drive API | All media, metadata, audit logs |
 | Backend hosting | Railway | FastAPI backend + Celery worker |
-| Frontend hosting | Vercel | React + Vite admin app at planBadmin.com. Source: `frontend/` |
+| Frontend hosting | Cloudflare Pages | React + Vite admin app at planBadmin.com. Source: `frontend/` |
 | Database | PostgreSQL (Railway plugin) | Job state, phase events, cost/revenue events. Alembic migrations |
 | Job queue | Celery + Redis | Async pipeline execution; Redis Cloud as broker |
 | Auth | Google OAuth + PyJWT | Google Identity Services login; 24h JWT sessions |
@@ -209,13 +209,13 @@ The platform has a live web admin at **planBadmin.com**.
 
 | Layer | Details |
 |---|---|
-| Frontend | React + Vite, hosted on Vercel. Source: `frontend/` |
+| Frontend | React + Vite, hosted on Cloudflare Pages. Source: `frontend/` |
 | Backend | FastAPI, hosted on Railway. Source: `src/aiplatform/webapp/` |
 | Auth | Google OAuth — only the `ALLOWED_EMAIL` account can log in |
-| Domain | Frontend: `planBadmin.com` → Vercel. API: `api.planBadmin.com` → Railway |
+| Domain | Frontend: `planBadmin.com` → Cloudflare Pages. API: `api.planBadmin.com` → Railway |
 
 Key env vars required on Railway: `GOOGLE_CLIENT_ID`, `ALLOWED_EMAIL`, `JWT_SECRET`, `CORS_ORIGINS`, `DATABASE_URL`, `ANTHROPIC_API_KEY`.
-Key env vars required on Vercel: `VITE_API_URL=https://api.planBadmin.com`.
+Key env vars required on Cloudflare Pages: `VITE_API_URL=https://api.planBadmin.com`.
 
 ---
 

@@ -257,3 +257,24 @@ When working on this platform, always:
 4. When asked to build a feature, first ask: does this belong in a skill (reusable, venture-agnostic) or a pipeline (venture-specific orchestration)?
 5. Never reference a venture name inside a skill file. If you catch yourself doing this, stop and split the function.
 6. The CLAUDE.md in the repo root and in the active venture directory are the authoritative context files. Read both before making changes.
+
+---
+
+## DevLog
+
+A file `DevLog.md` exists at the repo root. **After every commit, append a new row to the DevLog table:**
+
+| Column | Content |
+|---|---|
+| Date & Time | ISO 8601 local time, e.g. `2026-04-05 14:32` |
+| Jira Key | AII-XXX if this commit relates to a Jira issue; leave empty otherwise |
+| Commit ID | First 7 chars of the commit SHA |
+| Description | Why the change was needed and what it does (one sentence) |
+
+Format (append to the table in DevLog.md):
+
+```
+| 2026-04-05 14:32 | AII-137 | f076dc4 | Fixed Drive auth — create_gdoc and drive_organise now use OAuth token instead of service account |
+```
+
+Do not rewrite existing rows. Only append.

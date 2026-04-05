@@ -222,6 +222,16 @@ Run these after core pipeline Sprints 1–3 are stable.
 - [x] Fixed field name mismatch in echoforge-site JS (`file` → `audio`)
 - [x] `openai` added to `requirements.txt`
 
+### Sprint 3d — Admin Order Form: File Upload + Full Fields ✅ DONE (2026-04-05)
+- [x] Replaced URL text input with audio file upload picker in `ContentStudio.tsx`
+- [x] `content_studio.py` router rewritten to accept `multipart/form-data` with `UploadFile`
+- [x] Audio uploaded to Drive synchronously in the web router (web and worker are separate Railway containers — `/tmp` not shared)
+- [x] Full form fields added: Customer Email, Show Name, Episode Title, Host Name, Guest Name, Special Instructions
+- [x] Fixed delivery email showing "None" for episode title — all fields now included in order payload
+- [x] Google Doc sharing changed to `share_anyone_with_link=True` so clients can open links
+- [x] Drive upload errors now return HTTP 503 with detail message (CORS was stripping headers from unhandled 500s)
+- [x] Unified Drive auth: `create_gdoc.py` and `drive_organise.py` now use `get_drive_service()` from `_drive_auth.py` (was hardcoded to service account, causing quota errors)
+
 ### Sprint 4b — Social Calendar + Email Sequence
 - Integrate `market-social/SKILL.md` with podcast context prefix
 - Build `generate_social_calendar.py` wrapper

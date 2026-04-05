@@ -516,3 +516,5 @@ Add to `/platform/registry/skills.json`:
 | D-17 | Marketing Audit Multi-Page Crawler | ✅ done | BFS crawler in analyze_page.py — 20 pages, sitemap seeding, merges findings. | 2026-04-05 |
 | D-18 | Public Sample Endpoints | ✅ done | POST /api/sample/podcast + /api/sample/audit — rate-limited, demo mode, email delivery. | 2026-04-05 |
 | D-19 | Pipeline + Email Fixes | ✅ done | Drive upload before review gate; delivery email recipient fallback; Drive link fallback chain; openai in requirements. | 2026-04-05 |
+| D-20 | Drive Auth Unified — OAuth Token (AII-137) | ✅ done | create_gdoc.py and drive_organise.py were hardcoded to service account; unified to get_drive_service() from _drive_auth.py. Eliminates storageQuotaExceeded. | 2026-04-05 |
+| D-21 | Podcast Order Form — File Upload + Full Fields (AII-138) | ✅ done | Audio file upload replaces URL. Full form fields: email, show, episode, host, guest, instructions. Delivery email + Google Doc sharing fixed. | 2026-04-05 |

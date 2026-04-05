@@ -6,9 +6,7 @@ Content Studio (Podcast Notes) venture router.
   GET  /api/ventures/content-studio/orders/{order_id}
 """
 
-import os
 import uuid
-from io import BytesIO
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -67,26 +65,12 @@ async def create_podcast_order(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail="File too large. Maximum 200 MB.",
         )
-    audio.file = BytesIO(content)
 
-    # Upload to Drive if configured, otherwise keep local temp path
-    drive_folder = os.environ.get("DRIVE_PODCAST_ROOT_ID", "")
-    if drive_folder:
-        from aiplatform.skills.storage.drive_write import drive_write
-        tmp_dir = Path("/tmp") / order_id
-        tmp_dir.mkdir(parents=True, exist_ok=True)
-        tmp_path = tmp_dir / f"audio{suffix}"
-        tmp_path.write_bytes(content)
-        result = drive_write(str(tmp_path), drive_folder, filename=f"{order_id}{suffix}")
-        drive_audio_id = result["file_id"]
-        audio_path = None
-    else:
-        tmp_dir = Path("/tmp") / order_id
-        tmp_dir.mkdir(parents=True, exist_ok=True)
-        tmp_path = tmp_dir / f"audio{suffix}"
-        tmp_path.write_bytes(content)
-        drive_audio_id = ""
-        audio_path = str(tmp_path)
+    # Save to /tmp — the worker handles Drive upload at task start
+    tmp_dir = Path("/tmp") / order_id
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    tmp_path = tmp_dir / f"audio{suffix}"
+    tmp_path.write_bytes(content)
 
     order = {
         "order_id":              order_id,
@@ -94,11 +78,9 @@ async def create_podcast_order(
         "show_name":             show_name or "",
         "client_email":          client_email or None,
         "status":                "pending",
-        "drive_audio_id":        drive_audio_id,
+        "audio_path":            str(tmp_path),
         "audio_filename_suffix": suffix,
     }
-    if audio_path:
-        order["audio_path"] = audio_path
     # Write initial job record immediately — ensures the job is visible in the
     # jobs list even if the worker hasn't picked up the task yet or fails.
     from aiplatform.database.job_ops import upsert_job

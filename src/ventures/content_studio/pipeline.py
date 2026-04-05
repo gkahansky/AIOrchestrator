@@ -300,7 +300,7 @@ def _run_phase3_package(order: dict, content: dict, work_dir: Path) -> dict:
             title=doc_title,
             html_content=html,
             folder_id=folder_id or config.DRIVE_PODCAST_ROOT_ID,
-            share_anyone_with_link=False,
+            share_anyone_with_link=True,
         )
         print(f"    ✓ Google Doc ready: {gdoc['web_view_link']}")
     else:

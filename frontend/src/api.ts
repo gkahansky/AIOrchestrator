@@ -128,6 +128,8 @@ export async function createPodcastOrder(data: PodcastOrderRequest): Promise<Ord
   formData.append("audio", data.audio)
   formData.append("tier", data.tier)
   if (data.show_name) formData.append("show_name", data.show_name)
+  if (data.episode_title) formData.append("episode_title", data.episode_title)
+  if (data.host_name) formData.append("host_name", data.host_name)
   if (data.client_email) formData.append("client_email", data.client_email)
   const res = await fetch(`${BASE}/api/ventures/content-studio/orders`, {
     method: "POST",

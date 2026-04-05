@@ -80,6 +80,8 @@ function NewOrderForm() {
   const navigate = useNavigate()
   const [tier, setTier] = useState<"starter" | "standard" | "premium">("starter")
   const [showName, setShowName] = useState("")
+  const [episodeTitle, setEpisodeTitle] = useState("")
+  const [hostName, setHostName] = useState("")
   const [clientEmail, setClientEmail] = useState("")
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -108,7 +110,7 @@ function NewOrderForm() {
       return
     }
     setErrors({})
-    mutation.mutate({ audio: audioFile!, tier, show_name: showName, client_email: clientEmail })
+    mutation.mutate({ audio: audioFile!, tier, show_name: showName, episode_title: episodeTitle, host_name: hostName, client_email: clientEmail })
   }
 
   return (
@@ -182,6 +184,34 @@ function NewOrderForm() {
           value={showName}
           onChange={(e) => setShowName(e.target.value)}
           placeholder="My Podcast"
+          className="w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors"
+        />
+      </div>
+
+      {/* Episode Title */}
+      <div>
+        <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
+          Episode Title
+        </label>
+        <input
+          type="text"
+          value={episodeTitle}
+          onChange={(e) => setEpisodeTitle(e.target.value)}
+          placeholder="Episode 42 — How to Build a Business"
+          className="w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors"
+        />
+      </div>
+
+      {/* Host Name */}
+      <div>
+        <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
+          Host Name
+        </label>
+        <input
+          type="text"
+          value={hostName}
+          onChange={(e) => setHostName(e.target.value)}
+          placeholder="Jane Smith"
           className="w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors"
         />
       </div>

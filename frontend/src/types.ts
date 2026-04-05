@@ -126,6 +126,8 @@ export interface PodcastOrderRequest {
   audio: File
   tier: "starter" | "standard" | "premium"
   show_name?: string
+  episode_title?: string
+  host_name?: string
   client_email?: string
 }
 

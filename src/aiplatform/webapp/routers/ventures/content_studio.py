@@ -30,11 +30,13 @@ _MAX_UPLOAD_BYTES   = 200 * 1024 * 1024  # 200 MB
 
 @router.post("/orders", response_model=PodcastOrderResponse, status_code=status.HTTP_202_ACCEPTED)
 async def create_podcast_order(
-    tier:         str             = Form("standard"),
-    show_name:    str             = Form(default=""),
-    client_email: str             = Form(default=""),
-    order_id:     str | None      = Form(default=None),
-    audio:        UploadFile | None = File(default=None),
+    tier:          str              = Form("standard"),
+    show_name:     str              = Form(default=""),
+    episode_title: str              = Form(default=""),
+    host_name:     str              = Form(default=""),
+    client_email:  str              = Form(default=""),
+    order_id:      str | None       = Form(default=None),
+    audio:         UploadFile | None = File(default=None),
     _: str = Depends(require_auth),
 ) -> PodcastOrderResponse:
     """Submit a new podcast show notes order and queue it as a Celery task."""
@@ -95,6 +97,8 @@ async def create_podcast_order(
         "order_id":              order_id,
         "tier":                  tier,
         "show_name":             show_name or "",
+        "episode_title":         episode_title or "",
+        "host_name":             host_name or "",
         "client_email":          client_email or None,
         "status":                "pending",
         "drive_audio_id":        drive_audio_id,

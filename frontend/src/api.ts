@@ -10,7 +10,6 @@
   ApiKey,
   ApiKeyTestResult,
   AdvisoryProposal,
-  Roadmap,
   AdvisorConfig,
 } from "./types"
 

@@ -47,6 +47,7 @@ from aiplatform.webapp.routers.platform import dashboard as platform_dashboard
 from aiplatform.webapp.routers.platform import finance as platform_finance
 from aiplatform.webapp.routers.platform import settings as platform_settings
 from aiplatform.webapp.routers.platform import gigs as platform_gigs
+from aiplatform.webapp.routers.webhooks import github as webhooks_github
 from aiplatform.webapp.routers.ventures import etsy as ventures_etsy
 from aiplatform.webapp.routers.ventures import marketing_audit as ventures_audit
 from aiplatform.webapp.routers.ventures import content_studio as ventures_podcast
@@ -127,8 +128,9 @@ def create_app() -> FastAPI:
     app.include_router(ventures_podcast.router, prefix="/api/ventures/content-studio",    tags=["content-studio"])
 
     # Public (no auth) — free sample requests from echoforge.biz
-    app.include_router(public_sample.router,    prefix="/api/sample",                     tags=["public"])
-
+    app.include_router(public_sample.router,    prefix="/api/sample",                     tags=["public"])    
+    # Webhooks (Github, Stripe etc)
+    app.include_router(webhooks_github.router,  prefix="/api/webhooks",           tags=["webhooks"])
     @app.on_event("startup")
     async def _startup() -> None:
         if db_ping():

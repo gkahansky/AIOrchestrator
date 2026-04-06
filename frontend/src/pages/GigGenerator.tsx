@@ -28,8 +28,8 @@ interface GigPackage {
   price: number
   delivery_days: number
   revisions: number
+  title: string
   description: string
-  features: string[]
 }
 
 interface GigFaq {
@@ -249,13 +249,14 @@ export default function GigGenerator() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {mutation.data.packages.map((pkg, i) => (
                   <div key={i} className="border border-outline-variant/30 rounded-xl p-5 bg-surface-container-lowest">
+                    <h4 className="font-bold text-lg mb-4 text-primary border-b border-outline-variant/20 pb-2">{pkg.name}</h4>
                     <div className="flex flex-col gap-4 mb-4">
                       <div className="flex justify-between items-start gap-2">
                         <div>
-                          <span className="text-xs font-bold text-on-surface-variant uppercase tracking-wider block mb-1">Name (Max 35)</span>
-                          <h4 className="font-bold text-sm">{pkg.name}</h4>
+                          <span className="text-xs font-bold text-on-surface-variant uppercase tracking-wider block mb-1">Title (Max 35)</span>
+                          <h4 className="font-bold text-sm">{pkg.title}</h4>
                         </div>
-                        <CopyButton text={pkg.name} />
+                        <CopyButton text={pkg.title} />
                       </div>
                       
                       <div className="flex justify-between items-start gap-2">
@@ -264,18 +265,6 @@ export default function GigGenerator() {
                           <p className="text-sm text-on-surface-variant">{pkg.description}</p>
                         </div>
                         <CopyButton text={pkg.description} />
-                      </div>
-                      
-                      <div className="flex justify-between items-start gap-2">
-                        <div>
-                          <span className="text-xs font-bold text-on-surface-variant uppercase tracking-wider block mb-1">Custom Features (If applicable)</span>
-                          <ul className="space-y-1 mt-1">
-                            {pkg.features.map((f, j) => (
-                              <li key={j} className="text-sm text-on-surface-variant leading-snug">• {f}</li>
-                            ))}
-                          </ul>
-                        </div>
-                        <CopyButton text={pkg.features.join("\n")} />
                       </div>
                     </div>
                     

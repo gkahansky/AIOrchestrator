@@ -3,7 +3,8 @@
     "allow": [
       "mcp__claude_ai_Atlassian_Rovo__getTransitionsForJiraIssue",
       "mcp__claude_ai_Atlassian_Rovo__transitionJiraIssue",
-      "mcp__claude_ai_Atlassian_Rovo__createJiraIssue"
+      "mcp__claude_ai_Atlassian_Rovo__createJiraIssue",
+      "WebSearch"
     ],
     "defaultMode": "bypassPermissions"
   },

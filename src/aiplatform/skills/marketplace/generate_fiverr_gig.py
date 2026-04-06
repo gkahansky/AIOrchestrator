@@ -62,7 +62,7 @@ def generate_gig(
             gig_metadata: dict[str, str],
             gig_title: str,
             gig_description: str,
-            packages: [{name, price, delivery_days, revisions, description, features: [str]}],
+            packages: [{name, price, delivery_days, revisions, title, description}],
             faq: [{question: str, answer: str}],
             requirements: [{requirement: str, is_mandatory: bool, type: str}],
             tags: [str],
@@ -121,24 +121,24 @@ Return ONLY valid JSON matching this exact structure — no markdown fences, no 
       "price": <int USD>,
       "delivery_days": <int>,
       "revisions": <int>,
-      "description": "<STRICTLY under 100 characters — what this tier delivers>",
-      "features": ["<feature 1>", "<feature 2>", "<feature 3>"]
+      "title": "<STRICTLY under 35 characters — catchy package title>",
+      "description": "<STRICTLY under 100 characters — clear list of what is included (no emojis/checkmarks)>"
     }},
     {{
       "name": "Standard",
       "price": <int USD>,
       "delivery_days": <int>,
       "revisions": <int>,
-      "description": "<STRICTLY under 100 characters>",
-      "features": ["<feature 1>", "<feature 2>", "<feature 3>", "<feature 4>"]
+      "title": "<STRICTLY under 35 characters>",
+      "description": "<STRICTLY under 100 characters (no emojis/checkmarks)>"
     }},
     {{
       "name": "Premium",
       "price": <int USD>,
       "delivery_days": <int>,
       "revisions": <int>,
-      "description": "<STRICTLY under 100 characters>",
-      "features": ["<feature 1>", "<feature 2>", "<feature 3>", "<feature 4>", "<feature 5>"]
+      "title": "<STRICTLY under 35 characters>",
+      "description": "<STRICTLY under 100 characters (no emojis/checkmarks)>"
     }}
   ],
   "faq": [

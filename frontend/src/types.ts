@@ -1,4 +1,4 @@
-// ── Jobs ──────────────────────────────────────────────────────────────────────
+﻿// ── Jobs ──────────────────────────────────────────────────────────────────────
 
 export type Venture = "marketing_audit" | "content_studio" | "etsy"
 
@@ -159,4 +159,11 @@ export interface Roadmap {
   margin_potential: number | null
   status: string
   created_at: string
+}
+export interface AdvisorConfig {
+  id: string
+  model: string
+  capabilities: string[]
+  prompt_ref: string
+  system_prompt: string
 }

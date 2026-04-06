@@ -89,3 +89,55 @@ def reject_proposal(proposal_id: uuid.UUID, user: dict = Depends(get_current_use
         db.refresh(proposal)
         
         return proposal
+
+import os
+import json
+from pathlib import Path
+
+class AdvisorPromptRequest(BaseModel):
+    content: str
+
+@router.get("/advisors")
+def get_advisors(user: dict = Depends(get_current_user)):
+    registry_path = Path(__file__).parent.parent.parent / "registry" / "advisors.json"
+    with open(registry_path, "r") as f:
+        advisors = json.load(f)
+        
+    prompts_dir = registry_path.parent / "prompts"
+    
+    result = []
+    for adv_id, data in advisors.items():
+        ref = data.get("prompt_ref", adv_id + "_v1")
+        prompt_file = prompts_dir / f"{ref}.md"
+        
+        content = ""
+        if prompt_file.exists():
+            with open(prompt_file, "r", encoding="utf-8") as pf:
+                content = pf.read()
+                
+        result.append({
+            "id": adv_id,
+            "model": data.get("model"),
+            "capabilities": data.get("capabilities", []),
+            "prompt_ref": ref,
+            "system_prompt": content
+        })
+        
+    return result
+
+@router.put("/advisors/{advisor_id}/prompt")
+def update_advisor_prompt(advisor_id: str, prompt_data: AdvisorPromptRequest, user: dict = Depends(get_current_user)):
+    registry_path = Path(__file__).parent.parent.parent / "registry" / "advisors.json"
+    with open(registry_path, "r") as f:
+        advisors = json.load(f)
+        
+    if advisor_id not in advisors:
+        raise HTTPException(status_code=404, detail="Advisor not found")
+        
+    ref = advisors[advisor_id].get("prompt_ref", advisor_id + "_v1")
+    prompt_file = registry_path.parent / "prompts" / f"{ref}.md"
+    
+    with open(prompt_file, "w", encoding="utf-8") as pf:
+        pf.write(prompt_data.content)
+        
+    return {"status": "success", "advisor_id": advisor_id}

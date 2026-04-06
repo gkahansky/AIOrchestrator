@@ -99,22 +99,22 @@ class AdvisorPromptRequest(BaseModel):
 
 @router.get("/advisors")
 def get_advisors(user: str = Depends(require_auth)):
-    registry_path = Path(__file__).parent.parent.parent / "registry" / "advisors.json"
+    registry_path = Path(__file__).parent.parent.parent.parent / "registry" / "advisors.json"
     with open(registry_path, "r") as f:
         advisors = json.load(f)
-        
+
     prompts_dir = registry_path.parent / "prompts"
-    
+
     result = []
     for adv_id, data in advisors.items():
         ref = data.get("prompt_ref", adv_id + "_v1")
         prompt_file = prompts_dir / f"{ref}.md"
-        
+
         content = ""
         if prompt_file.exists():
             with open(prompt_file, "r", encoding="utf-8") as pf:
                 content = pf.read()
-                
+
         result.append({
             "id": adv_id,
             "model": data.get("model"),
@@ -122,12 +122,12 @@ def get_advisors(user: str = Depends(require_auth)):
             "prompt_ref": ref,
             "system_prompt": content
         })
-        
+
     return result
 
 @router.put("/advisors/{advisor_id}/prompt")
 def update_advisor_prompt(advisor_id: str, prompt_data: AdvisorPromptRequest, user: str = Depends(require_auth)):
-    registry_path = Path(__file__).parent.parent.parent / "registry" / "advisors.json"
+    registry_path = Path(__file__).parent.parent.parent.parent / "registry" / "advisors.json"
     with open(registry_path, "r") as f:
         advisors = json.load(f)
         

@@ -44,3 +44,5 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-06 13:46 | | 85d8bf0 | Fixed FastAPI Pydantic schema stripping 'title' from Fiverr Gig Generator payload |
 | 2026-04-06 15:58 | | 87892ea | Fixed UnicodeDecodeError in docker deployment caused by corrupted file encoding |
 | 2026-04-06 15:40 | AII-0 | 80541d2 | Implemented system prompts editing UI in StrategyRoom and decoupled strings into platform registry markdown |
+| 2026-04-06 16:30 | | 85d4399 | Fixed frontend ts build by removing unused roadmap import |
+| 2026-04-06 16:33 | | b591314 | Corrected backend path to advisors.json in strategy router |

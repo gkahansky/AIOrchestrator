@@ -47,10 +47,11 @@ VENTURE_CONFIGS: dict[str, dict] = {
         "packages": [
             {
                 "name": "Basic",
-                "price_usd": 29,
+                "price_usd": 30,
                 "delivery_days": 1,
                 "revisions": 1,
                 "includes": [
+                    "Up to 30 mins audio/video length",
                     "Show notes (600–800 words)",
                     "3 key takeaways",
                     "Episode summary paragraph",
@@ -58,25 +59,26 @@ VENTURE_CONFIGS: dict[str, dict] = {
             },
             {
                 "name": "Standard",
-                "price_usd": 79,
+                "price_usd": 80,
                 "delivery_days": 2,
                 "revisions": 2,
                 "includes": [
+                    "Up to 60 mins audio/video length",
                     "Full show notes (1000–1500 words)",
                     "Complete transcript",
-                    "LinkedIn post",
-                    "Newsletter teaser",
+                    "Chapter timestamps included",
+                    "Relevant links included",
+                    "LinkedIn post & Newsletter teaser",
                     "Audiogram caption",
-                    "5 key takeaways",
-                    "Chapter timestamps",
                 ],
             },
             {
                 "name": "Premium",
-                "price_usd": 149,
+                "price_usd": 150,
                 "delivery_days": 2,
                 "revisions": 3,
                 "includes": [
+                    "Up to 90 mins audio/video length",
                     "Everything in Standard",
                     "Brand voice guide (first episode)",
                     "4 promotional copy pieces",
@@ -98,14 +100,11 @@ VENTURE_CONFIGS: dict[str, dict] = {
             "Delivered in Google Docs for easy sharing with your team or sponsor",
         ],
         "keywords": [
-            "podcast show notes",
-            "podcast transcription",
-            "podcast marketing",
-            "show notes writer",
-            "podcast content",
-            "podcast editor",
-            "podcast SEO",
-            "episode summary",
+            "Podcasts",
+            "transcript",
+            "notes",
+            "internet marketing",
+            "SEO optimization"
         ],
     },
 
@@ -120,7 +119,7 @@ VENTURE_CONFIGS: dict[str, dict] = {
         "packages": [
             {
                 "name": "Snapshot",
-                "price_usd": 49,
+                "price_usd": 50,
                 "delivery_days": 1,
                 "revisions": 0,
                 "includes": [
@@ -131,7 +130,7 @@ VENTURE_CONFIGS: dict[str, dict] = {
             },
             {
                 "name": "Full Audit",
-                "price_usd": 149,
+                "price_usd": 150,
                 "delivery_days": 2,
                 "revisions": 1,
                 "includes": [
@@ -144,7 +143,7 @@ VENTURE_CONFIGS: dict[str, dict] = {
             },
             {
                 "name": "Audit + Strategy",
-                "price_usd": 249,
+                "price_usd": 250,
                 "delivery_days": 3,
                 "revisions": 2,
                 "includes": [
@@ -216,6 +215,7 @@ def main():
         output_dir=args.output_dir,
     )
 
+    print(f"  Classification: {result.get('category')} > {result.get('subcategory')} ({result.get('service_type')})")
     print(f"  Gig title:    {result['gig_title']}")
     print(f"  Tags:         {', '.join(result['tags'])}")
     print(f"  Description:  {len(result['gig_description'])} chars")
@@ -227,6 +227,10 @@ def main():
     print(f"  FAQ ({len(result['faq'])} items):")
     for item in result["faq"]:
         print(f"    Q: {item['question'][:70]}")
+    print()
+    print(f"  Requirements ({len(result.get('requirements', []))} items):")
+    for req in result.get("requirements", []):
+        print(f"    - [{req.get('type')}] {'(Mandatory)' if req.get('is_mandatory') else '(Optional)'} {req.get('requirement')}")
     print()
 
     if "image_prompt" in result and result["image_prompt"]:

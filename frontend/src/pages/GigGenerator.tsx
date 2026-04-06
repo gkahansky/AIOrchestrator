@@ -37,13 +37,25 @@ interface GigFaq {
   answer: string
 }
 
+interface GigRequirement {
+  requirement: string
+  is_mandatory: boolean
+  type: string
+}
+
 interface GigResponse {
+  category: string
+  subcategory: string
+  service_type: string
+  gig_metadata: Record<string, string>
   gig_title: string
   gig_description: string
   packages: GigPackage[]
   faq: GigFaq[]
+  requirements: GigRequirement[]
   tags: string[]
   image_url: string | null
+  image_error: string | null
   output_path: string
 }
 
@@ -159,6 +171,40 @@ export default function GigGenerator() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
+                  <h3 className="text-sm font-label font-bold uppercase text-on-surface-variant">Classification</h3>
+                </div>
+                <div className="p-4 bg-surface-container-lowest rounded-lg border border-outline-variant/20 font-medium text-sm space-y-2">
+                  <div className="flex justify-between items-center border-b border-outline-variant/10 pb-2">
+                    <span className="text-on-surface-variant">Category:</span>
+                    <div className="flex items-center gap-2">
+                      <span>{mutation.data.category} &gt; {mutation.data.subcategory}</span>
+                      <CopyButton text={`${mutation.data.category} > ${mutation.data.subcategory}`} />
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center border-b border-outline-variant/10 pb-2">
+                    <span className="text-on-surface-variant">Service Type:</span>
+                    <div className="flex items-center gap-2">
+                      <span>{mutation.data.service_type}</span>
+                      <CopyButton text={mutation.data.service_type} />
+                    </div>
+                  </div>
+                  <div className="pt-2 flex flex-col gap-1">
+                    <span className="text-on-surface-variant mb-1">Gig Metadata:</span>
+                    {Object.entries(mutation.data.gig_metadata || {}).map(([k, v]) => (
+                      <div key={k} className="flex justify-between items-center text-xs">
+                        <span className="font-bold">{k}:</span>
+                        <div className="flex items-center gap-2">
+                          <span>{v}</span>
+                          <CopyButton text={v} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
                   <h3 className="text-sm font-label font-bold uppercase text-on-surface-variant">Gig Title</h3>
                   <CopyButton text={mutation.data.gig_title} />
                 </div>
@@ -167,7 +213,7 @@ export default function GigGenerator() {
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 md:col-span-2">
                 <div className="flex justify-between items-center">
                   <h3 className="text-sm font-label font-bold uppercase text-on-surface-variant">Search Tags</h3>
                   <CopyButton text={mutation.data.tags.join(", ")} />
@@ -238,12 +284,43 @@ export default function GigGenerator() {
               <h3 className="text-sm font-label font-bold uppercase text-on-surface-variant mb-4">Frequently Asked Questions</h3>
               <div className="space-y-4">
                 {mutation.data.faq.map((faq, i) => (
-                  <div key={i} className="flex gap-4 p-4 bg-surface-container-lowest rounded-lg border border-outline-variant/20">
-                    <div className="flex-1">
-                      <h4 className="font-bold text-sm mb-1">{faq.question}</h4>
-                      <p className="text-sm text-on-surface-variant">{faq.answer}</p>
+                  <div key={i} className="flex flex-col gap-3 p-4 bg-surface-container-lowest rounded-lg border border-outline-variant/20">
+                    <div className="flex justify-between items-start gap-4">
+                      <div>
+                        <span className="text-xs font-bold text-on-surface-variant uppercase tracking-wider block mb-1">Question</span>
+                        <h4 className="font-bold text-sm">{faq.question}</h4>
+                      </div>
+                      <CopyButton text={faq.question} />
                     </div>
-                    <CopyButton text={`${faq.question}\n${faq.answer}`} />
+                    <hr className="border-outline-variant/10" />
+                    <div className="flex justify-between items-start gap-4">
+                      <div>
+                        <span className="text-xs font-bold text-on-surface-variant uppercase tracking-wider block mb-1">Answer</span>
+                        <p className="text-sm text-on-surface-variant">{faq.answer}</p>
+                      </div>
+                      <CopyButton text={faq.answer} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <hr className="border-outline-variant/20" />
+
+            {/* Requirements */}
+            <div className="space-y-2">
+              <h3 className="text-sm font-label font-bold uppercase text-on-surface-variant mb-4">Buyer Requirements</h3>
+              <div className="space-y-4">
+                {mutation.data.requirements?.map((req, i) => (
+                  <div key={i} className="flex justify-between items-start gap-4 p-4 bg-surface-container-lowest rounded-lg border border-outline-variant/20">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">{req.type}</span>
+                        {req.is_mandatory && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-error/10 text-error">MANDATORY</span>}
+                      </div>
+                      <p className="text-sm font-medium text-on-surface">{req.requirement}</p>
+                    </div>
+                    <CopyButton text={req.requirement} />
                   </div>
                 ))}
               </div>
@@ -275,7 +352,7 @@ export default function GigGenerator() {
                 </div>
               ) : (
                 <div className="p-4 bg-error/10 text-error rounded-lg text-sm font-medium">
-                  Cover Image generation skipped or failed.
+                  Cover Image generation skipped or failed.{mutation.data.image_error ? ` Error: ${mutation.data.image_error}` : ""}
                 </div>
               )}
             </div>

@@ -40,13 +40,24 @@ class GigFaq(BaseModel):
     question: str
     answer: str
 
+class GigRequirement(BaseModel):
+    requirement: str
+    is_mandatory: bool
+    type: str
+
 class GigContentResponse(BaseModel):
+    category: str
+    subcategory: str
+    service_type: str
+    gig_metadata: dict[str, str]
     gig_title: str
     gig_description: str
     packages: list[GigPackage]
     faq: list[GigFaq]
+    requirements: list[GigRequirement]
     tags: list[str]
     image_url: Optional[str] = None
+    image_error: Optional[str] = None
     output_path: str
 
 
@@ -84,6 +95,7 @@ def generate_gig_endpoint(
         raise HTTPException(status_code=500, detail=f"Failed to generate gig copy: {str(e)}")
 
     image_url = None
+    image_error = None
     image_prompt = result.get("image_prompt")
 
     # Generate cover image and upload to Drive if prompt exists
@@ -101,12 +113,10 @@ def generate_gig_endpoint(
             # Alternatively, we could serve it directly from the backend, but prompt says:
             # "Any images required will be stored in Google drive and a link will be provided to download locally."
             
-            # Assuming you have a general drive folder or we just use root for these temporary image covers
-            folder_id = "root"
-            # It might be cleaner to just store it in the same drive folder as the venture, 
-            # but we aren't loading venture configs here to get their drive ID. Let's just use root.
-            # If there's a GOOGLE_DRIVE_ROOT_ID or something similar:
-            # folder_id = os.environ.get("GOOGLE_DRIVE_ROOT_ID", "root")
+            # Try to resolve a valid folder ID from known environment variables
+            folder_id = os.environ.get("GOOGLE_DRIVE_PLATFORM_ASSETS_ID")
+            if not folder_id:
+                folder_id = os.environ.get("GOOGLE_DRIVE_PODCAST_NOTES_ROOT_ID", "root")
 
             drive_resp = drive_write(
                 local_path=image_result["image_path"],
@@ -119,14 +129,21 @@ def generate_gig_endpoint(
         except Exception as e:
             # Do not completely fail the request if image generation or drive upload fails
             print(f"Warning: Image generation or upload failed: {str(e)}")
+            image_error = str(e)
 
 
     return GigContentResponse(
+        category=result.get("category", ""),
+        subcategory=result.get("subcategory", ""),
+        service_type=result.get("service_type", ""),
+        gig_metadata=result.get("gig_metadata", {}),
         gig_title=result["gig_title"],
         gig_description=result["gig_description"],
         packages=result["packages"],
         faq=result["faq"],
+        requirements=result.get("requirements", []),
         tags=result["tags"],
         image_url=image_url,
+        image_error=image_error,
         output_path=result["output_path"]
     )

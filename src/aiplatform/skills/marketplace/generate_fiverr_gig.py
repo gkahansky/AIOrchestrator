@@ -56,10 +56,15 @@ def generate_gig(
 
     Returns:
         {
+            category: str,
+            subcategory: str,
+            service_type: str,
+            gig_metadata: dict[str, str],
             gig_title: str,
             gig_description: str,
             packages: [{name, price, delivery_days, revisions, description, features: [str]}],
             faq: [{question: str, answer: str}],
+            requirements: [{requirement: str, is_mandatory: bool, type: str}],
             tags: [str],
             image_prompt: str,
             output_path: str,
@@ -101,15 +106,22 @@ SEARCH KEYWORDS buyers use
 Return ONLY valid JSON matching this exact structure — no markdown fences, no commentary:
 
 {{
+  "category": "<The overarching Fiverr category, e.g. 'Writing & Translation', 'Digital Marketing'>",
+  "subcategory": "<The subcategory, e.g. 'Podcast Writing', 'Marketing Strategy'>",
+  "service_type": "<The specific service type, e.g. 'Show Notes', 'Consultation'>",
+  "gig_metadata": {{
+    "<Metadata key 1 (e.g. Language)>": "<Value 1>",
+    "<Metadata key 2 (e.g. Industry)>": "<Value 2>"
+  }},
   "gig_title": "<80-char SEO title starting with 'I will' — specific and benefit-driven>",
-  "gig_description": "<1200–2400 char Fiverr description — use **bold** for section headers; include: hook paragraph, what you get (bullet list), why choose me, process overview (numbered), CTA>",
+  "gig_description": "<STRICTLY under 1200 chars Fiverr description — use **bold** for section headers; include: hook paragraph, what you get (bullet list), why choose me, process overview (numbered), CTA>",
   "packages": [
     {{
       "name": "Basic",
       "price": <int USD>,
       "delivery_days": <int>,
       "revisions": <int>,
-      "description": "<1 sentence — what this tier delivers>",
+      "description": "<STRICTLY under 100 characters — what this tier delivers>",
       "features": ["<feature 1>", "<feature 2>", "<feature 3>"]
     }},
     {{
@@ -117,7 +129,7 @@ Return ONLY valid JSON matching this exact structure — no markdown fences, no 
       "price": <int USD>,
       "delivery_days": <int>,
       "revisions": <int>,
-      "description": "<1 sentence>",
+      "description": "<STRICTLY under 100 characters>",
       "features": ["<feature 1>", "<feature 2>", "<feature 3>", "<feature 4>"]
     }},
     {{
@@ -125,7 +137,7 @@ Return ONLY valid JSON matching this exact structure — no markdown fences, no 
       "price": <int USD>,
       "delivery_days": <int>,
       "revisions": <int>,
-      "description": "<1 sentence>",
+      "description": "<STRICTLY under 100 characters>",
       "features": ["<feature 1>", "<feature 2>", "<feature 3>", "<feature 4>", "<feature 5>"]
     }}
   ],
@@ -136,14 +148,20 @@ Return ONLY valid JSON matching this exact structure — no markdown fences, no 
     {{"question": "...", "answer": "..."}},
     {{"question": "...", "answer": "..."}}
   ],
+  "requirements": [
+    {{"requirement": "<Question or instruction for the buyer to provide before work can start>", "is_mandatory": true, "type": "<text | attachment>"}},
+    {{"requirement": "...", "is_mandatory": true, "type": "text"}}
+  ],
   "tags": ["<tag1>", "<tag2>", "<tag3>", "<tag4>", "<tag5>"],
   "image_prompt": "<detailed midjourney-style image prompt for a 16:9 gig cover image showing a minimal, professional, abstract visual representation of the service, WITHOUT text or typography>"
 }}
 
 Rules:
 - gig_title must start with "I will" and be under 80 characters total
-- gig_description must be 1200–2400 characters, persuasive, NOT generic
-- packages must match the exact price / delivery_days / revisions from the input
+- gig_description MUST be under 1200 characters total, persuasive, NOT generic
+- packages description MUST be under 100 characters total each
+- prices MUST be multiples of 5 (e.g. 30, 80, 150)
+- packages must match the exact delivery_days / revisions from the input
 - faq must address real buyer concerns: turnaround, revisions, formats, niche experience, communication
 - tags must be max 20 characters each and highly relevant search terms
 """

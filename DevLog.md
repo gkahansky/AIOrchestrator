@@ -38,3 +38,4 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-05 14:30 | | 6ee51f7 | Replaced "Vercel" with "Cloudflare Pages" across CLAUDE.md, ROADMAP.md, src/aiplatform/CLAUDE.md — frontend is hosted on Cloudflare Pages |
 | 2026-04-05 19:57 | | ace4c73 | Implemented Fiverr Gig Generator complete with platform webapp UI, backend endpoints, and cover image generation (H-08) |
 | 2026-04-06 12:14 | | cc30cbb | Updated Fiverr Gig Generator with buyer requirements section |
+| 2026-04-06 12:46 | | 20250ea | Updated Fiverr Gig Generator with strict length limits, package features, and audio length validation per tier via mutagen |

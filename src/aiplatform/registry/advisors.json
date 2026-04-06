@@ -1,0 +1,22 @@
+{
+  "architect": {
+    "model": "gemini-1.5-flash",
+    "capabilities": ["code-review", "tech-stack-audit"],
+    "prompt_ref": "architect_v1"
+  },
+  "marketing": {
+    "model": "gemini-1.5-pro",
+    "capabilities": ["revenue-analysis", "campaign-strategy"],
+    "prompt_ref": "marketing_v1"
+  },
+  "product": {
+    "model": "gemini-1.5-pro",
+    "capabilities": ["roadmap-planning", "efficiency-automation"],
+    "prompt_ref": "product_v1"
+  },
+  "executive": {
+    "model": "gemini-1.5-pro",
+    "capabilities": ["business-overview", "executive-summary"],
+    "prompt_ref": "executive_v1"
+  }
+}

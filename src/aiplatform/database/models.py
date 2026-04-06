@@ -221,3 +221,55 @@ class RevenueEvent(Base):
     def __repr__(self):
         return (f"<RevenueEvent job={self.job_id} venture={self.venture} "
                 f"net=${self.net_usd}>")
+
+# -- Advisory & Roadmap --------------------------------------------------------
+
+from sqlalchemy import SmallInteger
+
+ADVISOR_ID_ENUM = Enum(
+    "architect", "marketing", "product", "executive",
+    name="advisor_id_enum",
+)
+
+PROPOSAL_STATUS_ENUM = Enum(
+    "pending_review", "approved", "rejected", "archived",
+    name="proposal_status_enum",
+)
+
+ROADMAP_STATUS_ENUM = Enum(
+    "backlog", "in_progress", "completed",
+    name="roadmap_status_enum",
+)
+
+class AdvisoryProposal(Base):
+    """
+    AI-generated proposals for venture strategy, optimization, or platform codebase.
+    """
+    __tablename__ = "advisory_proposals"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    advisor_id = Column(ADVISOR_ID_ENUM, nullable=False, index=True)
+    category = Column(String(255), nullable=False)
+    content = Column(JSONB, nullable=False)
+    status = Column(PROPOSAL_STATUS_ENUM, nullable=False, default="pending_review", index=True)
+    priority = Column(SmallInteger, nullable=False, default=3)
+    job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    job = relationship("Job")
+
+class Roadmap(Base):
+    """
+    Actionable tasks approved from Advisory Proposals or created manually.
+    """
+    __tablename__ = "roadmap"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    title = Column(String(500), nullable=False)
+    description = Column(Text, nullable=False)
+    effort_score = Column(SmallInteger, nullable=True) # 1-10
+    margin_potential = Column(SmallInteger, nullable=True) # 1-10
+    status = Column(ROADMAP_STATUS_ENUM, nullable=False, default="backlog", index=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))

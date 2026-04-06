@@ -222,7 +222,7 @@ def main():
     print()
     print(f"  Packages:")
     for p in result["packages"]:
-        print(f"    {p['name']:10s} ${p['price']:>3}  {p['delivery_days']}d  {p['revisions']}rev  — {p['title'][:25]} � {p['description'][:30]}")
+        print(f"    {p['name']:10s} ${p['price']:>3}  {p['delivery_days']}d  {p['revisions']}rev  — {p['title'][:25]} — {p['description'][:30]}")
     print()
     print(f"  FAQ ({len(result['faq'])} items):")
     for item in result["faq"]:

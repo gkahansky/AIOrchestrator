@@ -139,3 +139,24 @@ export interface OrderResponse {
   celery_task_id: string
   status: string
 }
+
+export interface AdvisoryProposal {
+  id: string
+  advisor_id: string
+  category: string
+  content: string
+  status: string
+  priority: number
+  job_id: string | null
+  created_at: string
+}
+
+export interface Roadmap {
+  id: number
+  title: string
+  description: string
+  effort_score: number | null
+  margin_potential: number | null
+  status: string
+  created_at: string
+}

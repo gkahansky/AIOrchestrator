@@ -11,6 +11,7 @@ import ContentStudio from "./pages/ventures/ContentStudio"
 import EtsyVenture from "./pages/ventures/EtsyVenture"
 import Finance from "./pages/Finance"
 import Settings from "./pages/Settings"
+import StrategyRoom from "./pages/StrategyRoom"
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -48,6 +49,7 @@ export default function App() {
             <Route path="ventures/content-studio" element={<ContentStudio />} />
             <Route path="ventures/etsy" element={<EtsyVenture />} />
             <Route path="finance" element={<Finance />} />
+            <Route path="strategy-room" element={<StrategyRoom />} />
             <Route path="settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

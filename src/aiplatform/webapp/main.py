@@ -47,6 +47,7 @@ from aiplatform.webapp.routers.platform import dashboard as platform_dashboard
 from aiplatform.webapp.routers.platform import finance as platform_finance
 from aiplatform.webapp.routers.platform import settings as platform_settings
 from aiplatform.webapp.routers.platform import gigs as platform_gigs
+from aiplatform.webapp.routers.platform import strategy as platform_strategy
 from aiplatform.webapp.routers.webhooks import github as webhooks_github
 from aiplatform.webapp.routers.ventures import etsy as ventures_etsy
 from aiplatform.webapp.routers.ventures import marketing_audit as ventures_audit
@@ -121,6 +122,7 @@ def create_app() -> FastAPI:
     app.include_router(platform_finance.router,   prefix="/api/platform/finance",            tags=["platform"])
     app.include_router(platform_settings.router,  prefix="/api/platform/settings",           tags=["settings"])
     app.include_router(platform_gigs.router,      prefix="/api/platform/gigs",               tags=["platform"])
+    app.include_router(platform_strategy.router,  prefix="/api/platform/strategy",           tags=["platform"])
 
     # Ventures
     app.include_router(ventures_etsy.router,    prefix="/api/ventures/etsy",              tags=["etsy"])

@@ -77,6 +77,29 @@ async def create_podcast_order(
     tmp_path = tmp_dir / f"audio{suffix}"
     tmp_path.write_bytes(content)
 
+    # ── Verify audio length matches selected tier ─────────────
+    try:
+        from mutagen import File as MutagenFile
+        audio_meta = MutagenFile(tmp_path)
+        if audio_meta and audio_meta.info and hasattr(audio_meta.info, "length"):
+            duration_mins = audio_meta.info.length / 60
+            tier_limits = {"starter": 30, "standard": 60, "premium": 90}
+            limit = tier_limits.get(tier, 90)
+            
+            # Allow 5-minute grace period
+            if duration_mins > limit + 5:
+                tmp_path.unlink(missing_ok=True)
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Duration mismatch: Selected tier '{tier}' covers up to {limit} mins. Your file is {int(duration_mins)} mins.",
+                )
+    except ImportError:
+        pass # mutagen not installed, skip check
+    except Exception as e:
+        # Don't fail completely if we couldn't parse the length, let it proceed
+        pass
+
+
     # Upload to Drive — required because web + worker are separate containers.
     drive_folder = os.environ.get("DRIVE_PODCAST_ROOT_ID", "") or os.environ.get("DRIVE_SAMPLES_FOLDER_ID", "")
     if not drive_folder:

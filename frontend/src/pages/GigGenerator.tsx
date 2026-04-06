@@ -249,29 +249,43 @@ export default function GigGenerator() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {mutation.data.packages.map((pkg, i) => (
                   <div key={i} className="border border-outline-variant/30 rounded-xl p-5 bg-surface-container-lowest">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h4 className="font-bold text-lg">{pkg.name}</h4>
-                        <div className="text-2xl font-black mt-1">${pkg.price}</div>
+                    <div className="flex flex-col gap-4 mb-4">
+                      <div className="flex justify-between items-start gap-2">
+                        <div>
+                          <span className="text-xs font-bold text-on-surface-variant uppercase tracking-wider block mb-1">Name (Max 35)</span>
+                          <h4 className="font-bold text-sm">{pkg.name}</h4>
+                        </div>
+                        <CopyButton text={pkg.name} />
                       </div>
-                      <CopyButton text={`${pkg.name}\n${pkg.description}\n${pkg.features.join("\n")}`} />
+                      
+                      <div className="flex justify-between items-start gap-2">
+                        <div>
+                          <span className="text-xs font-bold text-on-surface-variant uppercase tracking-wider block mb-1">Description (Max 100)</span>
+                          <p className="text-sm text-on-surface-variant">{pkg.description}</p>
+                        </div>
+                        <CopyButton text={pkg.description} />
+                      </div>
+                      
+                      <div className="flex justify-between items-start gap-2">
+                        <div>
+                          <span className="text-xs font-bold text-on-surface-variant uppercase tracking-wider block mb-1">Custom Features (If applicable)</span>
+                          <ul className="space-y-1 mt-1">
+                            {pkg.features.map((f, j) => (
+                              <li key={j} className="text-sm text-on-surface-variant leading-snug">• {f}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        <CopyButton text={pkg.features.join("\n")} />
+                      </div>
                     </div>
                     
-                    <p className="text-sm text-on-surface-variant mb-4">{pkg.description}</p>
-                    
-                    <div className="flex items-center gap-4 text-xs font-medium text-on-surface mb-4">
-                      <div className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">schedule</span> {pkg.delivery_days} Days</div>
-                      <div className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">autorenew</span> {pkg.revisions} Revisions</div>
+                    <div className="flex justify-between items-end mt-4 pt-4 border-t border-outline-variant/30">
+                      <div className="text-2xl font-black">${pkg.price}</div>
+                      <div className="flex items-center gap-4 text-xs font-medium text-on-surface-variant">
+                        <div className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">schedule</span> {pkg.delivery_days} Days</div>
+                        <div className="flex items-center gap-1"><span className="material-symbols-outlined text-[16px]">autorenew</span> {pkg.revisions} Revs</div>
+                      </div>
                     </div>
-                    
-                    <ul className="space-y-2">
-                      {pkg.features.map((f, j) => (
-                        <li key={j} className="text-sm flex items-start gap-2">
-                          <span className="material-symbols-outlined text-[16px] text-green-600 mt-0.5">check</span>
-                          <span className="leading-snug">{f}</span>
-                        </li>
-                      ))}
-                    </ul>
                   </div>
                 ))}
               </div>

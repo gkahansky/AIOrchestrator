@@ -872,3 +872,75 @@ def check_fiverr_emails(self) -> dict:
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc, countdown=300)
         raise
+from celery.signals import task_success
+from aiplatform.database.models import Job, CostEvent
+from aiplatform.database.session import get_session
+import datetime
+from aiplatform.skills.strategy.run_advisor import run_advisor
+
+@task_success.connect
+def advisory_task_success_handler(sender=None, result=None, **kwargs):
+    if not isinstance(result, dict) or "job_id" not in result:
+        return
+        
+    job_id = result["job_id"]
+    with get_session() as db:
+        job = db.query(Job).filter(Job.id == job_id).first()
+        if not job or job.status not in ("delivered", "completed", "approved"):
+            return
+            
+        # Product Manager Rule
+        # If "review_pending" time vs "approved" time is large, trigger PM
+        # For simplicity, we just trigger PM to review the job stats
+        context_data = {
+            "job_id": job.id,
+            "venture": job.venture,
+            "duration": (job.completed_at - job.started_at).total_seconds() if job.completed_at and job.started_at else 0,
+            "status": job.status,
+            "phase_current": job.phase_current
+        }
+        
+        # In a real app we'd query cost_events here, but let's just pass the context
+        try:
+            costs = db.query(CostEvent).filter(CostEvent.job_id == job.id).all()
+            context_data["total_cost"] = sum(c.cost_usd for c in costs)
+        except:
+            context_data["total_cost"] = 0
+            
+        # Dispatch PM (We should probably submit it as an async task but we'll call sync for now, wait run_advisor is blocking. We can use a celery task to run the advisor)
+
+@celery_app.task(name="platform.run_advisor_async")
+def run_advisor_async(advisor_id: str, context_data: dict, job_id: str = None) -> None:
+    from aiplatform.skills.strategy.run_advisor import run_advisor
+    run_advisor(advisor_id, context_data, job_id)
+
+from celery.signals import task_success
+@task_success.connect
+def advisory_task_success_handler(sender=None, result=None, **kwargs):
+    if not isinstance(result, dict) or "job_id" not in result:
+        return
+    job_id = result.get("job_id")
+    if not job_id: return
+    
+    # Needs to be deferred to not block the main process and avoid circular dependencies too heavily
+    run_advisor_async.delay("pm", {"event": "task_success", "job_id": job_id}, job_id)
+
+ 
+ 
+ @ c e l e r y _ a p p . t a s k ( n a m e = " p l a t f o r m . r u n _ a d v i s o r _ a s y n c " ) 
+ d e f   r u n _ a d v i s o r _ a s y n c ( a d v i s o r _ i d :   s t r ,   c o n t e x t _ d a t a :   d i c t ,   j o b _ i d :   s t r   =   N o n e )   - >   N o n e : 
+         f r o m   a i p l a t f o r m . s k i l l s . s t r a t e g y . r u n _ a d v i s o r   i m p o r t   r u n _ a d v i s o r 
+         r u n _ a d v i s o r ( a d v i s o r _ i d ,   c o n t e x t _ d a t a ,   j o b _ i d ) 
+ 
+ f r o m   c e l e r y . s i g n a l s   i m p o r t   t a s k _ s u c c e s s 
+ @ t a s k _ s u c c e s s . c o n n e c t 
+ d e f   a d v i s o r y _ t a s k _ s u c c e s s _ h a n d l e r ( s e n d e r = N o n e ,   r e s u l t = N o n e ,   * * k w a r g s ) : 
+         i f   n o t   i s i n s t a n c e ( r e s u l t ,   d i c t )   o r   " j o b _ i d "   n o t   i n   r e s u l t : 
+                 r e t u r n 
+         j o b _ i d   =   r e s u l t . g e t ( " j o b _ i d " ) 
+         i f   n o t   j o b _ i d :   r e t u r n 
+         
+         #   N e e d s   t o   b e   d e f e r r e d   t o   n o t   b l o c k   t h e   m a i n   p r o c e s s   a n d   a v o i d   c i r c u l a r   d e p e n d e n c i e s   t o o   h e a v i l y 
+         r u n _ a d v i s o r _ a s y n c . d e l a y ( " p m " ,   { " e v e n t " :   " t a s k _ s u c c e s s " ,   " j o b _ i d " :   j o b _ i d } ,   j o b _ i d ) 
+  
+ 

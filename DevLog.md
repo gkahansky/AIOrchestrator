@@ -41,3 +41,4 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-06 12:46 | | 20250ea | Updated Fiverr Gig Generator with strict length limits, package features, and audio length validation per tier via mutagen |
 | 2026-04-06 13:41 | | 517aedd | Fixed Gig Generator package mappings (Title max 35 chars, Description max 100 chars) |
 | 2026-04-06 13:41 |  | 12d95a4 | Fixed Gig Generator package mappings (Title max 35 chars, Description max 100 chars) |
+| 2026-04-06 13:46 | | 85d8bf0 | Fixed FastAPI Pydantic schema stripping 'title' from Fiverr Gig Generator payload |

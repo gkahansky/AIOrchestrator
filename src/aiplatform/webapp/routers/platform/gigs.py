@@ -33,8 +33,8 @@ class GigPackage(BaseModel):
     price: int
     delivery_days: int
     revisions: int
+    title: str
     description: str
-    features: list[str]
 
 class GigFaq(BaseModel):
     question: str

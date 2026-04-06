@@ -6,7 +6,7 @@ from datetime import datetime
 
 from aiplatform.database.session import get_session
 from aiplatform.database.models import AdvisoryProposal, Roadmap
-from aiplatform.webapp.routers.platform.auth import get_current_user
+from aiplatform.webapp.auth import require_auth
 
 router = APIRouter()
 
@@ -38,7 +38,7 @@ class RoadmapResponse(BaseModel):
         from_attributes = True
 
 @router.get("/proposals", response_model=List[ProposalResponse])
-def get_proposals(status: Optional[str] = None, user: dict = Depends(get_current_user)):
+def get_proposals(status: Optional[str] = None, user: str = Depends(require_auth)):
     with get_session() as db:
         query = db.query(AdvisoryProposal)
         if status:
@@ -48,7 +48,7 @@ def get_proposals(status: Optional[str] = None, user: dict = Depends(get_current
         return query.order_by(AdvisoryProposal.priority.asc(), AdvisoryProposal.created_at.desc()).all()
 
 @router.post("/proposals/{proposal_id}/approve", response_model=ProposalResponse)
-def approve_proposal(proposal_id: uuid.UUID, user: dict = Depends(get_current_user)):
+def approve_proposal(proposal_id: uuid.UUID, user: str = Depends(require_auth)):
     with get_session() as db:
         proposal = db.query(AdvisoryProposal).filter(AdvisoryProposal.id == proposal_id).first()
         if not proposal:
@@ -75,7 +75,7 @@ def approve_proposal(proposal_id: uuid.UUID, user: dict = Depends(get_current_us
         return proposal
 
 @router.post("/proposals/{proposal_id}/reject", response_model=ProposalResponse)
-def reject_proposal(proposal_id: uuid.UUID, user: dict = Depends(get_current_user)):
+def reject_proposal(proposal_id: uuid.UUID, user: str = Depends(require_auth)):
     with get_session() as db:
         proposal = db.query(AdvisoryProposal).filter(AdvisoryProposal.id == proposal_id).first()
         if not proposal:
@@ -98,7 +98,7 @@ class AdvisorPromptRequest(BaseModel):
     content: str
 
 @router.get("/advisors")
-def get_advisors(user: dict = Depends(get_current_user)):
+def get_advisors(user: str = Depends(require_auth)):
     registry_path = Path(__file__).parent.parent.parent / "registry" / "advisors.json"
     with open(registry_path, "r") as f:
         advisors = json.load(f)
@@ -126,7 +126,7 @@ def get_advisors(user: dict = Depends(get_current_user)):
     return result
 
 @router.put("/advisors/{advisor_id}/prompt")
-def update_advisor_prompt(advisor_id: str, prompt_data: AdvisorPromptRequest, user: dict = Depends(get_current_user)):
+def update_advisor_prompt(advisor_id: str, prompt_data: AdvisorPromptRequest, user: str = Depends(require_auth)):
     registry_path = Path(__file__).parent.parent.parent / "registry" / "advisors.json"
     with open(registry_path, "r") as f:
         advisors = json.load(f)

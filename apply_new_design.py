@@ -1,4 +1,269 @@
-"""
+import sys
+
+# 1. New HTML template
+TEMPLATE = r'''<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Accessibility Report - {{ url }}</title>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&amp;family=Manrope:wght@300;400;500;600;700;800&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "secondary": "#ae2f34",
+                        "on-secondary-container": "#6d0010",
+                        "surface-container": "#eceef0",
+                        "on-primary-fixed": "#001c38",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary-fixed": "#002113",
+                        "surface": "#f7f9fb",
+                        "inverse-on-surface": "#eff1f3",
+                        "tertiary-fixed": "#6ffbbe",
+                        "secondary-fixed": "#ffdad8",
+                        "outline-variant": "#c3c6cf",
+                        "on-surface": "#191c1e",
+                        "tertiary": "#000f07",
+                        "surface-tint": "#456084",
+                        "on-error": "#ffffff",
+                        "surface-container-highest": "#e0e3e5",
+                        "on-secondary-fixed-variant": "#8c1520",
+                        "on-surface-variant": "#43474e",
+                        "on-tertiary-container": "#009d6c",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-lowest": "#ffffff",
+                        "primary": "#000c1e",
+                        "surface-variant": "#e0e3e5",
+                        "on-secondary-fixed": "#410006",
+                        "secondary-fixed-dim": "#ffb3b0",
+                        "inverse-primary": "#adc8f2",
+                        "on-background": "#191c1e",
+                        "surface-container-low": "#f2f4f6",
+                        "inverse-surface": "#2d3133",
+                        "secondary-container": "#ff6b6b",
+                        "on-primary": "#ffffff",
+                        "tertiary-fixed-dim": "#4edea3",
+                        "on-tertiary-fixed-variant": "#005236",
+                        "primary-container": "#002344",
+                        "primary-fixed-dim": "#adc8f2",
+                        "on-primary-fixed-variant": "#2c486b",
+                        "surface-dim": "#d8dadc",
+                        "error-container": "#ffdad6",
+                        "tertiary-container": "#002819",
+                        "primary-fixed": "#d3e3ff",
+                        "on-error-container": "#93000a",
+                        "surface-container-high": "#e6e8ea",
+                        "surface-bright": "#f7f9fb",
+                        "background": "#f7f9fb",
+                        "error": "#ba1a1a",
+                        "on-primary-container": "#708bb2",
+                        "outline": "#74777f"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "fontFamily": {
+                        "headline": ["Newsreader", "serif"],
+                        "body": ["Manrope", "sans-serif"],
+                        "label": ["Inter", "sans-serif"]
+                    }
+                }
+            }
+        }
+</script>
+<style>
+    .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        display: inline-block;
+        vertical-align: middle;
+    }
+    .chart-dial {
+        background: conic-gradient(from 180deg at 50% 50%, #000c1e 0deg, #000c1e {{ dial_deg }}deg, #eceef0 {{ dial_deg }}deg, #eceef0 360deg);
+    }
+    .a4-container {
+        margin: 0 auto;
+        background: white;
+        min-height: 100dvh;
+    }
+    @media print {
+        .no-print { display: none; }
+        body { background: white; padding: 0; }
+        .a4-container { 
+            box-shadow: none; 
+            width: 100%; 
+            margin: 0;
+        }
+        header, footer { position: static !important; }
+        section { break-inside: avoid; }
+    }
+    body {
+        background-color: #f1f3f5;
+        min-height: 100dvh;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+</style>
+</head>
+<body class="font-body text-on-surface selection:bg-primary-fixed">
+<div class="a4-container bg-surface relative">
+
+<!-- Top Navigation Anchor (No Borders) -->
+<header class="bg-surface/90 sticky top-0 z-50 pt-8 pb-4">
+<div class="flex justify-between items-center w-full px-12 max-w-5xl mx-auto">
+    <div class="flex flex-row items-center">
+        <!-- EchoForge Logo -->
+        <div class="flex items-center gap-2.5 mr-6">
+            <div class="relative flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-blue-900 to-primary shadow-[0_4px_12px_rgba(0,12,30,0.15)] overflow-hidden">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 8v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    <path d="M10 12h4"></path><path d="M10 16h4"></path><path d="M10 8h4"></path>
+                </svg>
+            </div>
+            <span class="text-2xl font-headline font-semibold text-primary tracking-tight">EchoForge</span>
+        </div>
+        <span class="ml-6 text-[10px] font-label font-bold text-outline uppercase tracking-widest">{{ title_prefix }}</span>
+    </div>
+    <div class="flex items-center gap-6">
+        <span class="font-label text-[10px] font-bold uppercase tracking-widest text-outline">{{ formatted_date }}</span>
+    </div>
+</div>
+</header>
+
+<main class="px-12 py-10 space-y-24 pb-32 max-w-5xl mx-auto">
+
+<!-- Executive Summary Section -->
+<section class="grid grid-cols-12 gap-8 items-start" id="summary">
+    <div class="col-span-12 space-y-4 mb-2">
+        <h1 class="text-5xl font-headline font-semibold text-primary leading-tight">Accessibility <span class="italic font-medium">Audit Results</span></h1>
+        <p class="text-base text-on-surface-variant font-light max-w-3xl leading-relaxed">A comprehensive analytical audit of digital infrastructure compliance evaluated against global WCAG standards for <strong class="text-primary">{{ url }}</strong>.</p>
+    </div>
+
+    <!-- Main Scorecard (Lowest Surface for Pop) -->
+    <div class="col-span-5 bg-surface-container-lowest p-10 rounded-xl relative overflow-hidden h-full flex flex-col justify-between shadow-[0_8px_30px_rgba(0,0,0,0.02)]">
+        <div class="absolute top-0 right-0 p-6">
+            <span class="text-[9px] font-label uppercase tracking-widest text-outline">Audit Status</span>
+        </div>
+        
+        <div class="flex flex-col items-center justify-center my-6">
+            <div class="relative w-48 h-48 mb-8">
+                <div class="chart-dial w-full h-full rounded-full flex items-center justify-center p-3 shadow-inner">
+                    <div class="bg-surface-container-lowest w-full h-full rounded-full flex flex-col items-center justify-center shadow-[0_2px_15px_rgba(0,0,0,0.06)]">
+                        <span class="text-6xl font-headline font-bold text-primary">{{ overall_score }}</span>
+                        <span class="text-[9px] font-label uppercase tracking-widest text-outline mt-1 font-bold">Composite</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-4 pt-6 grid grid-cols-1 gap-4">
+            <div class="text-center">
+                <h3 class="text-2xl font-headline font-semibold text-primary">{{ compliance_status }}</h3>
+                <p class="text-on-surface-variant text-sm mt-2 font-light leading-relaxed px-4">{{ compliance_description }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Weighted Breakdown -->
+    <div class="col-span-7 bg-surface-container-low p-10 rounded-xl space-y-8 flex flex-col h-full">
+        <!-- Replaced borders with background contrast per DESIGN.md -->
+        <div class="bg-primary p-8 rounded-xl text-on-primary">
+            <span class="text-[10px] font-label font-bold uppercase tracking-widest text-primary-fixed-dim mb-4 block">Audit Overview</span>
+            <p class="text-2xl font-headline italic leading-snug">
+                During the automated scan, <span class="font-medium text-tertiary-fixed">{{ violation_rules_count }}</span> unique accessibility rules were flagged across <span class="font-medium text-tertiary-fixed">{{ violation_instances_count }}</span> separate instances.
+            </p>
+        </div>
+        
+        <!-- Grid using surface-container-lowest per "The Layering Principle" -->
+        <div class="grid grid-cols-4 gap-4 flex-grow">
+            <div class="bg-surface-container-lowest p-6 rounded-xl flex flex-col justify-center text-center shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                <span class="block text-4xl font-headline font-bold text-secondary mb-2">{{ count_critical }}</span>
+                <span class="text-[9px] font-label font-bold uppercase tracking-widest text-outline block">Critical</span>
+            </div>
+            <div class="bg-surface-container-lowest p-6 rounded-xl flex flex-col justify-center text-center shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                <span class="block text-4xl font-headline font-bold text-secondary-container mb-2">{{ count_high }}</span>
+                <span class="text-[9px] font-label font-bold uppercase tracking-widest text-outline block">High</span>
+            </div>
+            <div class="bg-surface-container-lowest p-6 rounded-xl flex flex-col justify-center text-center shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                <span class="block text-4xl font-headline font-bold text-primary mb-2">{{ count_medium }}</span>
+                <span class="text-[9px] font-label font-bold uppercase tracking-widest text-outline block">Medium</span>
+            </div>
+            <div class="bg-surface-container-lowest p-6 rounded-xl flex flex-col justify-center text-center shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+                <span class="block text-4xl font-headline font-bold text-surface-tint mb-2">{{ count_low }}</span>
+                <span class="text-[9px] font-label font-bold uppercase tracking-widest text-outline block">Low</span>
+            </div>
+        </div>
+
+        <p class="text-xs text-on-surface-variant font-body mt-2 bg-surface p-4 rounded-lg">
+            Additional context: <strong class="text-primary">{{ incomplete_count }}</strong> incomplete automated checks requiring manual review, and <strong class="text-primary">{{ passes_count }}</strong> successful checks.
+        </p>
+    </div>
+</section>
+
+<!-- Compliance Categories -->
+<section class="space-y-10" id="categories">
+    <div class="flex justify-between items-baseline mb-4">
+        <h2 class="text-4xl font-headline font-semibold text-primary">Compliance <span class="italic font-medium">Categories</span></h2>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-12">
+        {{ checklist_html }}
+    </div>
+</section>
+
+<!-- Violation Overview -->
+<section class="space-y-8" id="overview">
+    <div class="flex justify-between items-baseline pb-2">
+        <h2 class="text-4xl font-headline font-semibold text-primary">Violation <span class="italic font-medium">Overview</span></h2>
+    </div>
+    <div class="bg-surface-container-low rounded-xl px-3 py-3">
+        <div class="w-full text-left">
+            <div class="grid grid-cols-12 gap-4 px-6 py-5 bg-surface-container-high rounded-t-lg">
+                <div class="col-span-6 text-[10px] font-label font-bold uppercase tracking-widest text-on-surface-variant">Violation Description</div>
+                <div class="col-span-2 text-[10px] font-label font-bold uppercase tracking-widest text-on-surface-variant text-center">Pct %</div>
+                <div class="col-span-2 text-[10px] font-label font-bold uppercase tracking-widest text-on-surface-variant text-center">Total</div>
+                <div class="col-span-2 text-[10px] font-label font-bold uppercase tracking-widest text-on-surface-variant text-center">Severity</div>
+            </div>
+            <div class="space-y-2 mb-1 mt-2">
+                {{ overview_table_html }}
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Critical Findings -->
+<section class="space-y-10" id="findings">
+    <div class="flex justify-between items-baseline pb-2">
+        <h2 class="text-4xl font-headline font-semibold text-primary">Critical <span class="italic font-medium">Findings</span></h2>
+    </div>
+    <div class="space-y-8">
+        {{ deepdive_html }}
+    </div>
+</section>
+
+</main>
+
+<!-- Footer -->
+<footer class="py-10 px-12 mt-12 bg-surface text-center">
+    <div class="flex justify-between items-center opacity-60 max-w-5xl mx-auto">
+        <p class="text-[9px] font-label font-bold uppercase tracking-widest">© 2026 EchoForge. Confidential.</p>
+        <p class="text-[9px] font-label font-bold uppercase tracking-widest">Accessibility Integrity Report</p>
+    </div>
+</footer>
+</div>
+</body></html>
+'''
+
+with open('src/aiplatform/skills/audit/report_template.html', 'w', encoding='utf-8') as f:
+    f.write(TEMPLATE)
+
+# 2. Re-write the python generation
+PYTHON_CODE = r'''"""
 Skill: generate_accessibility_report
 Render a PDF summary for an accessibility audit using Playwright and an HTML template.
 
@@ -348,3 +613,9 @@ def generate_accessibility_report(audit_data: dict, output_path: str, tier: str 
         "violation_instances": len(flattened_violations),
         "is_sample": is_sample,
     }
+'''
+
+with open('src/aiplatform/skills/audit/generate_accessibility_report.py', 'w', encoding='utf-8') as f:
+    f.write(PYTHON_CODE)
+
+print("Done")

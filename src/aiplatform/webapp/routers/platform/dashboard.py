@@ -21,7 +21,7 @@ _REVIEW_STATUSES = {"review_pending"}
 _DONE_STATUSES   = {"delivered", "published"}
 _FAILED_STATUSES = {"failed", "cancelled"}
 
-_VENTURES = ["etsy", "marketing_audit", "content_studio"]
+_VENTURES = ["etsy", "marketing_audit", "content_studio", "accessibility_audit"]
 
 
 @router.get("", response_model=DashboardResponse)

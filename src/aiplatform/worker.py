@@ -972,17 +972,30 @@ def run_accessibility_scan_job(audit_id: str, url: str) -> dict:
     import asyncio
     from aiplatform.skills.audit.accessibility_scan import run_accessibility_scan
     from aiplatform.database.session import SessionLocal
-    from aiplatform.database.models import AccessibilityAudit
+    from aiplatform.database.models import AccessibilityAudit, Job
     
     results = asyncio.run(run_accessibility_scan(url))
     db = SessionLocal()
     try:
         audit = db.query(AccessibilityAudit).filter(AccessibilityAudit.audit_id == audit_id).first()
+        job = db.query(Job).filter(Job.venture == "accessibility_audit", Job.order["audit_id"].astext == audit_id).first()
+        
         if audit:
             audit.raw_axe_results = results
             audit.compliance_score = results.get("wcag_score")
             audit.status = "Completed"
+            if job:
+                job.status = "delivered"
             db.commit()
+    except Exception as e:
+        audit = db.query(AccessibilityAudit).filter(AccessibilityAudit.audit_id == audit_id).first()
+        job = db.query(Job).filter(Job.venture == "accessibility_audit", Job.order["audit_id"].astext == audit_id).first()
+        if audit:
+            audit.status = "Failed"
+        if job:
+            job.status = "failed"
+        db.commit()
+        raise e
     finally:
         db.close()
     return {"status": "Completed", "audit_id": str(audit_id)}

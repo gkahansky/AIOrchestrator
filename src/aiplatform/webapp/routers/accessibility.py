@@ -4,7 +4,7 @@ import uuid
 
 from aiplatform.webapp.auth import require_auth
 from aiplatform.database.session import get_db
-from aiplatform.database.models import AccessibilityAudit
+from aiplatform.database.models import AccessibilityAudit, Job
 from aiplatform.webapp.schemas import AccessibilityAuditRequest
 from aiplatform.webapp.worker import run_accessibility_scan_job
 
@@ -25,6 +25,15 @@ def initiate_scan(request: AccessibilityAuditRequest, db: Session = Depends(get_
     db.refresh(new_audit)
 
     audit_id = str(new_audit.audit_id)
+
+    # Create twin Job record for the master platform dashboard
+    new_job = Job(
+        venture="accessibility_audit",
+        status="pending",
+        order={"url": request.url, "audit_id": audit_id, "is_testing": request.is_testing, "is_bundled": request.is_bundled}
+    )
+    db.add(new_job)
+    db.commit()
 
     # Log cost (compute/server time estimate) 
     # Log revenue if not a demo test and not already bundled into Marketing Audit's revenue

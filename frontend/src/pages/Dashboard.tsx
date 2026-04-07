@@ -9,7 +9,7 @@ import PhaseBar from "../components/PhaseBar"
 import type { Job } from "../types"
 
 const TERMINAL_STATUSES = new Set(["delivered", "published", "failed", "cancelled", "rejected"])
-const VENTURE_OPTIONS = ["", "etsy", "marketing_audit", "content_studio"]
+  const VENTURE_OPTIONS = ["", "etsy", "marketing_audit", "content_studio", "accessibility_audit"]
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
   { value: "pending", label: "Pending" },

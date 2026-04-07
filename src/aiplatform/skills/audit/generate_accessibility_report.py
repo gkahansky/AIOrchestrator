@@ -74,9 +74,10 @@ def generate_accessibility_report(audit_data: dict, output_path: str, tier: str 
     pdf.cell(0, 6, _s(f"Passing checks: {len(passes)}"), new_x="LMARGIN", new_y="NEXT")
     if is_sample:
         pdf.multi_cell(
-            _full_width(pdf),
+            0,
             5,
             _s("Sample tier: this one-page version shows a few real findings and censors the rest. Upgrade to a full audit for the complete remediation plan."),
+            new_x="LMARGIN", new_y="NEXT"
         )
     pdf.ln(4)
 
@@ -84,7 +85,7 @@ def generate_accessibility_report(audit_data: dict, output_path: str, tier: str 
     pdf.cell(0, 8, _s("Top Violations" if not is_sample else "Sample Findings"), new_x="LMARGIN", new_y="NEXT")
     if not violations:
         pdf.set_font("Helvetica", "", 10)
-        pdf.multi_cell(0, 6, _s("No violations were detected by the automated scan."))
+        pdf.multi_cell(0, 6, _s("No violations were detected by the automated scan."), new_x="LMARGIN", new_y="NEXT")
     else:
         for index, violation in enumerate(visible_violations, start=1):
             nodes = violation.get("nodes") or []
@@ -94,33 +95,35 @@ def generate_accessibility_report(audit_data: dict, output_path: str, tier: str 
 
             pdf.set_font("Helvetica", "B", 10)
             pdf.multi_cell(
-                _full_width(pdf),
+                0,
                 6,
                 _s(f"{index}. {violation.get('id', 'unknown')} | impact: {impact} | occurrences: {len(nodes)}"),
+                new_x="LMARGIN", new_y="NEXT"
             )
             pdf.set_font("Helvetica", "", 10)
-            pdf.multi_cell(_full_width(pdf), 5, _s(description or "No description provided."))
+            pdf.multi_cell(0, 5, _s(description or "No description provided."), new_x="LMARGIN", new_y="NEXT")
             if help_url:
                 pdf.set_text_color(45, 92, 170)
-                pdf.multi_cell(_full_width(pdf), 5, _s(help_url))
+                pdf.multi_cell(0, 5, _s(help_url), new_x="LMARGIN", new_y="NEXT")
                 pdf.set_text_color(0, 0, 0)
             if nodes:
                 first_target = ", ".join(nodes[0].get("target", [])[:3])
                 if first_target:
-                    pdf.multi_cell(_full_width(pdf), 5, _s(f"Example target: {first_target}"))
+                    pdf.multi_cell(0, 5, _s(f"Example target: {first_target}"), new_x="LMARGIN", new_y="NEXT")
             pdf.ln(2)
 
         if is_sample and hidden_violations:
             pdf.set_font("Helvetica", "B", 10)
-            pdf.multi_cell(_full_width(pdf), 6, _s("Additional Findings (censored)"))
+            pdf.multi_cell(0, 6, _s("Additional Findings (censored)"), new_x="LMARGIN", new_y="NEXT")
             pdf.set_font("Helvetica", "", 10)
             pdf.multi_cell(
-                _full_width(pdf),
+                0,
                 5,
                 _s(f"{hidden_violations} additional rule-level findings are hidden in this sample report."),
+                new_x="LMARGIN", new_y="NEXT"
             )
             for _ in range(min(hidden_violations, 6)):
-                pdf.multi_cell(_full_width(pdf), 5, _s("[ REDACTED FOR SAMPLE PREVIEW ]"))
+                pdf.multi_cell(0, 5, _s("[ REDACTED FOR SAMPLE PREVIEW ]"), new_x="LMARGIN", new_y="NEXT")
             pdf.ln(2)
 
     if is_sample:
@@ -131,6 +134,7 @@ def generate_accessibility_report(audit_data: dict, output_path: str, tier: str 
             0,
             6,
             _s("This sample is designed for lead generation: a few real issues are visible, while the full set stays censored until the client upgrades."),
+            new_x="LMARGIN", new_y="NEXT"
         )
 
     pdf.output(str(output))

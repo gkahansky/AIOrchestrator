@@ -232,7 +232,7 @@ def request_accessibility_sample(
     }
 
     # Store initial accessibility context for the worker
-    new_audit = AccessibilityAudit(id=audit_id, url=url, status="running")
+    new_audit = AccessibilityAudit(audit_id=audit_id, target_url=url, status="running")
     db.add(new_audit)
     db.commit()
     db.refresh(new_audit)

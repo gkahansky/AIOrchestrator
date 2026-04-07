@@ -129,7 +129,7 @@ export interface AccessibilityAuditRequest {
   client_email?: string
   is_testing?: boolean
   is_bundled?: boolean
-  tier?: "single_page" | "standard" | "premium"
+  tier?: "single_page" | "sample" | "standard" | "premium"
 }
 
 export interface PodcastOrderRequest {

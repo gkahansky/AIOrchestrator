@@ -237,5 +237,5 @@ class AccessibilityAuditRequest(BaseModel):
     client_email: str | None = None
     is_bundled: bool | None = False
     is_testing: bool | None = False
-    tier: str = Field("single_page", pattern="^(single_page|standard|premium)$")
+    tier: str = Field("standard", pattern="^(single_page|sample|standard|premium)$")
 

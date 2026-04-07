@@ -5,7 +5,6 @@ import { fetchAccessibilityAudits, createAccessibilityAudit } from "../../api"
 type Tab = "overview" | "new_order" | "orders"
 
 const TIERS = [
-  { id: "single_page", label: "Single Page Scan", price: "$40", description: "Home page or critical landing page" },
   { id: "standard", label: "Standard Audit", price: "$120", description: "Up to 5 key user journeys with detailed PDF" },
   { id: "premium", label: "Premium + Strategy", price: "$250", description: "Complete site with 30-day remediation roadmap" },
 ] as const
@@ -23,7 +22,7 @@ function formatDate(iso: string | null | undefined) {
 function Overview() {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         {TIERS.map((t) => (
           <div key={t.id} className="bg-surface-container-lowest rounded-xl p-5 shadow-float">
             <div className="font-headline font-bold text-2xl text-primary mb-1">{t.price}</div>
@@ -31,6 +30,12 @@ function Overview() {
             <div className="text-sm font-body text-on-surface-variant">{t.description}</div>
           </div>
         ))}
+      </div>
+      <div className="bg-surface-container-lowest rounded-xl p-5 shadow-float border border-outline-variant/20">
+        <h3 className="font-headline font-bold text-base text-on-surface mb-2">Public Sample Offer</h3>
+        <p className="text-sm font-body text-on-surface-variant">
+          The one-page sample audit is still supported for website lead-gen flows, but it is no longer exposed in the internal admin ordering UI.
+        </p>
       </div>
       <div className="bg-surface-container-lowest rounded-xl p-5 shadow-float">
         <h3 className="font-headline font-bold text-base text-on-surface mb-3">Pipeline Phases</h3>
@@ -59,7 +64,7 @@ function Overview() {
 
 function NewOrder({ onSuccess }: { onSuccess: () => void }) {
   const [url, setUrl] = useState("")
-  const [tier, setTier] = useState<"single_page" | "standard" | "premium">("single_page")
+  const [tier, setTier] = useState<"standard" | "premium">("standard")
   const [clientEmail, setClientEmail] = useState("")
   const [isDemo, setIsDemo] = useState(false)
   const [errorMsg, setErrorMsg] = useState("")

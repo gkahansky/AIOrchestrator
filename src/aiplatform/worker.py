@@ -998,14 +998,20 @@ def run_accessibility_scan_job(audit_id: str, url: str) -> dict:
 
         results = asyncio.run(run_accessibility_scan(url))
         work_dir = Path("/tmp") / "accessibility_audits" / audit_id
-        report_name = f"{audit_id}-accessibility-report.pdf"
-        report_meta = generate_accessibility_report(results, str(work_dir / report_name))
+        tier = str((job.input_data or {}).get("tier") or "standard") if job else "standard"
+        is_sample = tier in {"single_page", "sample"}
+        report_name = f"{audit_id}-accessibility-{'sample' if is_sample else 'report'}.pdf"
+        report_meta = generate_accessibility_report(results, str(work_dir / report_name), tier=tier)
 
         orders_root = os.environ.get("DRIVE_ACCESSIBILITY_ORDERS_ID") or os.environ.get("DRIVE_ACCESSIBILITY_ROOT_ID")
-        if not orders_root:
+        samples_root = os.environ.get("DRIVE_ACCESSIBILITY_SAMPLES_ID") or orders_root
+        if not orders_root and not samples_root:
             raise RuntimeError("DRIVE_ACCESSIBILITY_ORDERS_ID or DRIVE_ACCESSIBILITY_ROOT_ID must be set")
+        target_root = samples_root if is_sample else orders_root
+        if not target_root:
+            raise RuntimeError("Accessibility Drive target folder is not configured")
 
-        folder_meta = create_folder(audit_id, orders_root)
+        folder_meta = create_folder(audit_id, target_root)
         drive_meta = drive_write(
             report_meta["pdf_path"],
             folder_meta["folder_id"],
@@ -1042,6 +1048,7 @@ def run_accessibility_scan_job(audit_id: str, url: str) -> dict:
                 "url": url,
                 "wcag_score": results.get("wcag_score"),
                 "tier": (job.input_data or {}).get("tier"),
+                "is_sample": is_sample,
                 "client_email": (job.input_data or {}).get("client_email"),
                 "pdf_path": report_meta["pdf_path"],
                 "pdf_size_bytes": report_meta["size_bytes"],

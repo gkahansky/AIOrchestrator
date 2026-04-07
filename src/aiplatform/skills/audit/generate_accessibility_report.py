@@ -173,9 +173,15 @@ def generate_accessibility_report(audit_data: dict, output_path: str, tier: str 
     if not violation_summary:
         overview_table_html = '<tr><td colspan="4" class="px-8 py-6 text-center">No violations found.</td></tr>'
 
+    active_principles = {k: v for k, v in checklist_map.items() if v}
+    is_single_section = len(active_principles) == 1
+    
     checklist_html = ""
-    for prin, items_dict in checklist_map.items():
-        checklist_html += f"<div><h4 class='text-lg font-bold mb-6 border-b border-outline-variant/20 pb-4'>{prin}</h4><ul class='space-y-4'>"
+    for prin, items_dict in active_principles.items():
+        # Remove the number prefix if there is only 1 section (e.g. "1. Perceivable" -> "Perceivable")
+        display_prin = prin.split(" ", 1)[1] if is_single_section and " " in prin else prin
+        
+        checklist_html += f"<div><h4 class='text-lg font-bold mb-4 border-b border-outline-variant/20 pb-3'>{display_prin}</h4><ul class='space-y-3'>"
         for wcag, info in sorted(items_dict.items()):
             label, _ = WCAG_MAP.get(wcag, (wcag, ""))
             if info["status"] == "Fail": 
@@ -183,8 +189,6 @@ def generate_accessibility_report(audit_data: dict, output_path: str, tier: str 
             else: 
                 span = "<span class='flex items-center gap-2 text-[10px] font-bold text-primary uppercase'><span class='material-symbols-outlined text-sm'>check_circle</span> Pass</span>"
             checklist_html += f"<li class='flex items-center justify-between py-1'><span class='text-sm text-on-surface-variant'>{label}</span>{span}</li>"
-        if not items_dict:
-            checklist_html += "<li class='text-sm text-on-surface-variant italic'>No checks recorded.</li>"
         checklist_html += "</ul></div>"
 
     visible_violations = flattened_violations[:4] if is_sample else flattened_violations
@@ -201,31 +205,32 @@ def generate_accessibility_report(audit_data: dict, output_path: str, tier: str 
         html_code = _html_escape(item["html"])
         remediation = _html_escape(item["failureSummary"]).replace("\\n", "<br/>")
 
+        # Removed 'page-break', decreased padding 12->8, changed gap-6->gap-4 to increase vertical space per item
         deepdive_html += f"""
-        <div class="bg-surface-container-low p-12 rounded-xl relative overflow-hidden page-break break-inside-avoid mt-8">
+        <div class="bg-surface-container-low p-8 rounded-xl relative overflow-hidden break-inside-avoid mt-6">
             <div class="relative z-10">
-                <div class="flex items-center gap-3 mb-6">
+                <div class="flex items-center gap-3 mb-4">
                     <span class="px-3 py-1 {sev_class} text-[10px] font-black uppercase rounded-sm">{sev} Finding</span>
-                    <h3 class="text-2xl font-black tracking-tight text-on-surface">{desc}</h3>
+                    <h3 class="text-xl font-black tracking-tight text-on-surface">{desc}</h3>
                 </div>
-                <div class="mb-6">
+                <div class="mb-4">
                     <a class="text-xs font-bold text-primary uppercase hover:underline" href="{wcag_link}">WCAG Success Criterion: {wcag_label}</a>
                 </div>
-                <div class="grid grid-cols-1 gap-6">
+                <div class="grid grid-cols-1 gap-4">
                     <div>
-                        <h4 class="text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-3">Problem / Target Element</h4>
-                        <div class="bg-surface-container-highest/20 p-4 rounded-lg text-sm text-on-surface font-mono overflow-x-auto whitespace-pre-wrap">{target}</div>
+                        <h4 class="text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Problem / Target Element</h4>
+                        <div class="bg-surface-container-highest/20 p-3 rounded-lg text-sm text-on-surface font-mono overflow-x-auto whitespace-pre-wrap">{target}</div>
                     </div>
                     <div>
-                        <h4 class="text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-3">Code Snippet</h4>
-                        <div class="bg-inverse-surface text-inverse-on-surface p-6 rounded-lg font-mono text-xs overflow-x-auto">
+                        <h4 class="text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Code Snippet</h4>
+                        <div class="bg-inverse-surface text-inverse-on-surface p-4 rounded-lg font-mono text-xs overflow-x-auto">
                             <div class="mb-2 text-error-container">// Non-compliant markup</div>
                             <div class="mb-2 whitespace-pre-wrap">{html_code}</div>
                         </div>
                     </div>
                     <div>
-                        <h4 class="text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-3">Remediation Instruction</h4>
-                        <div class="bg-surface-container-highest/50 p-6 rounded-lg text-sm text-on-surface leading-relaxed">
+                        <h4 class="text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Remediation Instruction</h4>
+                        <div class="bg-surface-container-highest/50 p-4 rounded-lg text-sm text-on-surface leading-relaxed">
                             {remediation}
                         </div>
                     </div>
@@ -236,7 +241,7 @@ def generate_accessibility_report(audit_data: dict, output_path: str, tier: str 
 
     if is_sample and hidden_violations > 0:
         deepdive_html += f"""
-        <div class="bg-error-container/30 p-12 rounded-xl text-center mt-12 page-break">
+        <div class="bg-error-container/30 p-8 rounded-xl text-center break-inside-avoid mt-8">
             <h3 class="text-2xl font-black text-on-surface mb-2">{hidden_violations} More Instances Found</h3>
             <p class="text-on-surface-variant">The remaining isolated violation occurrences are available securely in the full audit report. Upgrade to review all specific code targets.</p>
         </div>

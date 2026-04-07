@@ -932,41 +932,41 @@ def advisory_task_success_handler(sender=None, result=None, **kwargs):
     run_advisor_async.delay("pm", {"event": "task_success", "job_id": job_id}, job_id)
 
 
- 
- 
- @ c e l e r y _ a p p . t a s k ( n a m e = " p l a t f o r m . r u n _ a d v i s o r _ a s y n c " ) 
- d e f   r u n _ a d v i s o r _ a s y n c ( a d v i s o r _ i d :   s t r ,   c o n t e x t _ d a t a :   d i c t ,   j o b _ i d :   s t r   =   N o n e )   - >   N o n e : 
-         f r o m   a i p l a t f o r m . s k i l l s . s t r a t e g y . r u n _ a d v i s o r   i m p o r t   r u n _ a d v i s o r 
-         r u n _ a d v i s o r ( a d v i s o r _ i d ,   c o n t e x t _ d a t a ,   j o b _ i d ) 
- 
- f r o m   c e l e r y . s i g n a l s   i m p o r t   t a s k _ s u c c e s s 
- @ t a s k _ s u c c e s s . c o n n e c t 
- d e f   a d v i s o r y _ t a s k _ s u c c e s s _ h a n d l e r ( s e n d e r = N o n e ,   r e s u l t = N o n e ,   * * k w a r g s ) : 
-         i f   n o t   i s i n s t a n c e ( r e s u l t ,   d i c t )   o r   " j o b _ i d "   n o t   i n   r e s u l t : 
-                 r e t u r n 
-         j o b _ i d   =   r e s u l t . g e t ( " j o b _ i d " ) 
-         i f   n o t   j o b _ i d :   r e t u r n 
-         
-         #   N e e d s   t o   b e   d e f e r r e d   t o   n o t   b l o c k   t h e   m a i n   p r o c e s s   a n d   a v o i d   c i r c u l a r   d e p e n d e n c i e s   t o o   h e a v i l y 
-         r u n _ a d v i s o r _ a s y n c . d e l a y ( " p m " ,   { " e v e n t " :   " t a s k _ s u c c e s s " ,   " j o b _ i d " :   j o b _ i d } ,   j o b _ i d ) 
- 
- 
- 
+
+
+@celery_app.task(name="platform.run_advisor_async")
+def run_advisor_async(advisor_id: str, context_data: dict, job_id: str = None) -> None:
+    from aiplatform.skills.strategy.run_advisor import run_advisor
+    run_advisor(advisor_id, context_data, job_id)
+
+from celery.signals import task_success
+@task_success.connect
+def advisory_task_success_handler(sender=None, result=None, **kwargs):
+    if not isinstance(result, dict) or "job_id" not in result:
+        return
+    job_id = result.get("job_id")
+    if not job_id: return
+    
+    # Needs to be deferred to not block the main process and avoid circular dependencies too heavily
+    run_advisor_async.delay("pm", {"event": "task_success", "job_id": job_id}, job_id)
+
+
+
 @celery_app.task(name="platform.eo_weekly_review")
 def eo_weekly_review() -> None:
     # Action: Aggregates all CostEvent and RevenueEvent data for the week to generate a "Weekly Business Overview".
     from aiplatform.skills.strategy.run_advisor import run_advisor
     run_advisor("executive", {"event": "weekly_review"})
 
- 
- 
- @ c e l e r y _ a p p . t a s k ( n a m e = " p l a t f o r m . e o _ w e e k l y _ r e v i e w " ) 
- d e f   e o _ w e e k l y _ r e v i e w ( )   - >   N o n e : 
-         #   A c t i o n :   A g g r e g a t e s   a l l   C o s t E v e n t   a n d   R e v e n u e E v e n t   d a t a   f o r   t h e   w e e k   t o   g e n e r a t e   a   " W e e k l y   B u s i n e s s   O v e r v i e w " . 
-         f r o m   a i p l a t f o r m . s k i l l s . s t r a t e g y . r u n _ a d v i s o r   i m p o r t   r u n _ a d v i s o r 
-         r u n _ a d v i s o r ( " e x e c u t i v e " ,   { " e v e n t " :   " w e e k l y _ r e v i e w " } ) 
- 
- 
+
+
+@celery_app.task(name="platform.eo_weekly_review")
+def eo_weekly_review() -> None:
+    # Action: Aggregates all CostEvent and RevenueEvent data for the week to generate a "Weekly Business Overview".
+    from aiplatform.skills.strategy.run_advisor import run_advisor
+    run_advisor("executive", {"event": "weekly_review"})
+
+
 @celery_app.task(name="platform.run_accessibility_scan_job")
 def run_accessibility_scan_job(audit_id: str, url: str) -> dict:
     import asyncio

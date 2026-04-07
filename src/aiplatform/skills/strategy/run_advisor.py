@@ -17,10 +17,10 @@ def load_advisors_registry() -> dict:
         return json.load(f)
 
 def run_advisor(advisor_id: str, context_data: dict, job_id: str = None) -> dict:
-    "\""
+    """
     Run a specific advisor persona against the provided context data,
     generate a proposal, log costs, and save to DB.
-    "\""
+    """
     registry = load_advisors_registry()
     if advisor_id not in registry:
         raise ValueError(f"Unknown advisor_id: {advisor_id}")

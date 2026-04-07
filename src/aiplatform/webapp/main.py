@@ -128,7 +128,8 @@ def create_app() -> FastAPI:
     # Ventures
     app.include_router(ventures_etsy.router,    prefix="/api/ventures/etsy",              tags=["etsy"])
     app.include_router(ventures_audit.router,   prefix="/api/ventures/marketing-audit",   tags=["marketing-audit"])
-    app.include_router(ventures_podcast.router, prefix="/api/ventures/content-studio",    tags=["content-studio"])    app.include_router(audit_accessibility.router,      prefix="/api/audit/accessibility",        tags=["accessibility"])
+    app.include_router(ventures_podcast.router, prefix="/api/ventures/content-studio",    tags=["content-studio"])
+    app.include_router(audit_accessibility.router,      prefix="/api/audit/accessibility",        tags=["accessibility"])     
     # Public (no auth) — free sample requests from echoforge.biz
     app.include_router(public_sample.router,    prefix="/api/sample",                     tags=["public"])    
     # Webhooks (Github, Stripe etc)

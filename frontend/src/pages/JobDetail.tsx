@@ -10,6 +10,11 @@ interface PhaseStep {
   timestamp?: string
 }
 
+interface ResourceLink {
+  label: string
+  url: string
+}
+
 // Statuses where the current phase has actually finished (no spinner)
 const DONE_STATUSES = new Set([
   "completed", "delivered", "published", "approved",
@@ -66,6 +71,30 @@ function formatDate(iso: string | null) {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
+  })
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {}
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : ""
+}
+
+function buildResourceLinks(outputData: Record<string, unknown>): ResourceLink[] {
+  const candidates: ResourceLink[] = [
+    { label: "Open Report", url: asString(outputData.drive_report_link) },
+    { label: "Open Drive Folder", url: asString(outputData.drive_folder_link) },
+    { label: "Open Google Doc", url: asString(outputData.gdoc_url) },
+    { label: "Open Sample PDF", url: asString(outputData.drive_sample_pdf_link) || asString(outputData.drive_sample_PDF_link) },
+  ]
+
+  const seen = new Set<string>()
+  return candidates.filter((item) => {
+    if (!item.url || !/^https?:\/\//.test(item.url) || seen.has(item.url)) return false
+    seen.add(item.url)
+    return true
   })
 }
 
@@ -145,6 +174,8 @@ export default function JobDetail() {
   const steps = buildPhaseSteps(job.status, job.phase_current, job.phase_total)
   const isReviewPending = job.status === "review_pending"
   const isFailed = job.status === "failed"
+  const outputData = asRecord(job.output_data)
+  const resourceLinks = buildResourceLinks(outputData)
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -263,6 +294,28 @@ export default function JobDetail() {
 
         {/* Input / Output data */}
         <div className="col-span-7 space-y-4">
+          {resourceLinks.length > 0 && (
+            <div className="bg-surface-container-lowest rounded-xl shadow-float overflow-hidden">
+              <div className="px-5 py-4 border-b border-outline-variant/15">
+                <h2 className="font-headline font-bold text-sm text-on-surface">Deliverables</h2>
+              </div>
+              <div className="px-5 py-4 flex flex-wrap gap-3">
+                {resourceLinks.map((link) => (
+                  <a
+                    key={`${link.label}-${link.url}`}
+                    href={link.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 text-primary text-sm font-label font-semibold hover:bg-primary/15 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                    {link.label}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Input Data */}
           <div className="bg-surface-container-lowest rounded-xl shadow-float overflow-hidden">
             <div className="px-5 py-4 border-b border-outline-variant/15">
@@ -283,7 +336,7 @@ export default function JobDetail() {
               </div>
               <div className="px-5 py-4">
                 <pre className="text-xs font-mono text-on-surface-variant bg-surface-container-low rounded-lg p-3 overflow-x-auto overflow-y-auto whitespace-pre-wrap max-h-72">
-                  {JSON.stringify(job.output_data, null, 2)}
+                  {JSON.stringify(outputData, null, 2)}
                 </pre>
               </div>
             </div>
@@ -308,6 +361,22 @@ export default function JobDetail() {
 
           {isReviewPending && (
             <>
+              {resourceLinks.length > 0 && (
+                <div className="flex flex-wrap gap-3">
+                  {resourceLinks.map((link) => (
+                    <a
+                      key={`review-${link.label}-${link.url}`}
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-primary/20 text-primary text-sm font-label font-semibold hover:bg-primary/5 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">description</span>
+                      {link.label}
+                    </a>
+                  ))}
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
                   Notes (optional)

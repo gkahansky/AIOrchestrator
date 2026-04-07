@@ -1,9 +1,10 @@
 ﻿// ── Jobs ──────────────────────────────────────────────────────────────────────
 
-export type Venture = "marketing_audit" | "content_studio" | "etsy"
+export type Venture = "marketing_audit" | "content_studio" | "etsy" | "accessibility_audit"
 
 export type JobStatus =
   | "pending"
+  | "running"
   | "scraping" | "scraped"
   | "auditing" | "audited"
   | "generating_report" | "report_ready"
@@ -125,9 +126,10 @@ export interface AuditOrderRequest {
 export interface AccessibilityAuditRequest {
   url: string
   client_id?: string
+  client_email?: string
   is_testing?: boolean
   is_bundled?: boolean
-  tier?: string
+  tier?: "single_page" | "standard" | "premium"
 }
 
 export interface PodcastOrderRequest {

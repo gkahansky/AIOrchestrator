@@ -123,6 +123,15 @@
         "function": "generate_pdf",
         "active": true,
         "note": "Fully implemented using fpdf2 (not WeasyPrint — avoids GTK3 Windows dependency). Generates review-sheet PDF with thumbnails, auto-checks, Drive links."
+      },
+      {
+        "id": "accessibility-report-fpdf",
+        "tier": "standard",
+        "cost_per_call": 0.00,
+        "module": "aiplatform.skills.audit.generate_accessibility_report",
+        "function": "generate_accessibility_report",
+        "active": true,
+        "note": "Generates accessibility audit PDF summaries for review and delivery."
       }
     ]
   },

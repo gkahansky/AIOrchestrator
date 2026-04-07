@@ -38,9 +38,9 @@ function Overview() {
           {[
             "Initiate",
             "Headless Scan",
-            "Analyze Axe",
-            "Draft PDF",
-            "Deliver",
+            "Create Report",
+            "Human Review",
+            "Client Delivery",
           ].map((phase, i) => (
             <div key={i} className="text-center">
               <div className="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center mx-auto mb-1">
@@ -79,7 +79,7 @@ function NewOrder({ onSuccess }: { onSuccess: () => void }) {
     submitMut.mutate({
       url,
       tier,
-      client_id: clientEmail || "admin@example.com",
+      client_email: clientEmail || undefined,
       is_testing: isDemo,
     })
   }

@@ -234,6 +234,8 @@ class ToolSettingResponse(BaseModel):
 class AccessibilityAuditRequest(BaseModel):
     url: str
     client_id: str | None = None
+    client_email: str | None = None
     is_bundled: bool | None = False
     is_testing: bool | None = False
+    tier: str = Field("single_page", pattern="^(single_page|standard|premium)$")
 

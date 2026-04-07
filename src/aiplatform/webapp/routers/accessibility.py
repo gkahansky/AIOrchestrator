@@ -22,10 +22,14 @@ def initiate_scan(request: AccessibilityAuditRequest, db: Session = Depends(get_
     db.flush()
 
     audit_id = str(new_audit.audit_id)
+    client_email = request.client_email or request.client_id
     job_payload = {
         "order_id": audit_id,
         "audit_id": audit_id,
         "url": request.url,
+        "tier": request.tier,
+        "client_id": request.client_id,
+        "client_email": client_email,
         "is_testing": request.is_testing,
         "is_bundled": request.is_bundled,
         "status": "pending",
@@ -35,6 +39,8 @@ def initiate_scan(request: AccessibilityAuditRequest, db: Session = Depends(get_
     new_job = Job(
         venture="accessibility_audit",
         status="pending",
+        phase_current=1,
+        phase_total=4,
         input_data=job_payload,
         output_data=dict(job_payload),
     )
@@ -84,6 +90,7 @@ def get_report(audit_id: str, db: Session = Depends(get_db)):
     audit = db.query(AccessibilityAudit).filter(AccessibilityAudit.audit_id == audit_id).first()
     if not audit:
         raise HTTPException(status_code=404, detail="Audit not found")
+    job = db.query(Job).filter(Job.id == audit.job_id).first() if audit.job_id else None
         
     if audit.status != "Completed":
         return {"status": audit.status, "message": "Report not ready yet"}
@@ -92,7 +99,8 @@ def get_report(audit_id: str, db: Session = Depends(get_db)):
         "status": "Completed",
         "url": audit.target_url,
         "wcag_score": audit.compliance_score,
-        "results": audit.raw_axe_results
+        "results": audit.raw_axe_results,
+        "drive_report_link": (job.output_data or {}).get("drive_report_link", "") if job else "",
     }
 
 
@@ -101,6 +109,7 @@ def list_audits(db: Session = Depends(get_db)):
     audits = db.query(AccessibilityAudit).order_by(AccessibilityAudit.created_at.desc()).limit(100).all()
     return [{
         "id": str(a.audit_id),
+        "job_id": str(a.job_id) if a.job_id else None,
         "url": a.target_url,
         "status": a.status,
         "score": a.compliance_score,

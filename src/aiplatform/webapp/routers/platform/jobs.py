@@ -112,7 +112,7 @@ def approve_job(
     _redis_signal(str(job_id), "approve")
 
     # Re-dispatch Celery task with approved order state
-    from aiplatform.worker import run_audit_order, run_podcast_order, run_etsy_phase
+    from aiplatform.worker import run_audit_order, run_podcast_order, run_etsy_phase, deliver_accessibility_audit_job
 
     order = dict(job.output_data or job.input_data)
     order["status"] = "approved"
@@ -134,6 +134,8 @@ def approve_job(
             "phase3_result": phase3_result,
             "phase4_result": phase4_result,
         })
+    elif job.venture == "accessibility_audit":
+        task = deliver_accessibility_audit_job.delay(str(job_id), req.notes)
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -193,7 +195,7 @@ def retry_job(
             detail="Only failed jobs can be retried",
         )
 
-    from aiplatform.worker import run_audit_order, run_podcast_order, run_etsy_phase
+    from aiplatform.worker import run_audit_order, run_podcast_order, run_etsy_phase, run_accessibility_scan_job
 
     order = dict(job.output_data or job.input_data)
     order["status"] = "pending"
@@ -208,6 +210,11 @@ def retry_job(
         inp = dict(job.input_data or {})
         inp.pop("order_id", None)
         task = run_etsy_phase.delay(phase, inp)
+    elif job.venture == "accessibility_audit":
+        task = run_accessibility_scan_job.delay(
+            str(order.get("audit_id") or order.get("order_id") or job.input_data.get("audit_id") or job.input_data.get("order_id")),
+            str(order.get("url") or job.input_data.get("url") or ""),
+        )
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

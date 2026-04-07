@@ -130,7 +130,9 @@ export async function createAccessibilityAudit(data: import("./types").Accessibi
     headers: getHeaders(),
     body: JSON.stringify({
       url: data.url,
-      client_id: data.client_id,
+      tier: data.tier,
+      client_id: data.client_id ?? data.client_email,
+      client_email: data.client_email ?? data.client_id,
       is_testing: data.is_testing,
       is_bundled: data.is_bundled
     }),

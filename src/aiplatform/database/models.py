@@ -273,3 +273,21 @@ class Roadmap(Base):
     status = Column(ROADMAP_STATUS_ENUM, nullable=False, default="backlog", index=True)
 
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+class AccessibilityAudit(Base):
+    """
+    Accessibility Audit Module (AAM) table storing raw Axe results and structured roadmap data.
+    """
+    __tablename__ = "accessibility_audits"
+
+    audit_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True, index=True)
+    target_url = Column(String(2048), nullable=False)
+    raw_axe_results = Column(JSONB, nullable=True)
+    roadmap_data = Column(JSONB, nullable=True)
+    compliance_score = Column(Integer, nullable=True)
+    manual_override_notes = Column(Text, nullable=True)
+    status = Column(String(50), nullable=False, default="Queued") # Queued | Scanning | Analyzing | Completed
+
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    job = relationship("Job")

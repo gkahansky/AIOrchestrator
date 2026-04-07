@@ -52,6 +52,7 @@ from aiplatform.webapp.routers.webhooks import github as webhooks_github
 from aiplatform.webapp.routers.ventures import etsy as ventures_etsy
 from aiplatform.webapp.routers.ventures import marketing_audit as ventures_audit
 from aiplatform.webapp.routers.ventures import content_studio as ventures_podcast
+from aiplatform.webapp.routers import accessibility as audit_accessibility
 from aiplatform.webapp.routers.public import sample as public_sample
 
 logging.basicConfig(level=logging.INFO)
@@ -127,8 +128,7 @@ def create_app() -> FastAPI:
     # Ventures
     app.include_router(ventures_etsy.router,    prefix="/api/ventures/etsy",              tags=["etsy"])
     app.include_router(ventures_audit.router,   prefix="/api/ventures/marketing-audit",   tags=["marketing-audit"])
-    app.include_router(ventures_podcast.router, prefix="/api/ventures/content-studio",    tags=["content-studio"])
-
+    app.include_router(ventures_podcast.router, prefix="/api/ventures/content-studio",    tags=["content-studio"])    app.include_router(audit_accessibility.router,      prefix="/api/audit/accessibility",        tags=["accessibility"])
     # Public (no auth) — free sample requests from echoforge.biz
     app.include_router(public_sample.router,    prefix="/api/sample",                     tags=["public"])    
     # Webhooks (Github, Stripe etc)

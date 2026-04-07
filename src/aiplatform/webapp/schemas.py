@@ -230,3 +230,8 @@ class ToolSettingResponse(BaseModel):
     cost_per_call: float
     active: bool
     note: str | None = None
+
+class AccessibilityAuditRequest(BaseModel):
+    url: str
+    client_id: str | None = None
+    is_bundled: bool | None = False

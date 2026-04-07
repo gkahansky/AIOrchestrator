@@ -957,11 +957,33 @@ def eo_weekly_review() -> None:
     # Action: Aggregates all CostEvent and RevenueEvent data for the week to generate a "Weekly Business Overview".
     from aiplatform.skills.strategy.run_advisor import run_advisor
     run_advisor("executive", {"event": "weekly_review"})
- 
+
+ 
  
  @ c e l e r y _ a p p . t a s k ( n a m e = " p l a t f o r m . e o _ w e e k l y _ r e v i e w " ) 
  d e f   e o _ w e e k l y _ r e v i e w ( )   - >   N o n e : 
          #   A c t i o n :   A g g r e g a t e s   a l l   C o s t E v e n t   a n d   R e v e n u e E v e n t   d a t a   f o r   t h e   w e e k   t o   g e n e r a t e   a   " W e e k l y   B u s i n e s s   O v e r v i e w " . 
          f r o m   a i p l a t f o r m . s k i l l s . s t r a t e g y . r u n _ a d v i s o r   i m p o r t   r u n _ a d v i s o r 
-         r u n _ a d v i s o r ( " e x e c u t i v e " ,   { " e v e n t " :   " w e e k l y _ r e v i e w " } )  
+         r u n _ a d v i s o r ( " e x e c u t i v e " ,   { " e v e n t " :   " w e e k l y _ r e v i e w " } ) 
  
+ 
+@celery_app.task(name="platform.run_accessibility_scan_job")
+def run_accessibility_scan_job(audit_id: str, url: str) -> dict:
+    import asyncio
+    from aiplatform.skills.audit.accessibility_scan import run_accessibility_scan
+    from aiplatform.database.session import SessionLocal
+    from aiplatform.database.models import AccessibilityAudit
+    
+    results = asyncio.run(run_accessibility_scan(url))
+    db = SessionLocal()
+    try:
+        audit = db.query(AccessibilityAudit).filter(AccessibilityAudit.audit_id == audit_id).first()
+        if audit:
+            audit.raw_axe_results = results
+            audit.compliance_score = results.get("wcag_score")
+            audit.status = "Completed"
+            db.commit()
+    finally:
+        db.close()
+    return {"status": "Completed", "audit_id": str(audit_id)}
+

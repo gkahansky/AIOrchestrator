@@ -9,4 +9,5 @@ from aiplatform.worker import (  # noqa: F401  re-export
     run_etsy_phase,
     run_audit_order,
     run_podcast_order,
+    run_accessibility_scan_job,
 )

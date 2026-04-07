@@ -60,13 +60,13 @@ def _get_wcag_principle(tags: list[str]) -> str:
     return "Other / General"
 
 
-def _get_w3_link(tags: list[str]) -> str:
+def _get_wcag_criteria(tags: list[str], rule_id: str) -> str:
     for tag in tags:
         if tag.startswith("wcag") and len(tag) >= 7:
             criteria = tag.replace("wcag", "")
             formatted = f"{criteria[0]}.{criteria[1]}.{criteria[2:]}"
-            return f"https://www.w3.org/WAI/WCAG22/quickref/#{formatted.replace('.', '')}"
-    return "https://www.w3.org/WAI/standards-guidelines/wcag/"
+            return f"Criteria {formatted}"
+    return f"Rule {rule_id}"
 
 
 def _full_width(pdf: FPDF) -> float:
@@ -91,7 +91,7 @@ def generate_accessibility_report(audit_data: dict, output_path: str, tier: str 
         rule_desc = rule.get("description", "No description")
         tags = rule.get("tags", [])
         principle = _get_wcag_principle(tags)
-        w3_link = _get_w3_link(tags)
+        wcag_criteria = _get_wcag_criteria(tags, rule_id)
         
         nodes = rule.get("nodes", [])
         if not nodes:
@@ -101,7 +101,7 @@ def generate_accessibility_report(audit_data: dict, output_path: str, tier: str 
                 "principle": principle,
                 "rule_id": rule_id,
                 "description": rule_desc,
-                "w3_link": w3_link,
+                "wcag_criteria": wcag_criteria,
                 "html": "N/A",
                 "target": "N/A",
                 "failureSummary": rule.get("help", "No remediation provided.")
@@ -115,7 +115,7 @@ def generate_accessibility_report(audit_data: dict, output_path: str, tier: str 
                     "principle": principle,
                     "rule_id": rule_id,
                     "description": rule_desc,
-                    "w3_link": w3_link,
+                    "wcag_criteria": wcag_criteria,
                     "html": node.get("html", "N/A"),
                     "target": target_str,
                     "failureSummary": node.get("failureSummary", rule.get("help", "No remediation provided."))
@@ -203,7 +203,7 @@ def generate_accessibility_report(audit_data: dict, output_path: str, tier: str 
             pdf.multi_cell(
                 0,
                 6,
-                _s(f"{index}. Rule: {item['rule_id']}"),
+                _s(f"{index}. Rule: {item['rule_id']} ({item['wcag_criteria']})"),
                 new_x="LMARGIN", new_y="NEXT"
             )
             
@@ -211,7 +211,7 @@ def generate_accessibility_report(audit_data: dict, output_path: str, tier: str 
             pdf.multi_cell(0, 5, _s(f"Description: {item['description']}"), new_x="LMARGIN", new_y="NEXT")
             
             pdf.set_text_color(45, 92, 170)
-            pdf.multi_cell(0, 5, _s(f"WCAG Guideline: {item['w3_link']}"), new_x="LMARGIN", new_y="NEXT")
+            pdf.multi_cell(0, 5, _s("WCAG Guideline: https://www.w3.org/WAI/standards-guidelines/wcag/"), new_x="LMARGIN", new_y="NEXT")
             pdf.set_text_color(0, 0, 0)
             
             pdf.set_font("Helvetica", "B", 8)

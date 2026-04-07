@@ -180,6 +180,7 @@ COMPETITOR_MAX=3                    # Max competitors scraped per report
 - [x] Full PDF via `generate_pdf_report.py` from ai-marketing-claude
 - [x] Full Markdown report
 - [x] Sample/censored PDF — `sample_report.py` with diagonal "SAMPLE" watermark, redaction bars, CTA page
+- [x] Accessibility Audit Component — Switched to Playwright HTML-to-PDF rendering pipeline featuring Tailwind styling, EchoForge branding, tables, vertical instance breakdown, direct WCAG mapping, and compliance code-snippet generator.
 - [x] Sample Markdown for proposal letter embedding (`🔒` blockquotes)
 - [x] `--report-type both|full|sample` CLI flag
 - [x] `--demo` mode for PDF testing without API calls

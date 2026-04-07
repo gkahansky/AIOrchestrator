@@ -107,6 +107,7 @@ Scripts add `src/` to `sys.path` explicitly. Pytest uses `conftest.py` for the s
       packaging/
         create_zip.py           # Assemble delivery ZIP — any digital product
         generate_pdf.py         # WeasyPrint PDF generation — any venture
+        generate_accessibility_report.py # Playwright HTML-to-PDF reports
     registry/
       skills.json               # Skill catalogue: capability tags, tools, costs
       tool_router.py            # Selects tool based on tier, budget, availability

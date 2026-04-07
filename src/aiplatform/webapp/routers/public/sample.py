@@ -238,15 +238,26 @@ def request_accessibility_sample(
     db.refresh(new_audit)
 
     # Sync to global Job row
-    job = upsert_job(order, "accessibility_audit", phase_current=1, phase_total=4)
-    new_audit.job_id = job.id
+    new_job = Job(
+        venture="accessibility_audit",
+        status="pending",
+        phase_current=1,
+        phase_total=4,
+        input_data=order,
+        output_data=dict(order),
+    )
+    db.add(new_job)
+    db.flush()
+    new_audit.job_id = new_job.id
     db.commit()
+    db.refresh(new_job)
 
     from aiplatform.worker import run_accessibility_scan_job as celery_task
     task = celery_task.delay(audit_id, url)
     
     # Store task connection
-    upsert_job({"order_id": order_id}, "accessibility_audit", celery_task_id=task.id)
+    new_job.celery_task_id = str(task.id)
+    db.commit()
 
     return {
         "message": "Your accessibility sample is being generated — check your inbox in 10–20 minutes.",

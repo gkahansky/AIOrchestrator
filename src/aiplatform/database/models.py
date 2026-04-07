@@ -36,7 +36,7 @@ class Base(DeclarativeBase):
 # ── Enums ──────────────────────────────────────────────────────────────────────
 
 VENTURE_ENUM = Enum(
-    "etsy", "marketing_audit", "content_studio",
+    "etsy", "marketing_audit", "content_studio", "accessibility_audit",
     name="venture_enum",
 )
 

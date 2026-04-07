@@ -195,3 +195,61 @@ def request_audit_sample(
         "message": "Your audit sample is being generated — check your inbox in 10–20 minutes.",
         "order_id": order_id,
     }
+
+
+# ─── POST /api/sample/accessibility ───────────────────────────────────────────
+
+@router.post("/accessibility", status_code=status.HTTP_202_ACCEPTED)
+def request_accessibility_sample(
+    email: str = Form(...),
+    url:   str = Form(...),
+    db=Depends(get_db),
+) -> dict:
+    """
+    Run an accessibility audit on the provided URL and email a censored sample PDF.
+    One request per email per 24 hours.
+    """
+    import uuid
+    from aiplatform.database.job_ops import upsert_job
+    from aiplatform.database.models import AccessibilityAudit
+    
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+
+    _check_rate_limit(email, "accessibility_audit", db)
+
+    order_id = f"sample-acc-{uuid.uuid4().hex[:10]}"
+    audit_id = str(uuid.uuid4())
+    
+    order = {
+        "order_id": order_id,
+        "sample_email": email,
+        "client_email": email,
+        "url": url,
+        "tier": "sample",
+        "audit_id": audit_id,
+        "status": "pending"
+    }
+
+    # Store initial accessibility context for the worker
+    new_audit = AccessibilityAudit(id=audit_id, url=url, status="running")
+    db.add(new_audit)
+    db.commit()
+    db.refresh(new_audit)
+
+    # Sync to global Job row
+    job = upsert_job(order, "accessibility_audit", phase_current=1, phase_total=4)
+    new_audit.job_id = job.id
+    db.commit()
+
+    from aiplatform.worker import run_accessibility_scan_job as celery_task
+    task = celery_task.delay(audit_id, url)
+    
+    # Store task connection
+    upsert_job({"order_id": order_id}, "accessibility_audit", celery_task_id=task.id)
+
+    return {
+        "message": "Your accessibility sample is being generated — check your inbox in 10–20 minutes.",
+        "order_id": order_id,
+    }
+

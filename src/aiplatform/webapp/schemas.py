@@ -235,3 +235,5 @@ class AccessibilityAuditRequest(BaseModel):
     url: str
     client_id: str | None = None
     is_bundled: bool | None = False
+    is_testing: bool | None = False
+

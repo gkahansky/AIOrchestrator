@@ -124,6 +124,28 @@ export async function createAuditOrder(data: AuditOrderRequest): Promise<OrderRe
   return handleResponse<OrderResponse>(res)
 }
 
+export async function createAccessibilityAudit(data: import("./types").AccessibilityAuditRequest): Promise<{ audit_id: string, detail: string }> {
+  const res = await fetch(`${BASE}/api/audit/accessibility/initiate`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({
+      url: data.url,
+      client_id: data.client_id,
+      is_testing: data.is_testing,
+      is_bundled: data.is_bundled
+    }),
+  })
+  return handleResponse<{ audit_id: string, detail: string }>(res)
+}
+
+export async function fetchAccessibilityAudits(): Promise<any> {
+  const res = await fetch(`${BASE}/api/audit/accessibility/`, {
+    method: "GET",
+    headers: getHeaders(),
+  })
+  return handleResponse<any>(res)
+}
+
 export async function createPodcastOrder(data: PodcastOrderRequest): Promise<OrderResponse> {
   const token = localStorage.getItem("api_token") ?? "test"
   const formData = new FormData()

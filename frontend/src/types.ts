@@ -122,6 +122,14 @@ export interface AuditOrderRequest {
   is_testing?: boolean
 }
 
+export interface AccessibilityAuditRequest {
+  url: string
+  client_id?: string
+  is_testing?: boolean
+  is_bundled?: boolean
+  tier?: string
+}
+
 export interface PodcastOrderRequest {
   audio: File
   tier: "starter" | "standard" | "premium"

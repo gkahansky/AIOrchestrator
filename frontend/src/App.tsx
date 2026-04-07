@@ -9,6 +9,7 @@ import Ventures from "./pages/Ventures"
 import MarketingAudit from "./pages/ventures/MarketingAudit"
 import ContentStudio from "./pages/ventures/ContentStudio"
 import EtsyVenture from "./pages/ventures/EtsyVenture"
+import AccessibilityAudit from "./pages/ventures/AccessibilityAudit"
 import Finance from "./pages/Finance"
 import Settings from "./pages/Settings"
 import StrategyRoom from "./pages/StrategyRoom"
@@ -46,6 +47,7 @@ export default function App() {
             <Route path="gigs" element={<GigGenerator />} />
             <Route path="ventures" element={<Ventures />} />
             <Route path="ventures/marketing-audit" element={<MarketingAudit />} />
+            <Route path="ventures/accessibility-audit" element={<AccessibilityAudit />} />
             <Route path="ventures/content-studio" element={<ContentStudio />} />
             <Route path="ventures/etsy" element={<EtsyVenture />} />
             <Route path="finance" element={<Finance />} />

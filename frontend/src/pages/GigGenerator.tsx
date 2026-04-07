@@ -134,6 +134,7 @@ export default function GigGenerator() {
           >
             <option value="podcast_notes">EchoForge: Podcast Notes & Content</option>
             <option value="marketing_audit">EchoForge: Marketing Audit</option>
+            <option value="accessibility_audit">EchoForge: Accessibility WCAG Audit</option>
           </select>
         </div>
 

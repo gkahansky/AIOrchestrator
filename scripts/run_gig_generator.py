@@ -148,6 +148,7 @@ VENTURE_CONFIGS: dict[str, dict] = {
                 "revisions": 2,
                 "includes": [
                     "Everything in Full Audit",
+                    "Complete WCAG Accessibility Scan",
                     "30-day implementation roadmap",
                     "3 competitor comparisons",
                     "15–20 page branded PDF report",
@@ -175,6 +176,72 @@ VENTURE_CONFIGS: dict[str, dict] = {
             "website critique",
             "CRO audit",
             "marketing review",
+        ],
+    },
+    "accessibility_audit": {
+        "service_name": "WCAG Website Accessibility Audit \& VPAT Report",
+        "service_description": (
+            "Comprehensive automated WCAG 2.1 AA/AAA accessibility audit for your website. "
+            "Identify critical compliance risks before they become legal liabilities. "
+            "Scans for contrast, ARIA parity, structure, keyboard navigation, and more. "
+            "Delivered as a detailed, prioritized PDF action plan for your developers."
+        ),
+        "packages": [
+            {
+                "name": "Single Page Scan",
+                "price_usd": 40,
+                "delivery_days": 1,
+                "revisions": 0,
+                "includes": [
+                    "Home page or critical landing page",
+                    "Automated WCAG 2.1 AA scan",
+                    "Prioritized developer fix-list PDF",
+                ],
+            },
+            {
+                "name": "Standard Audit",
+                "price_usd": 120,
+                "delivery_days": 2,
+                "revisions": 1,
+                "includes": [
+                    "Up to 5 key user journeys/pages",
+                    "Automated WCAG 2.1 AA/AAA check",
+                    "Detailed PDF report",
+                    "Color contrast analysis",
+                ],
+            },
+            {
+                "name": "Premium + Strategy",
+                "price_usd": 250,
+                "delivery_days": 3,
+                "revisions": 2,
+                "includes": [
+                    "Complete site scan (up to 15 pages)",
+                    "Automated WCAG 2.1 AA/AAA check",
+                    "Strategic risk assessment",
+                    "Prioritized 30-day remediation roadmap",
+                ],
+            },
+        ],
+        "target_audience": (
+            "Business owners, agencies, and developers needing to ensure public-facing "
+            "websites meet ADA/WCAG compliance before scaling traffic or facing liability."
+        ),
+        "key_benefits": [
+            "Identify hidden accessibility flaws that block disabled users",
+            "Clear technical instructions for developers to fix violations",
+            "Reduce risk of ADA compliance lawsuits",
+            "Improve overall SEO and site usability",
+            "Executive-friendly scorecard and detailed technical breakdown",
+        ],
+        "keywords": [
+            "accessibility audit",
+            "WCAG audit",
+            "ADA compliance",
+            "website audit",
+            "ARIA check",
+            "web accessibility",
+            "accessibility report",
         ],
     },
 }

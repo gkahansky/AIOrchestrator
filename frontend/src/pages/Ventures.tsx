@@ -12,6 +12,15 @@ interface VentureCard {
 
 const ventures: VentureCard[] = [
   {
+    name: "Accessibility Audit",
+    description: "EchoForge — automated WCAG scan & heuristic reporting",
+    to: "/ventures/accessibility-audit",
+    icon: "accessibility_new",
+    color: "text-secondary",
+    bgColor: "bg-surface-variant",
+    status: "active",
+  },
+  {
     name: "Marketing Audit",
     description: "EchoForge — website SEO & marketing audit pipeline",
     to: "/ventures/marketing-audit",

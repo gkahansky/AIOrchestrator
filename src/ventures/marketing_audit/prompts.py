@@ -38,7 +38,7 @@ def build_audit_prompt(order: dict, scraped: dict) -> str:
     target = scraped.get("target", {})
     competitors = scraped.get("competitors", [])
 
-    scraped_summary = _summarise_scraped(target, competitors)
+    scraped_summary = _summarise_scraped(target, competitors, scraped.get("accessibility_audit", {}))
     client_context_block = _build_client_context(order)
 
     # Tier controls OUTPUT SCOPE only — not scoring depth.
@@ -46,7 +46,7 @@ def build_audit_prompt(order: dict, scraped: dict) -> str:
     tier_output_scope = {
         "snapshot": """\
 OUTPUT SCOPE — Snapshot tier:
-- categories: score, key_finding, AND details for all 6 dimensions (always required)
+- categories: score, key_finding, AND details for all 7 dimensions (always required)
 - findings: all issues found (8-15 items across all severity levels)
 - quick_wins: 5-7 specific actions
 - medium_term: leave as empty array []
@@ -57,7 +57,7 @@ OUTPUT SCOPE — Snapshot tier:
 """,
         "full": """\
 OUTPUT SCOPE — Full Audit tier:
-- categories: score, key_finding, AND details for all 6 dimensions (always required)
+- categories: score, key_finding, AND details for all 7 dimensions (always required)
 - findings: all issues found (8-15 items)
 - quick_wins: 5-7 specific actions
 - medium_term: 4-6 actions (1-3 month horizon)
@@ -68,7 +68,7 @@ OUTPUT SCOPE — Full Audit tier:
 """,
         "premium": """\
 OUTPUT SCOPE — Audit + Strategy tier:
-- categories: score, key_finding, AND details for all 6 dimensions (always required)
+- categories: score, key_finding, AND details for all 7 dimensions (always required)
 - findings: all issues found (10-18 items)
 - quick_wins: 5-7 specific actions
 - medium_term: 4-6 actions (1-3 month horizon)
@@ -94,6 +94,7 @@ suggestions, and real metric targets where possible.
     "SEO & Discoverability":   {"score": 0-100, "key_finding": "string", "details": "string — 2-3 paragraphs"},
     "Competitive Positioning": {"score": 0-100, "key_finding": "string", "details": "string — 2-3 paragraphs"},
     "Brand & Trust":           {"score": 0-100, "key_finding": "string", "details": "string — 2-3 paragraphs"},
+    "Accessibility & UX":      {"score": 0-100, "key_finding": "string", "details": "string — Include WCAG 2.1 summary based directly on the provided scrape data, outline specific violations to give remediation steps."},
     "Growth & Strategy":       {"score": 0-100, "key_finding": "string", "details": "string — 2-3 paragraphs"}
   },
   "findings": [
@@ -234,7 +235,7 @@ def _extract_brand(url: str) -> str:
     return host.split(".")[0].title()
 
 
-def _summarise_scraped(target: dict, competitors: list) -> str:
+def _summarise_scraped(target: dict, competitors: list, accessibility: dict = None) -> str:
     """Compact summary of scraped data to keep prompt size manageable."""
     analysis = target.get("analysis", {})
 
@@ -272,6 +273,13 @@ def _summarise_scraped(target: dict, competitors: list) -> str:
         f"OG tags: {list(seo.get('og_tags', {}).keys())}",
     ]
 
+    if accessibility and "wcag_score" in accessibility:
+        lines.append(f"\n--- ACCESSIBILITY AUDIT (WCAG 2.1) ---")
+        lines.append(f"WCAG Compliance Score: {accessibility.get('wcag_score')}/100")
+        lines.append(f"Total Violations: {len(accessibility.get('violations', []))}")
+        lines.append(f"Top Violations: {[v.get('id') for v in accessibility.get('violations', [])[:5]]}")
+        lines.append(f"Incomplete/Needs Review: {len(accessibility.get('incomplete', []))}")
+
     if competitors:
         lines.append("\n--- COMPETITORS ---")
         for comp in competitors:
@@ -292,3 +300,9 @@ def _summarise_scraped(target: dict, competitors: list) -> str:
             )
 
     return "\n".join(lines)
+
+
+
+
+
+

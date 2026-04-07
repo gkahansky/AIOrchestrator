@@ -153,6 +153,8 @@ def run_order(order: dict, output_dir: str | None = None) -> dict:
 # --- Phase implementations ----------------------------------------------------
 
 def _run_phase1_scrape(order: dict, work_dir: Path) -> dict:
+    import asyncio
+    from aiplatform.skills.audit.accessibility_scan import run_accessibility_scan
     tier = order["tier"]
     url = order["url"]
     competitor_urls = order.get("competitor_urls", [])
@@ -164,6 +166,18 @@ def _run_phase1_scrape(order: dict, work_dir: Path) -> dict:
         print(f"    + {len(competitor_urls)} competitor(s): {', '.join(competitor_urls)}")
 
     result = scrape_website(url, competitor_urls=competitor_urls or None)
+
+    # Automatically bundle Accessibility Audit info if the user bought 'premium' tier
+    if tier == "premium":
+        print(f"    + Running accessibility scan for Premium Tier...")
+        try:
+            a11y_result = asyncio.run(run_accessibility_scan(url))
+            result["accessibility_audit"] = a11y_result
+            print(f"    OK Accessibility Scan completed (Score: {a11y_result.get('wcag_score')}/100)")
+        except Exception as e:
+            print(f"    WARN: Accessibility scan failed: {e}")
+            result["accessibility_audit"] = {"error": str(e)}
+
     print(f"    OK Scraped target + {len(result.get('competitors', []))} competitor(s)")
     return result
 

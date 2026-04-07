@@ -35,20 +35,22 @@ TIERS = {
 
 # ─── Scoring weights (must sum to 1.0) ────────────────────────────────────────
 DIMENSION_WEIGHTS = {
-    "Content & Messaging":    0.25,
+    "Content & Messaging":    0.20,
     "Conversion Optimization": 0.20,
     "SEO & Discoverability":  0.20,
     "Competitive Positioning": 0.15,
     "Brand & Trust":          0.10,
+    "Accessibility & UX":     0.05,
     "Growth & Strategy":      0.10,
 }
 
 DIMENSION_WEIGHT_LABELS = {
-    "Content & Messaging":    "25%",
+    "Content & Messaging":    "20%",
     "Conversion Optimization": "20%",
     "SEO & Discoverability":  "20%",
     "Competitive Positioning": "15%",
     "Brand & Trust":          "10%",
+    "Accessibility & UX":     "5%",
     "Growth & Strategy":      "10%",
 }
 

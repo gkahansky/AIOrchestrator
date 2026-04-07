@@ -450,7 +450,9 @@ def run_audit_order(self, order: dict) -> dict:
 
     except Exception as exc:
         _mark_failed(order_id, "marketing_audit", str(exc))
-        if self.request.retries < self.max_retries:
+        # Scrape failures are deterministic — retrying the same blocked URL wastes time.
+        is_scrape_failure = "Could not fetch page" in str(exc) or "Failed to scrape" in str(exc)
+        if not is_scrape_failure and self.request.retries < self.max_retries:
             raise self.retry(exc=exc, countdown=120)
         _slack_alert_failure("marketing_audit", order_id, exc)
         raise

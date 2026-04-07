@@ -159,16 +159,16 @@ export default function Dashboard() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {kpis.map((k) => (
           <KpiCard key={k.label} label={k.label} value={k.value} icon={k.icon} loading={dashLoading} />
         ))}
       </div>
 
       {/* Main grid */}
-      <div className="grid grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
         {/* Review Queue */}
-        <div className="col-span-8 bg-surface-container-lowest rounded-xl shadow-float overflow-hidden">
+        <div className="md:col-span-8 bg-surface-container-lowest rounded-xl shadow-float overflow-hidden">
           <div className="px-5 py-4 border-b border-outline-variant/15 flex items-center justify-between">
             <h2 className="font-headline font-bold text-base text-on-surface">Review Queue</h2>
             {reviewQueue.length > 0 && (
@@ -212,7 +212,7 @@ export default function Dashboard() {
         </div>
 
         {/* System Health */}
-        <div className="col-span-4 bg-surface-container-lowest rounded-xl shadow-float overflow-hidden">
+        <div className="md:col-span-4 bg-surface-container-lowest rounded-xl shadow-float overflow-hidden">
           <div className="px-5 py-4 border-b border-outline-variant/15 flex items-center justify-between">
             <h2 className="font-headline font-bold text-base text-on-surface">System Health</h2>
             {health && <HealthDot status={health.status} />}

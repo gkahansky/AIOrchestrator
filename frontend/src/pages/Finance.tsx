@@ -51,7 +51,7 @@ export default function Finance() {
             <p className="text-xs font-label text-on-surface-variant mt-0.5">{data.period}</p>
           )}
         </div>
-        <div className="grid grid-cols-4 divide-x divide-outline-variant/10">
+        <div className="grid grid-cols-2 md:grid-cols-4 divide-outline-variant/10 divide-y md:divide-y-0 md:divide-x">
           {isLoading ? (
             Array(4).fill(null).map((_, i) => (
               <div key={i} className="px-6 py-5">
@@ -86,7 +86,7 @@ export default function Finance() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Revenue by Venture */}
         <div className="bg-surface-container-lowest rounded-xl overflow-hidden" style={{ boxShadow: "0px 20px 40px rgba(19,27,46,0.06)" }}>
           <div className="px-5 py-4 border-b border-outline-variant/15">

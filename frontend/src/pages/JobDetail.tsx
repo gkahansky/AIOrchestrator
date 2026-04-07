@@ -150,7 +150,7 @@ export default function JobDetail() {
     return (
       <div className="space-y-6">
         <div className="h-8 w-64 bg-surface-dim rounded animate-pulse" />
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-32 bg-surface-container-lowest rounded-xl animate-pulse" />
           ))}
@@ -189,7 +189,7 @@ export default function JobDetail() {
       </div>
 
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
           <div className="flex items-center gap-3 mb-1">
             <h1 className="font-headline font-bold text-2xl text-on-surface">
@@ -231,7 +231,7 @@ export default function JobDetail() {
       </div>
 
       {/* Meta cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-surface-container-lowest rounded-xl p-4 shadow-float">
           <p className="text-[11px] font-label font-medium uppercase tracking-widest text-on-surface-variant mb-1">
             Created
@@ -252,9 +252,9 @@ export default function JobDetail() {
         </div>
       </div>
 
-      <div className="grid grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
         {/* Phase Timeline */}
-        <div className="col-span-5 bg-surface-container-lowest rounded-xl shadow-float overflow-hidden">
+        <div className="md:col-span-5 bg-surface-container-lowest rounded-xl shadow-float overflow-hidden">
           <div className="px-5 py-4 border-b border-outline-variant/15">
             <h2 className="font-headline font-bold text-sm text-on-surface">Pipeline Timeline</h2>
           </div>
@@ -303,7 +303,7 @@ export default function JobDetail() {
         </div>
 
         {/* Input / Output data */}
-        <div className="col-span-7 space-y-4">
+        <div className="md:col-span-7 space-y-4">
           {resourceLinks.length > 0 && (
             <div className="bg-surface-container-lowest rounded-xl shadow-float overflow-hidden">
               <div className="px-5 py-4 border-b border-outline-variant/15">

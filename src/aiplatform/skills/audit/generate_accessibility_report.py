@@ -69,6 +69,35 @@ def _get_wcag_criteria(tags: list[str], rule_id: str) -> str:
                 return f"{criteria[0]}.{criteria[1]}.{criteria[2:]}"
     return rule_id
 
+import re
+def _generate_compliant_snippet(rule_id: str, html_code: str, default_summary: str) -> tuple[str, str]:
+    """Returns (compliant_code_str, explanation) if possible, otherwise (None, default_summary)."""
+    if "color-contrast" in rule_id:
+        return None, default_summary
+        
+    html_lower = html_code.lower()
+    
+    if rule_id == "image-alt" and "<img" in html_lower:
+        fixed = re.sub(r'<img([^>]*)>', r'<img\1 alt="Appropriate descriptive text">', html_code, flags=re.IGNORECASE)
+        # Avoid double alt if it existed but was empty
+        fixed = re.sub(r' alt=""', '', fixed, flags=re.IGNORECASE)
+        if fixed != html_code: return fixed, "Provide a descriptive alt attribute for the image."
+        
+    elif rule_id == "button-name" and "<button" in html_lower:
+        if ">" in html_code:
+            fixed = re.sub(r'<button([^>]*)>(.*?)</button>', r'<button\1 aria-label="Descriptive action">\2</button>', html_code, flags=re.IGNORECASE)
+            return fixed, "Ensure standard buttons or icon buttons have a programmatic name via aria-label or visible text."
+            
+    elif rule_id == "link-name" and "<a " in html_lower:
+        fixed = re.sub(r'<a([^>]*)>(.*?)</a>', r'<a\1>Descriptive link text</a>', html_code, flags=re.IGNORECASE)
+        return fixed, "Ensure links have discernible text that describes the destination."
+
+    elif rule_id == "html-has-lang" and "<html" in html_lower:
+        fixed = re.sub(r'<html([^>]*)>', r'<html\1 lang="en">', html_code, flags=re.IGNORECASE)
+        return fixed, "Add a lang attribute to the root html element."
+        
+    return None, default_summary
+
 # Map severity to CSS classes matching DESIGN.md
 SEV_CLASSES = {
     "Critical": "bg-error/10 text-error",
@@ -157,7 +186,16 @@ def generate_accessibility_report(audit_data: dict, output_path: str, tier: str 
     for (rule_id, rule_desc), cnt in sorted(violation_summary.items(), key=lambda x: x[1]["Total"], reverse=True):
         pct = (cnt["Total"] / total_instances * 100) if total_instances > 0 else 0
         desc_esc = _html_escape(rule_desc)
-        brk = f"C:{cnt['Critical']} H:{cnt['High']} M:{cnt['Medium']} L:{cnt['Low']}"
+        
+        brk = f"""
+        <div class="text-left inline-block text-[9px] leading-tight space-y-0.5">
+            <div class="text-error font-bold">Critical: {cnt['Critical']}</div>
+            <div class="text-tertiary font-bold">High: {cnt['High']}</div>
+            <div class="text-primary font-bold">Medium: {cnt['Medium']}</div>
+            <div class="text-on-surface-variant font-bold">Low: {cnt['Low']}</div>
+        </div>
+        """
+        
         overview_table_html += f"""
         <tr class="bg-surface-container-lowest">
             <td class="px-8 py-6">
@@ -166,7 +204,9 @@ def generate_accessibility_report(audit_data: dict, output_path: str, tier: str 
             </td>
             <td class="px-8 py-6 text-center text-sm font-medium text-on-surface">{pct:.1f}%</td>
             <td class="px-8 py-6 text-center text-sm font-bold text-primary">{cnt["Total"]}</td>
-            <td class="px-8 py-6 text-center font-mono text-[10px] text-on-surface-variant">{brk}</td>
+            <td class="px-8 py-6 text-center font-mono">
+                {brk}
+            </td>
         </tr>
         """
         
@@ -197,13 +237,38 @@ def generate_accessibility_report(audit_data: dict, output_path: str, tier: str 
     deepdive_html = ""
     for item in visible_violations:
         sev = item["severity"]
+        rule_id = item["rule_id"]
         sev_class = SEV_CLASSES.get(sev, SEV_CLASSES["Medium"])
         wcag_raw = item["wcag_criteria"]
         wcag_label, wcag_link = WCAG_MAP.get(wcag_raw, (f"{wcag_raw} (WCAG)", "https://www.w3.org/WAI/standards-guidelines/wcag/"))
         desc = _html_escape(item["description"])
         target = _html_escape(item["target"])
         html_code = _html_escape(item["html"])
-        remediation = _html_escape(item["failureSummary"]).replace("\\n", "<br/>")
+        raw_remediation = item["failureSummary"]
+        remediation_text = _html_escape(raw_remediation).replace("\\n", "<br/>")
+
+        compliant_code, updated_summary = _generate_compliant_snippet(rule_id, item["html"], raw_remediation)
+        
+        remediation_html = ""
+        if compliant_code:
+            remediation_desc = _html_escape(updated_summary)
+            remediation_code_esc = _html_escape(compliant_code)
+            remediation_html = f"""
+                        <div class="bg-surface-container-highest/50 p-4 rounded-lg text-sm text-on-surface leading-relaxed">
+                            {remediation_desc}
+                        </div>
+                        <h4 class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mt-4 mb-2">Compliant Example</h4>
+                        <div class="bg-inverse-surface text-inverse-on-surface p-4 rounded-lg font-mono text-xs overflow-x-auto border border-primary/20">
+                            <div class="mb-2 text-primary-fixed-dim">// Compliant markup</div>
+                            <div class="mb-2 whitespace-pre-wrap">{remediation_code_esc}</div>
+                        </div>
+            """
+        else:
+            remediation_html = f"""
+                        <div class="bg-surface-container-highest/50 p-4 rounded-lg text-sm text-on-surface leading-relaxed">
+                            {remediation_text}
+                        </div>
+            """
 
         # Removed 'page-break', decreased padding 12->8, changed gap-6->gap-4 to increase vertical space per item
         deepdive_html += f"""
@@ -230,9 +295,7 @@ def generate_accessibility_report(audit_data: dict, output_path: str, tier: str 
                     </div>
                     <div>
                         <h4 class="text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">Remediation Instruction</h4>
-                        <div class="bg-surface-container-highest/50 p-4 rounded-lg text-sm text-on-surface leading-relaxed">
-                            {remediation}
-                        </div>
+                        {remediation_html}
                     </div>
                 </div>
             </div>

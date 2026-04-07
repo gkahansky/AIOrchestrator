@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Accessibility Report - {{ url }}</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "secondary-container": "#d5e3fc",
+                        "inverse-surface": "#263143",
+                        "surface-dim": "#cfdaf2",
+                        "on-primary-fixed-variant": "#2c3c9e",
+                        "primary-fixed-dim": "#bbc3ff",
+                        "primary-container": "#3949ab",
+                        "on-tertiary-fixed-variant": "#733500",
+                        "on-primary": "#ffffff",
+                        "tertiary-fixed-dim": "#ffb689",
+                        "surface-container-high": "#dee8ff",
+                        "on-error-container": "#93000a",
+                        "primary-fixed": "#dee0ff",
+                        "tertiary-container": "#863f00",
+                        "error-container": "#ffdad6",
+                        "outline": "#767684",
+                        "on-primary-container": "#bbc3ff",
+                        "error": "#ba1a1a",
+                        "background": "#f9f9ff",
+                        "surface-bright": "#f9f9ff",
+                        "surface-container": "#e7eeff",
+                        "secondary": "#515f74",
+                        "on-secondary-container": "#57657a",
+                        "surface-container-highest": "#d8e3fb",
+                        "on-error": "#ffffff",
+                        "surface-tint": "#4555b7",
+                        "tertiary": "#632d00",
+                        "outline-variant": "#c6c5d4",
+                        "on-surface": "#111c2d",
+                        "surface": "#f9f9ff",
+                        "inverse-on-surface": "#ecf1ff",
+                        "secondary-fixed": "#d5e3fc",
+                        "tertiary-fixed": "#ffdbc7",
+                        "on-tertiary-fixed": "#311300",
+                        "on-secondary": "#ffffff",
+                        "on-primary-fixed": "#000e5e",
+                        "primary": "#1e3093",
+                        "surface-container-lowest": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "on-tertiary-container": "#ffb78a",
+                        "on-surface-variant": "#454652",
+                        "on-secondary-fixed-variant": "#3a485b",
+                        "surface-container-low": "#f0f3ff",
+                        "inverse-primary": "#bbc3ff",
+                        "on-background": "#111c2d",
+                        "secondary-fixed-dim": "#b9c7df",
+                        "on-secondary-fixed": "#0d1c2e",
+                        "surface-variant": "#d8e3fb"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "fontFamily": {
+                        "headline": ["Manrope"],
+                        "body": ["Manrope"],
+                        "label": ["Manrope"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Manrope', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .chart-dial {
+            background: conic-gradient(from 180deg at 50% 50%, #1e3093 0deg, #1e3093 {{ dial_deg }}deg, #e7eeff {{ dial_deg }}deg, #e7eeff 360deg);
+        }
+        body {
+            min-height: max(884px, 100dvh);
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        .page-break { page-break-after: always; }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface selection:bg-primary-container selection:text-on-primary-container">
+<!-- Top Navigation Anchor (Shared Component) -->
+<header class="bg-slate-50 sticky top-0 z-50 transition-colors duration-300">
+<div class="flex justify-between items-center w-full px-8 py-6 max-w-5xl mx-auto">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-indigo-700" data-icon="description">description</span>
+<span class="text-xl font-black text-indigo-900 tracking-tight">{{ title_prefix }}</span>
+</div>
+<div class="flex items-center gap-6">
+<span class="font-manrope text-xs uppercase tracking-widest text-slate-500">{{ formatted_date }}</span>
+</div>
+</div>
+<div class="bg-slate-100 h-[1px] w-full"></div>
+</header>
+<main class="max-w-5xl mx-auto px-8 pt-12 pb-24">
+<!-- Report Header Section -->
+<section class="mb-20">
+<h1 class="text-6xl font-extrabold tracking-tighter text-on-surface mb-4">Accessibility Report</h1>
+<p class="text-xl text-on-surface-variant font-light max-w-2xl leading-relaxed">
+    A comprehensive analytical audit of digital infrastructure compliance visually following WCAG standards for <strong>{{ url }}</strong>.
+</p>
+</section>
+<!-- Executive Summary Section (Bento Style) -->
+<section class="mb-32">
+<h2 class="text-xs font-bold uppercase tracking-[0.2em] text-primary mb-12 flex items-center gap-2">
+<span class="w-8 h-[2px] bg-primary"></span> 01 Executive Summary
+</h2>
+<div class="grid grid-cols-1 md:grid-cols-12 gap-8">
+<!-- Score Dial Card -->
+<div class="md:col-span-5 bg-surface-container-low p-10 rounded-xl flex flex-col items-center justify-center text-center">
+<div class="relative w-64 h-64 mb-8">
+<div class="chart-dial w-full h-full rounded-full flex items-center justify-center p-4">
+<div class="bg-surface-container-low w-full h-full rounded-full flex flex-col items-center justify-center shadow-inner">
+<span class="text-6xl font-black text-on-surface">{{ overall_score }}</span>
+<span class="text-xs uppercase tracking-widest text-on-surface-variant">Composite Score</span>
+</div>
+</div>
+</div>
+<div class="space-y-2">
+<h3 class="text-2xl font-bold text-on-surface">{{ compliance_status }}</h3>
+<p class="text-on-surface-variant text-sm">{{ compliance_description }}</p>
+</div>
+</div>
+<!-- Compliance Narrative & Severity -->
+<div class="md:col-span-7 flex flex-col gap-8">
+<div class="bg-surface-container-highest p-8 rounded-xl border-l-4 border-primary">
+<h4 class="text-lg font-bold mb-4">Audit Result</h4>
+<p class="text-on-surface-variant leading-relaxed">
+    During the automated scan of this URL, {{ violation_rules_count }} unique accessibility rules were flagged across {{ violation_instances_count }} separate instances.
+</p>
+</div>
+<div class="grid grid-cols-4 gap-4">
+<div class="bg-surface-container-high p-6 rounded-lg text-center">
+<span class="block text-3xl font-black text-error mb-1">{{ count_critical }}</span>
+<span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Critical</span>
+</div>
+<div class="bg-surface-container-high p-6 rounded-lg text-center">
+<span class="block text-3xl font-black text-tertiary mb-1">{{ count_high }}</span>
+<span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">High</span>
+</div>
+<div class="bg-surface-container-high p-6 rounded-lg text-center">
+<span class="block text-3xl font-black text-primary mb-1">{{ count_medium }}</span>
+<span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Medium</span>
+</div>
+<div class="bg-surface-container-high p-6 rounded-lg text-center">
+<span class="block text-3xl font-black text-secondary mb-1">{{ count_low }}</span>
+<span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Low</span>
+</div>
+</div>
+<p class="text-xs text-on-surface-variant">Additional Context: {{ incomplete_count }} incomplete automated checks requiring manual review, {{ passes_count }} successful automated checks.</p>
+</div>
+</div>
+</section>
+
+<!-- Compliance Checklist Section -->
+<section class="mb-32 page-break">
+<h2 class="text-xs font-bold uppercase tracking-[0.2em] text-primary mb-12 flex items-center gap-2">
+<span class="w-8 h-[2px] bg-primary"></span> 02 Compliance Categories
+</h2>
+<!-- Detailed Findings (HTML Rendered directly from Python list of dicts) -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-12">
+{{ checklist_html }}
+</div>
+</section>
+
+<!-- Overview Findings Section -->
+<section class="mb-32">
+<div class="flex justify-between items-baseline mb-12">
+<h2 class="text-xs font-bold uppercase tracking-[0.2em] text-primary flex items-center gap-2">
+<span class="w-8 h-[2px] bg-primary"></span> 03 Violation Overview
+</h2>
+</div>
+<div class="overflow-hidden rounded-xl bg-surface-container-low">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-highest">
+<th class="px-8 py-5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Violation</th>
+<th class="px-8 py-5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant text-center">Pct %</th>
+<th class="px-8 py-5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant text-center">Count</th>
+<th class="px-8 py-5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant text-center">Breakdown</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/10">
+{{ overview_table_html }}
+</tbody>
+</table>
+</div>
+</section>
+
+<!-- Detailed Deep-dive Section -->
+<section class="mb-12">
+<div class="flex justify-between items-baseline mb-12">
+<h2 class="text-xs font-bold uppercase tracking-[0.2em] text-primary flex items-center gap-2">
+<span class="w-8 h-[2px] bg-primary"></span> 04 Detailed Findings
+</h2>
+</div>
+<div class="space-y-8">
+{{ deepdive_html }}
+</div>
+</section>
+</main>
+<!-- Footer Component (Shared) -->
+<footer class="bg-white border-t border-slate-100 mt-20">
+<div class="flex justify-between items-center w-full px-8 py-4 max-w-5xl mx-auto mt-auto">
+<div class="font-bold text-indigo-900 font-manrope text-xs uppercase tracking-widest">
+    © 2024-2026 Echoforge Accessibility Audit
+</div>
+<div class="flex gap-8">
+<span class="font-manrope text-xs uppercase tracking-widest text-slate-500">Confidential Auto-Generated Report</span>
+</div>
+</div>
+</footer>
+</body></html>

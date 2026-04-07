@@ -120,22 +120,18 @@ def generate_accessibility_report(audit_data: dict, output_path: str, tier: str 
                 _s(f"{hidden_violations} additional rule-level findings are hidden in this sample report."),
             )
             for _ in range(min(hidden_violations, 6)):
-                pdf.cell(_full_width(pdf), 5, _s("[ REDACTED FOR SAMPLE PREVIEW ]"), new_x="LMARGIN", new_y="NEXT")
+                pdf.multi_cell(_full_width(pdf), 5, _s("[ REDACTED FOR SAMPLE PREVIEW ]"))
             pdf.ln(2)
 
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 8, _s("Next Step" if is_sample else "Review Note"), new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("Helvetica", "", 10)
-    pdf.multi_cell(
-        0,
-        6,
-        _s(
-            "This report is generated automatically and should be human-reviewed before client delivery. "
-            "After approval, the client receives the Drive link to the final document."
-            if not is_sample
-            else "This sample is designed for lead generation: a few real issues are visible, while the full set stays censored until the client upgrades."
-        ),
-    )
+    if is_sample:
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.cell(0, 8, _s("Next Step"), new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "", 10)
+        pdf.multi_cell(
+            0,
+            6,
+            _s("This sample is designed for lead generation: a few real issues are visible, while the full set stays censored until the client upgrades."),
+        )
 
     pdf.output(str(output))
     return {

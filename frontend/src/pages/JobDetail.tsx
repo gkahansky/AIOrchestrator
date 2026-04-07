@@ -200,6 +200,16 @@ export default function JobDetail() {
           <p className="text-sm font-label text-on-surface-variant font-mono">{job.id}</p>
         </div>
         <div className="flex items-center gap-3">
+          {isReviewPending && !actionDone && (
+            <button
+              onClick={handleApprove}
+              disabled={approve.isPending}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-label font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-60"
+            >
+              <span className="material-symbols-outlined text-[14px]">check_circle</span>
+              {approve.isPending ? "Approving…" : "Approve"}
+            </button>
+          )}
           {!["delivered", "published", "completed", "approved", "failed", "cancelled", "rejected"].includes(job.status) && !actionDone && (
             <button
               onClick={handleCancel}
@@ -390,14 +400,6 @@ export default function JobDetail() {
                 />
               </div>
               <div className="flex gap-3">
-                <button
-                  onClick={handleApprove}
-                  disabled={approve.isPending}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-label font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-60"
-                >
-                  <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                  {approve.isPending ? "Approving…" : "Approve"}
-                </button>
                 <button
                   onClick={handleReject}
                   disabled={reject.isPending}

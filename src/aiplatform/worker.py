@@ -974,26 +974,62 @@ def run_accessibility_scan_job(audit_id: str, url: str) -> dict:
     from aiplatform.database.session import SessionLocal
     from aiplatform.database.models import AccessibilityAudit, Job
     
-    results = asyncio.run(run_accessibility_scan(url))
     db = SessionLocal()
+    audit = None
+    job = None
     try:
         audit = db.query(AccessibilityAudit).filter(AccessibilityAudit.audit_id == audit_id).first()
-        job = db.query(Job).filter(Job.venture == "accessibility_audit", Job.order["audit_id"].astext == audit_id).first()
-        
+        job = db.query(Job).filter(
+            Job.venture == "accessibility_audit",
+            Job.input_data["audit_id"].astext == audit_id,
+        ).first()
+        if audit:
+            audit.status = "Scanning"
+        if job:
+            job.status = "running"
+            current_output = dict(job.output_data or {})
+            current_output["status"] = "running"
+            job.output_data = current_output
+        db.commit()
+
+        results = asyncio.run(run_accessibility_scan(url))
+        audit = db.query(AccessibilityAudit).filter(AccessibilityAudit.audit_id == audit_id).first()
+        job = db.query(Job).filter(
+            Job.venture == "accessibility_audit",
+            Job.input_data["audit_id"].astext == audit_id,
+        ).first()
+
         if audit:
             audit.raw_axe_results = results
             audit.compliance_score = results.get("wcag_score")
             audit.status = "Completed"
-            if job:
-                job.status = "delivered"
-            db.commit()
+        if job:
+            current_output = dict(job.output_data or {})
+            current_output.update({
+                "audit_id": audit_id,
+                "url": url,
+                "wcag_score": results.get("wcag_score"),
+                "results": results,
+                "status": "delivered",
+            })
+            job.status = "delivered"
+            job.output_data = current_output
+        db.commit()
     except Exception as e:
         audit = db.query(AccessibilityAudit).filter(AccessibilityAudit.audit_id == audit_id).first()
-        job = db.query(Job).filter(Job.venture == "accessibility_audit", Job.order["audit_id"].astext == audit_id).first()
+        job = db.query(Job).filter(
+            Job.venture == "accessibility_audit",
+            Job.input_data["audit_id"].astext == audit_id,
+        ).first()
         if audit:
             audit.status = "Failed"
         if job:
+            current_output = dict(job.output_data or {})
+            current_output["status"] = "failed"
+            current_output["error"] = str(e)
             job.status = "failed"
+            job.error_message = str(e)
+            job.output_data = current_output
         db.commit()
         raise e
     finally:

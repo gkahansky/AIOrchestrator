@@ -43,9 +43,16 @@ Clicking **Find Leads** triggers a two-step flow:
 3. The edited prompt is passed as `search_prompt` to the Celery task, which uses it to qualify leads.
 
 **Channels searched:**
-- Reddit (public JSON API, no key required) — subreddits and keywords per venture
-- Web (SerpAPI — requires `SERPAPI_KEY` env var)
-- Listen Notes (podcast discovery — requires `LISTENNOTES_API_KEY` for `content_studio`)
+
+| Channel | Source | Key Required |
+|---|---|---|
+| Reddit | Public JSON API (`reddit.com/r/*/search.json`) | None |
+| Google | SerpAPI — buying-intent queries per venture | `SERPAPI_KEY` |
+| LinkedIn | Google `site:linkedin.com/posts OR site:linkedin.com/pulse` via SerpAPI | `SERPAPI_KEY` |
+| Hacker News | Algolia HN API (`hn.algolia.com/api/v1/search`) | None |
+| IndieHackers | Google `site:indiehackers.com` via SerpAPI | `SERPAPI_KEY` |
+| Fiverr | Scrapes `/requests/pending` using session cookie; falls back to Google `site:fiverr.com/requests` | `FIVERR_SESSION_COOKIE` (optional) |
+| Listen Notes | Podcast discovery for `content_studio` venture | `LISTENNOTES_API_KEY` |
 
 ### 3. Review Leads
 
@@ -153,6 +160,7 @@ New orders through the admin or other intake flows should upsert the Contact rec
 | `ANTHROPIC_API_KEY` | Claude API (Haiku for qualification/analysis, Sonnet for email composition) |
 | `SERPAPI_KEY` | Web search for leads |
 | `LISTENNOTES_API_KEY` | Podcast discovery (content_studio) |
+| `FIVERR_SESSION_COOKIE` | Scrape Fiverr buyer requests (optional — falls back to Google signals if unset) |
 | `RESEND_API_KEY` | Email sending via Resend |
 | `EMAIL_FROM` | Verified sender address |
 | `OUTREACH_SENDER_NAME` | Name shown in email sign-off (default: Gal) |

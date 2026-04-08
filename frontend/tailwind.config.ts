@@ -32,6 +32,7 @@ const config: Config = {
         "on-secondary": "#ffffff",
         "tertiary-container": "#9c4ddc",
         "on-error-container": "#93000a",
+        "surface-container-lowest": "#ffffff",
         "surface-container-low": "#f2f3ff",
         "on-background": "#131b2e",
         secondary: "#505f76",

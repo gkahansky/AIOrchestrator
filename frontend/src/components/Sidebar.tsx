@@ -57,7 +57,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 space-y-0.5">
+      <nav className="flex-1 overflow-y-auto px-3 space-y-0.5">
         {navItems.map((item) => (
           <NavLink
             key={item.to}

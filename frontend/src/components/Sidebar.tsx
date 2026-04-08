@@ -11,6 +11,7 @@ const navItems: NavItem[] = [
   { label: "Ventures", to: "/ventures", icon: "account_tree" },
   { label: "Gig Generator", to: "/gigs", icon: "storefront" },
   { label: "Strategy Room", to: "/strategy-room", icon: "psychology" },
+  { label: "Marketing", to: "/marketing", icon: "campaign" },
   { label: "Finance", to: "/finance", icon: "payments" },
   { label: "Settings", to: "/settings", icon: "settings" },
 ]

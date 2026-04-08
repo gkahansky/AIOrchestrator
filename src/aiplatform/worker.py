@@ -1163,3 +1163,146 @@ def deliver_accessibility_audit_job(job_id: str, review_notes: str | None = None
     finally:
         db.close()
 
+
+# ── Outreach tasks ─────────────────────────────────────────────────────────────
+
+@celery_app.task(bind=True, name="outreach.find_leads", max_retries=1)
+def run_find_leads(self, campaign_id: str, venture: str, max_leads: int = 20, channels: list | None = None) -> dict:
+    """
+    Search configured channels for potential customers and persist them as leads.
+    Skips duplicates by checking existing lead source_url in this campaign.
+    """
+    from aiplatform.skills.research.find_leads import find_leads
+    from aiplatform.database.models import Lead, OutreachCampaign
+    from aiplatform.database.session import SessionLocal
+    import uuid
+
+    db = SessionLocal()
+    try:
+        raw_leads = find_leads(venture, max_leads=max_leads, channels=channels)
+
+        # Deduplicate against existing leads in DB (by source_url)
+        campaign_uuid = uuid.UUID(campaign_id)
+        existing_urls = {
+            row[0] for row in db.query(Lead.source_url).filter(
+                Lead.campaign_id == campaign_uuid,
+                Lead.source_url.isnot(None),
+            ).all()
+        }
+
+        new_count = 0
+        for lead_data in raw_leads:
+            if lead_data.get("source_url") in existing_urls:
+                continue
+            l = Lead(
+                venture=lead_data["venture"],
+                source_channel=lead_data["source_channel"],
+                source_url=lead_data.get("source_url"),
+                name=lead_data.get("name"),
+                email=lead_data.get("email"),
+                website_url=lead_data.get("website_url"),
+                company=lead_data.get("company"),
+                notes=lead_data.get("notes"),
+                status="new",
+                campaign_id=campaign_uuid,
+            )
+            db.add(l)
+            new_count += 1
+
+        db.commit()
+        return {"campaign_id": campaign_id, "leads_found": len(raw_leads), "leads_added": new_count}
+
+    except Exception as exc:
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=60)
+        raise
+    finally:
+        db.close()
+
+
+@celery_app.task(bind=True, name="outreach.send", max_retries=1)
+def run_send_outreach(self, campaign_id: str, lead_ids: list | None = None, template_variant: str | None = None) -> dict:
+    """
+    Send approved outreach emails to leads in a campaign.
+    Distributes leads round-robin across approved template variants.
+    Only sends to leads with status='new' and a valid email.
+    """
+    from aiplatform.skills.comms.send_email import send_email
+    from aiplatform.database.models import Lead, OutreachTemplate, OutreachSend, OutreachCampaign
+    from aiplatform.database.session import SessionLocal
+    import uuid, os
+
+    db = SessionLocal()
+    try:
+        campaign_uuid = uuid.UUID(campaign_id)
+        campaign = db.get(OutreachCampaign, campaign_uuid)
+        if not campaign:
+            raise ValueError(f"Campaign {campaign_id} not found")
+
+        # Get approved templates
+        tq = db.query(OutreachTemplate).filter(
+            OutreachTemplate.campaign_id == campaign_uuid,
+            OutreachTemplate.approved == "approved",
+        )
+        if template_variant:
+            tq = tq.filter(OutreachTemplate.variant == template_variant)
+        templates = tq.all()
+        if not templates:
+            return {"error": "No approved templates found"}
+
+        # Get eligible leads
+        lq = db.query(Lead).filter(
+            Lead.campaign_id == campaign_uuid,
+            Lead.status == "new",
+            Lead.email.isnot(None),
+        )
+        if lead_ids:
+            lead_uuids = [uuid.UUID(lid) for lid in lead_ids]
+            lq = lq.filter(Lead.id.in_(lead_uuids))
+        leads = lq.all()
+
+        sent_count = 0
+        base_url = os.environ.get("RAILWAY_PUBLIC_URL", "https://api.planbadmin.com")
+
+        for i, lead in enumerate(leads):
+            template = templates[i % len(templates)]
+
+            # Inject tracking pixel into HTML
+            send_id = str(uuid.uuid4())
+            pixel_url = f"{base_url}/api/outreach/track/open/{send_id}"
+            body_html = template.body_html + f'\n<img src="{pixel_url}" width="1" height="1" style="display:none" />'
+
+            result = send_email(
+                to=lead.email,
+                subject=template.subject,
+                body_html=body_html,
+                body_text=template.body_text,
+            )
+
+            if result.get("error"):
+                lead.status = "new"  # keep as new, will retry
+                continue
+
+            # Record the send
+            send_record = OutreachSend(
+                id=uuid.UUID(send_id),
+                lead_id=lead.id,
+                template_id=template.id,
+                campaign_id=campaign_uuid,
+                message_id=result.get("message_id", ""),
+                status="sent",
+            )
+            db.add(send_record)
+            template.sends_count = (template.sends_count or 0) + 1
+            lead.status = "email_sent"
+            sent_count += 1
+
+        db.commit()
+        return {"campaign_id": campaign_id, "sent": sent_count, "total_leads": len(leads)}
+
+    except Exception as exc:
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=60)
+        raise
+    finally:
+        db.close()

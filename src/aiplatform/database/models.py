@@ -274,6 +274,120 @@ class Roadmap(Base):
 
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
+# ── Outreach ───────────────────────────────────────────────────────────────────
+
+LEAD_STATUS_ENUM = Enum(
+    "new", "email_sent", "opened", "replied", "converted", "not_interested",
+    name="lead_status_enum",
+)
+
+CAMPAIGN_STATUS_ENUM = Enum(
+    "draft", "active", "paused", "completed",
+    name="campaign_status_enum",
+)
+
+OUTREACH_VENTURE_ENUM = Enum(
+    "marketing_audit", "content_studio", "accessibility_audit",
+    name="outreach_venture_enum",
+)
+
+
+class Lead(Base):
+    """
+    A potential customer found via automated or manual research.
+    Tracks contact info, discovery source, and outreach status.
+    """
+    __tablename__ = "leads"
+
+    id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    venture        = Column(String(50), nullable=False, index=True)
+    source_channel = Column(String(100), nullable=False)   # reddit, web_search, linkedin, producthunt
+    source_url     = Column(String(2048), nullable=True)   # URL where they were found
+    name           = Column(String(255), nullable=True)
+    email          = Column(String(255), nullable=True, index=True)
+    website_url    = Column(String(2048), nullable=True)   # their website (for audit leads)
+    company        = Column(String(255), nullable=True)
+    notes          = Column(Text, nullable=True)           # AI-extracted context about them
+    status         = Column(String(50), nullable=False, default="new", index=True)
+    campaign_id    = Column(UUID(as_uuid=True), ForeignKey("outreach_campaigns.id", ondelete="SET NULL"), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    campaign = relationship("OutreachCampaign", back_populates="leads")
+    sends    = relationship("OutreachSend", back_populates="lead", cascade="all, delete-orphan")
+
+
+class OutreachCampaign(Base):
+    """
+    A named outreach campaign targeting a specific venture's audience.
+    Contains multiple A/B template variants.
+    """
+    __tablename__ = "outreach_campaigns"
+
+    id      = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    venture = Column(String(50), nullable=False, index=True)
+    name    = Column(String(255), nullable=False)
+    status  = Column(String(50), nullable=False, default="draft", index=True)
+    goal    = Column(Text, nullable=True)   # e.g. "Convert freelancers to podcast notes clients"
+
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    leads     = relationship("Lead", back_populates="campaign")
+    templates = relationship("OutreachTemplate", back_populates="campaign", cascade="all, delete-orphan")
+    sends     = relationship("OutreachSend", back_populates="campaign", cascade="all, delete-orphan")
+
+
+class OutreachTemplate(Base):
+    """
+    An email template variant within a campaign (A/B/C testing).
+    Tracks sends, opens, and replies per variant.
+    """
+    __tablename__ = "outreach_templates"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    campaign_id = Column(UUID(as_uuid=True), ForeignKey("outreach_campaigns.id", ondelete="CASCADE"), nullable=False, index=True)
+    variant     = Column(String(10), nullable=False)   # "A", "B", "C"
+    subject     = Column(String(500), nullable=False)
+    body_html   = Column(Text, nullable=False)
+    body_text   = Column(Text, nullable=True)
+    tone_notes  = Column(Text, nullable=True)          # notes on the tone/approach used
+    sends_count = Column(Integer, nullable=False, default=0)
+    opens_count = Column(Integer, nullable=False, default=0)
+    replies_count = Column(Integer, nullable=False, default=0)
+    approved    = Column(String(10), nullable=False, default="pending")  # pending, approved, rejected
+
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    campaign = relationship("OutreachCampaign", back_populates="templates")
+    sends    = relationship("OutreachSend", back_populates="template", cascade="all, delete-orphan")
+
+
+class OutreachSend(Base):
+    """
+    A record of one email sent to one lead using one template variant.
+    Tracks open and reply events for A/B analysis.
+    """
+    __tablename__ = "outreach_sends"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    lead_id     = Column(UUID(as_uuid=True), ForeignKey("leads.id", ondelete="CASCADE"), nullable=False, index=True)
+    template_id = Column(UUID(as_uuid=True), ForeignKey("outreach_templates.id", ondelete="CASCADE"), nullable=False, index=True)
+    campaign_id = Column(UUID(as_uuid=True), ForeignKey("outreach_campaigns.id", ondelete="CASCADE"), nullable=False, index=True)
+    message_id  = Column(String(255), nullable=True)   # Resend message ID for tracking
+    status      = Column(String(50), nullable=False, default="sent")  # sent, opened, replied, bounced
+
+    sent_at     = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    opened_at   = Column(DateTime(timezone=True), nullable=True)
+    replied_at  = Column(DateTime(timezone=True), nullable=True)
+
+    lead     = relationship("Lead", back_populates="sends")
+    template = relationship("OutreachTemplate", back_populates="sends")
+    campaign = relationship("OutreachCampaign", back_populates="sends")
+
+
 class AccessibilityAudit(Base):
     """
     Accessibility Audit Module (AAM) table storing raw Axe results and structured roadmap data.

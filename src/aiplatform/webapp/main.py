@@ -54,6 +54,7 @@ from aiplatform.webapp.routers.ventures import marketing_audit as ventures_audit
 from aiplatform.webapp.routers.ventures import content_studio as ventures_podcast
 from aiplatform.webapp.routers import accessibility as audit_accessibility
 from aiplatform.webapp.routers.public import sample as public_sample
+from aiplatform.webapp.routers import outreach as platform_outreach
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -130,6 +131,9 @@ def create_app() -> FastAPI:
     app.include_router(ventures_audit.router,   prefix="/api/ventures/marketing-audit",   tags=["marketing-audit"])
     app.include_router(ventures_podcast.router, prefix="/api/ventures/content-studio",    tags=["content-studio"])
     app.include_router(audit_accessibility.router,      prefix="/api/audit/accessibility",        tags=["accessibility"])     
+    # Outreach — lead discovery, campaign management, A/B email testing
+    app.include_router(platform_outreach.router, prefix="/api/outreach",                  tags=["outreach"])
+
     # Public (no auth) — free sample requests from echoforge.biz
     app.include_router(public_sample.router,    prefix="/api/sample",                     tags=["public"])    
     # Webhooks (Github, Stripe etc)

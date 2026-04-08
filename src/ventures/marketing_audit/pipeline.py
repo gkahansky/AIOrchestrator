@@ -322,17 +322,16 @@ def _run_phase6_deliver(order: dict) -> None:
 
 def _generate_pdf(report_data: dict, output_path: str) -> None:
     """
-    Call generate_pdf_report.py's generate_report() function from ai-marketing-claude.
-    Falls back to a plain-text PDF stub if reportlab / ai-marketing-claude is unavailable.
+    Call new Playwright-based generate_pdf_report from aiplatform skills.
+    Falls back to a plain-text PDF stub if Playwright is unavailable.
     """
     try:
-        scripts_path = _resolve_scripts_path()
-        if scripts_path not in sys.path:
-            sys.path.insert(0, scripts_path)
-        from generate_pdf_report import generate_report
-        generate_report(report_data, output_path)
-    except ImportError:
+        from aiplatform.skills.media.generate_marketing_audit_pdf import generate_pdf_report
+        generate_pdf_report(report_data, output_path)
+    except Exception as exc:
+        print(f"    WARN  Playwright generation failed: {exc}")
         _write_fallback_pdf(report_data, output_path)
+
 
 
 def _resolve_scripts_path() -> str:

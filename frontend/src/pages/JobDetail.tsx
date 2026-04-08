@@ -13,6 +13,7 @@ interface PhaseStep {
 interface ResourceLink {
   label: string
   url: string
+  icon: string
 }
 
 // Statuses where the current phase has actually finished (no spinner)
@@ -84,10 +85,10 @@ function asString(value: unknown): string {
 
 function buildResourceLinks(outputData: Record<string, unknown>): ResourceLink[] {
   const candidates: ResourceLink[] = [
-    { label: "Open Report", url: asString(outputData.drive_report_link) },
-    { label: "Open Drive Folder", url: asString(outputData.drive_folder_link) },
-    { label: "Open Google Doc", url: asString(outputData.gdoc_url) },
-    { label: "Open Sample PDF", url: asString(outputData.drive_sample_pdf_link) || asString(outputData.drive_sample_PDF_link) },
+    { label: "Open Document", url: asString(outputData.drive_report_link), icon: "description" },
+    { label: "Open Folder", url: asString(outputData.drive_folder_link), icon: "folder_open" },
+    { label: "Open Google Doc", url: asString(outputData.gdoc_url), icon: "description" },
+    { label: "Open Sample PDF", url: asString(outputData.drive_sample_pdf_link) || asString(outputData.drive_sample_PDF_link), icon: "description" },
   ]
 
   const seen = new Set<string>()
@@ -318,7 +319,7 @@ export default function JobDetail() {
                     rel="noreferrer"
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 text-primary text-sm font-label font-semibold hover:bg-primary/15 transition-colors"
                   >
-                    <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                    <span className="material-symbols-outlined text-[16px]">{link.icon}</span>
                     {link.label}
                   </a>
                 ))}
@@ -381,7 +382,7 @@ export default function JobDetail() {
                       rel="noreferrer"
                       className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-primary/20 text-primary text-sm font-label font-semibold hover:bg-primary/5 transition-colors"
                     >
-                      <span className="material-symbols-outlined text-[16px]">description</span>
+                      <span className="material-symbols-outlined text-[16px]">{link.icon}</span>
                       {link.label}
                     </a>
                   ))}

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 const API = import.meta.env.VITE_API_URL || "https://api.planbadmin.com"
@@ -63,10 +63,11 @@ function useCampaign(id: string | null) {
   })
 }
 
-function useLeads(campaignId: string | null) {
+function useLeads(campaignId: string | null, polling = false) {
   return useQuery({
     queryKey: ["leads", campaignId],
     enabled: !!campaignId,
+    refetchInterval: polling ? 3000 : false,
     queryFn: async () => {
       const r = await fetch(`${API}/api/outreach/leads?campaign_id=${campaignId}&page_size=100`, { headers: authHeader() })
       if (!r.ok) throw new Error(r.statusText)
@@ -348,15 +349,46 @@ function TemplateCard({
 
 // ── Campaign detail ───────────────────────────────────────────────────────────
 
+// Poll timeout: stop automatically after 2 minutes (Celery task won't run longer)
+const SEARCH_TIMEOUT_MS = 120_000
+
 function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDeleted: () => void }) {
   const qc = useQueryClient()
   const { data: campaign, isLoading } = useCampaign(campaignId)
-  const { data: leadsData } = useLeads(campaignId)
+  const [searchingLeads, setSearchingLeads] = useState(false)
+  const { data: leadsData } = useLeads(campaignId, searchingLeads)
   const { data: stats, refetch: refetchStats } = useStats(campaignId)
   const [activeTab, setActiveTab] = useState<"templates" | "leads" | "stats">("templates")
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [showFindLeads, setShowFindLeads] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const prevLeadCountRef = useRef<number>(0)
+  const stableCountSinceRef = useRef<number | null>(null)
+
+  // Auto-stop polling when lead count stops growing for 12s, or after hard timeout
+  useEffect(() => {
+    if (!searchingLeads) return
+    const currentCount = leadsData?.total ?? 0
+
+    if (currentCount !== prevLeadCountRef.current) {
+      prevLeadCountRef.current = currentCount
+      stableCountSinceRef.current = Date.now()
+    } else if (stableCountSinceRef.current && Date.now() - stableCountSinceRef.current > 12_000 && currentCount > 0) {
+      // Count hasn't changed for 12s and we have at least one lead — likely done
+      setSearchingLeads(false)
+    }
+  }, [leadsData?.total, searchingLeads])
+
+  function startSearchPolling() {
+    setSearchingLeads(true)
+    prevLeadCountRef.current = leadsData?.total ?? 0
+    stableCountSinceRef.current = null
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
+    searchTimeoutRef.current = setTimeout(() => setSearchingLeads(false), SEARCH_TIMEOUT_MS)
+  }
+
+  useEffect(() => () => { if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current) }, [])
 
   async function triggerAction(endpoint: string, body: object, actionKey: string) {
     setActionLoading(actionKey)
@@ -402,6 +434,7 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
           campaignId={campaignId}
           onClose={() => setShowFindLeads(false)}
           onTriggered={() => {
+            startSearchPolling()
             qc.invalidateQueries({ queryKey: ["leads", campaignId] })
             qc.invalidateQueries({ queryKey: ["campaign", campaignId] })
           }}
@@ -464,6 +497,23 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
             <span><strong className="text-on-surface">{campaign.open_rate}%</strong> open rate</span>
             <span><strong className="text-on-surface">{campaign.reply_rate}%</strong> reply rate</span>
           </div>
+
+          {/* Search-in-progress banner */}
+          {searchingLeads && (
+            <div className="flex items-center justify-between gap-3 mt-3 px-3 py-2.5 bg-primary/8 border border-primary/20 rounded-lg">
+              <div className="flex items-center gap-2 text-xs font-label text-primary">
+                <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
+                Searching for leads in the background — {leadsData?.total ?? 0} found so far. This page updates automatically.
+              </div>
+              <button
+                onClick={() => setSearchingLeads(false)}
+                className="text-primary/60 hover:text-primary transition-colors"
+                title="Dismiss (search continues in background)"
+              >
+                <span className="material-symbols-outlined text-[16px]">close</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Tabs */}

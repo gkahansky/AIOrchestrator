@@ -388,6 +388,44 @@ class OutreachSend(Base):
     campaign = relationship("OutreachCampaign", back_populates="sends")
 
 
+class Contact(Base):
+    """
+    Unified CRM contact list across all ventures.
+
+    Retention rules:
+      - status in (approached, inquired): auto-expire 12 months from last_activity_at
+      - status = purchased: keep forever
+      - status = unsubscribed: keep forever (to prevent re-contacting)
+
+    Cross-venture spam guard: before sending any email, look up email here.
+    If unsubscribed — never send. If recently approached — respect cooldown.
+    """
+    __tablename__ = "contacts"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email       = Column(String(255), nullable=False, unique=True, index=True)
+    name        = Column(String(255), nullable=True)
+    phone       = Column(String(50), nullable=True)
+    address     = Column(Text, nullable=True)
+    company     = Column(String(255), nullable=True)
+    website_url = Column(String(2048), nullable=True)
+
+    # approached | inquired | purchased | unsubscribed
+    status      = Column(String(50), nullable=False, default="approached", index=True)
+
+    # List of venture slugs this contact was approached from, e.g. ["marketing_audit"]
+    ventures_approached  = Column(JSONB, nullable=False, default=list)
+    # {venture_slug: "what they were shown / interested in"}
+    features_of_interest = Column(JSONB, nullable=True)
+
+    last_activity_at  = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    purchased_at      = Column(DateTime(timezone=True), nullable=True)
+    unsubscribed_at   = Column(DateTime(timezone=True), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
 class AccessibilityAudit(Base):
     """
     Accessibility Audit Module (AAM) table storing raw Axe results and structured roadmap data.

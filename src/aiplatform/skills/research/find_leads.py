@@ -185,10 +185,13 @@ def _search_listennotes(query: str, limit: int = 10) -> list[dict]:
 
 # ── Claude-powered lead extraction ────────────────────────────────────────────
 
-def _extract_lead_context(post: dict, venture: str) -> dict | None:
+def _extract_lead_context(post: dict, venture: str, search_prompt: str | None = None) -> dict | None:
     """
     Use Claude to decide if a Reddit post represents a real lead and extract context.
     Returns a lead dict or None if not a good fit.
+
+    If search_prompt is provided (user-reviewed criteria), it is injected into the
+    qualification prompt so the model applies the exact criteria the user approved.
     """
     import anthropic
 
@@ -200,8 +203,13 @@ def _extract_lead_context(post: dict, venture: str) -> dict | None:
         "accessibility_audit": "a WCAG accessibility audit service that scans websites for accessibility violations",
     }.get(venture, "a digital service")
 
-    prompt = f"""You are screening Reddit posts to find potential customers for {venture_pitch}.
+    criteria_block = f"""
+CAMPAIGN SEARCH CRITERIA (use these to qualify this lead — the user has reviewed and approved these guidelines):
+{search_prompt}
+""" if search_prompt else ""
 
+    prompt = f"""You are screening posts to find potential customers for {venture_pitch}.
+{criteria_block}
 Post title: {post.get('title', '')}
 Post text: {post.get('text', '')}
 Author: {post.get('author', '')}
@@ -251,6 +259,7 @@ def find_leads(
     venture: str,
     max_leads: int = 20,
     channels: list[str] | None = None,
+    search_prompt: str | None = None,
 ) -> list[dict]:
     """
     Search for potential customers for a given venture across configured channels.
@@ -337,7 +346,7 @@ def find_leads(
             continue
 
         # Use Claude to qualify the lead
-        extracted = _extract_lead_context(post, venture)
+        extracted = _extract_lead_context(post, venture, search_prompt)
         if not extracted:
             continue
 

@@ -1167,10 +1167,11 @@ def deliver_accessibility_audit_job(job_id: str, review_notes: str | None = None
 # ── Outreach tasks ─────────────────────────────────────────────────────────────
 
 @celery_app.task(bind=True, name="outreach.find_leads", max_retries=1)
-def run_find_leads(self, campaign_id: str, venture: str, max_leads: int = 20, channels: list | None = None) -> dict:
+def run_find_leads(self, campaign_id: str, venture: str, max_leads: int = 20, channels: list | None = None, search_prompt: str | None = None) -> dict:
     """
     Search configured channels for potential customers and persist them as leads.
     Skips duplicates by checking existing lead source_url in this campaign.
+    search_prompt: user-reviewed AI criteria prompt that guides Claude qualification.
     """
     from aiplatform.skills.research.find_leads import find_leads
     from aiplatform.database.models import Lead, OutreachCampaign
@@ -1179,7 +1180,7 @@ def run_find_leads(self, campaign_id: str, venture: str, max_leads: int = 20, ch
 
     db = SessionLocal()
     try:
-        raw_leads = find_leads(venture, max_leads=max_leads, channels=channels)
+        raw_leads = find_leads(venture, max_leads=max_leads, channels=channels, search_prompt=search_prompt)
 
         # Deduplicate against existing leads in DB (by source_url)
         campaign_uuid = uuid.UUID(campaign_id)
@@ -1226,10 +1227,17 @@ def run_send_outreach(self, campaign_id: str, lead_ids: list | None = None, temp
     Send approved outreach emails to leads in a campaign.
     Distributes leads round-robin across approved template variants.
     Only sends to leads with status='new' and a valid email.
+
+    Cross-venture spam guard:
+      - Never sends to a contact that has unsubscribed (any campaign, any venture).
+      - Never sends a second email to the same address within 30 days across all campaigns.
+
+    After each successful send, upserts the Contact record for CRM tracking.
     """
     from aiplatform.skills.comms.send_email import send_email
-    from aiplatform.database.models import Lead, OutreachTemplate, OutreachSend, OutreachCampaign
+    from aiplatform.database.models import Contact, Lead, OutreachTemplate, OutreachSend, OutreachCampaign
     from aiplatform.database.session import SessionLocal
+    from datetime import timedelta
     import uuid, os
 
     db = SessionLocal()
@@ -1262,26 +1270,58 @@ def run_send_outreach(self, campaign_id: str, lead_ids: list | None = None, temp
         leads = lq.all()
 
         sent_count = 0
+        skipped_spam = 0
         base_url = os.environ.get("RAILWAY_PUBLIC_URL", "https://api.planbadmin.com")
+        cooldown_days = 30
+        now = datetime.now(timezone.utc)
 
         for i, lead in enumerate(leads):
+            # ── Cross-venture spam guard ─────────────────────────────────────
+            if lead.email:
+                contact = db.query(Contact).filter(Contact.email == lead.email).first()
+                if contact:
+                    # Never send to unsubscribed contacts
+                    if contact.status == "unsubscribed":
+                        lead.status = "unsubscribed"
+                        skipped_spam += 1
+                        continue
+                    # Cooldown: skip if contacted within last 30 days from ANY campaign
+                    if contact.last_activity_at and (now - contact.last_activity_at).days < cooldown_days:
+                        skipped_spam += 1
+                        continue
+
+            # Pick template round-robin across variants
             template = templates[i % len(templates)]
 
-            # Inject tracking pixel into HTML
+            # ── Build tracking URLs ──────────────────────────────────────────
             send_id = str(uuid.uuid4())
             pixel_url = f"{base_url}/api/outreach/track/open/{send_id}"
-            body_html = template.body_html + f'\n<img src="{pixel_url}" width="1" height="1" style="display:none" />'
+            unsub_url = f"{base_url}/api/outreach/unsubscribe/{send_id}"
+
+            # Replace unsubscribe placeholder in body text
+            body_text = (template.body_text or "").replace("{{UNSUBSCRIBE_URL}}", unsub_url)
+
+            # Build HTML: inject pixel + unsubscribe link
+            body_html = template.body_html
+            # Replace placeholder if present, otherwise append footer
+            if "{{UNSUBSCRIBE_URL}}" in body_html:
+                body_html = body_html.replace("{{UNSUBSCRIBE_URL}}", unsub_url)
+            else:
+                body_html += (
+                    f'\n<p style="margin-top:24px;font-size:11px;color:#999;">'
+                    f'<a href="{unsub_url}" style="color:#999;">Unsubscribe</a></p>'
+                )
+            body_html += f'\n<img src="{pixel_url}" width="1" height="1" style="display:none" alt="" />'
 
             result = send_email(
                 to=lead.email,
                 subject=template.subject,
                 body_html=body_html,
-                body_text=template.body_text,
+                body_text=body_text,
             )
 
             if result.get("error"):
-                lead.status = "new"  # keep as new, will retry
-                continue
+                continue  # keep lead as "new" for retry
 
             # Record the send
             send_record = OutreachSend(
@@ -1297,8 +1337,36 @@ def run_send_outreach(self, campaign_id: str, lead_ids: list | None = None, temp
             lead.status = "email_sent"
             sent_count += 1
 
+            # ── Upsert Contact for CRM tracking ─────────────────────────────
+            if lead.email:
+                contact = db.query(Contact).filter(Contact.email == lead.email).first()
+                if contact:
+                    contact.last_activity_at = now
+                    ventures = list(contact.ventures_approached or [])
+                    if campaign.venture not in ventures:
+                        ventures.append(campaign.venture)
+                        contact.ventures_approached = ventures
+                    if contact.status not in ("unsubscribed", "purchased", "inquired"):
+                        contact.status = "approached"
+                else:
+                    contact = Contact(
+                        email=lead.email,
+                        name=lead.name,
+                        company=lead.company,
+                        website_url=lead.website_url,
+                        status="approached",
+                        ventures_approached=[campaign.venture],
+                        last_activity_at=now,
+                    )
+                    db.add(contact)
+
         db.commit()
-        return {"campaign_id": campaign_id, "sent": sent_count, "total_leads": len(leads)}
+        return {
+            "campaign_id": campaign_id,
+            "sent": sent_count,
+            "skipped_spam_or_cooldown": skipped_spam,
+            "total_leads": len(leads),
+        }
 
     except Exception as exc:
         if self.request.retries < self.max_retries:

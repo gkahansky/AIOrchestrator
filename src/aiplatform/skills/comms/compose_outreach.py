@@ -115,6 +115,19 @@ def compose_outreach(
     lead_company = lead.get("company", "")
     lead_channel = lead.get("source_channel", "")
 
+    # Determine which variant angle fits this lead best (context-aware hint)
+    lead_type_hint = ""
+    notes_lower = lead_notes.lower()
+    channel_lower = lead_channel.lower()
+    if any(w in notes_lower for w in ["podcast", "episode", "show", "recording", "interview"]):
+        lead_type_hint = "This person is a podcaster or content creator. Peer-to-peer casual tone (Variant B style) tends to resonate best, but follow the assigned variant tone."
+    elif any(w in notes_lower for w in ["saas", "startup", "app", "product", "launch", "mvp"]):
+        lead_type_hint = "This person is a startup founder or product builder. Value-first tone works well — lead with insight before mentioning your service."
+    elif any(w in notes_lower for w in ["agency", "freelance", "client", "web design", "developer"]):
+        lead_type_hint = "This person is a developer or agency owner. They respond to specifics and concrete outcomes — avoid vague value props."
+    elif "reddit" in channel_lower:
+        lead_type_hint = "Found on Reddit — they are comfortable with informal, direct communication. Avoid anything that reads like a marketing email."
+
     prompt = f"""You are writing a cold outreach email for {vc['sender_name']} ({vc['sender_role']}).
 
 SERVICE: {vc['service']}
@@ -128,6 +141,7 @@ LEAD CONTEXT:
 - Where found: {lead_channel}
 - What we know about them: {lead_notes}
 {f'- Extra context: {extra_context}' if extra_context else ''}
+{f'- Lead type hint: {lead_type_hint}' if lead_type_hint else ''}
 
 CAMPAIGN GOAL: {goal}
 
@@ -135,20 +149,34 @@ TONE: {tone['tone']}
 ANGLE: {tone['angle']}
 CTA STYLE: {tone['cta_style']}
 
-RULES (follow all of these):
-1. Subject line: max 8 words, no emoji, no ALL CAPS, never start with "I"
-2. Body: under 140 words. Short paragraphs (1-2 sentences max).
-3. Never use: "I hope this email finds you well", "I wanted to reach out", "synergy", "leverage", "game-changer", "cutting-edge", "revolutionize", "excited to share"
-4. Sound like a real person wrote this — informal punctuation is fine, contractions are encouraged
-5. If you mention something specific about them, be accurate based on the notes above — don't invent details
-6. One CTA only. Make it low-friction.
-7. Sign off with: {vc['sender_name']} (no title, no company — keep it human)
+RULES (follow every one — failure to comply means the email will not be used):
+1. Subject line: max 8 words. No emoji, no ALL CAPS, no exclamation marks.
+   Never start the subject with "I". Sentence case only (capitalise first word and proper nouns).
+2. Body: 80–140 words. Short paragraphs — 1 to 2 sentences each.
+3. Grammar and style: write like an educated native English speaker.
+   - Every sentence must start with a capital letter.
+   - Proper nouns (company names, product names, people's names) must be capitalised correctly.
+   - No comma splices, no run-on sentences.
+   - Use contractions naturally (it's, we've, I'd) — they make it sound human.
+   - No sentence fragments unless deliberately used for effect (e.g. "Worth a look?" is fine).
+4. Banned phrases — never use any of these:
+   "I hope this email finds you well", "I wanted to reach out", "just checking in",
+   "synergy", "leverage", "game-changer", "cutting-edge", "revolutionize",
+   "excited to share", "touch base", "circle back", "at your earliest convenience",
+   "I trust this email", "please do not hesitate", "as per my last email"
+5. Do not invent details about the lead that aren't in the notes above.
+6. Include exactly one CTA. Make it low-friction — a link or a yes/no question.
+   Place the CTA in its own short paragraph near the end.
+7. End with a blank line then sign: {vc['sender_name']}
+   (no title, no company name in the sign-off — keep it human).
+8. Include this exact placeholder on its own line at the very end, after the signature:
+   {{{{UNSUBSCRIBE_URL}}}}
 
 Write the email now. Output JSON only:
 {{
   "subject": "...",
-  "body_text": "plain text version",
-  "tone_notes": "one sentence explaining the angle you chose"
+  "body_text": "full plain-text email including sign-off and unsubscribe placeholder",
+  "tone_notes": "one sentence explaining the specific angle and why it fits this lead"
 }}"""
 
     client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))

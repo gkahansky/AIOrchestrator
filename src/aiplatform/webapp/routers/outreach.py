@@ -626,7 +626,7 @@ def unsubscribe(send_id: str, db=Depends(get_db)):
 h1{color:#222;}p{line-height:1.6;}</style></head>
 <body>
 <h1>You've been unsubscribed</h1>
-<p>You will not receive any further emails from EchoForge regarding this or any other campaign.</p>
+<p>You will not receive any further emails from us regarding this or any other campaign.</p>
 <p>If this was a mistake, please reply to the email you received and we'll reinstate you.</p>
 </body></html>"""
     return HTMLResponse(content=html)

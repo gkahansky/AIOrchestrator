@@ -3,6 +3,8 @@ import hmac
 import hashlib
 import os
 
+from aiplatform.skills.strategy.run_advisor import run_advisor
+
 router = APIRouter()
 
 def verify_github_signature(payload: bytes, signature: str) -> bool:
@@ -30,8 +32,14 @@ async def github_webhook(
     action = data.get("action")
     
     if "pull_request" in data and action in ["opened", "synchronize"]:
-        # Run Architect Advisor
-        # background_tasks.add_task(run_advisor, "architect", data["pull_request"])
-        pass
+        pr_context = {
+            "title": data["pull_request"].get("title"),
+            "body": data["pull_request"].get("body"),
+            "changed_files": data["pull_request"].get("changed_files"),
+            "additions": data["pull_request"].get("additions"),
+            "deletions": data["pull_request"].get("deletions"),
+            "url": data["pull_request"].get("html_url"),
+        }
+        background_tasks.add_task(run_advisor, "architect", pr_context)
         
     return {"status": "accepted"}

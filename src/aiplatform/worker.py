@@ -470,7 +470,16 @@ def run_audit_sample(self, order: dict) -> dict:
     try:
         from ventures.marketing_audit import pipeline as audit_pipeline
         from aiplatform.skills.comms.send_email import send_email
+        from aiplatform.database.crm_ops import can_send_sample, log_contact_message
+        from aiplatform.database.crm_ops import can_send_sample, log_contact_message
         from pathlib import Path
+
+        if sample_email and not can_send_sample(sample_email, "marketing_audit"):
+            return {
+                "order_id": order.get("order_id"), 
+                "status": "skipped_throttle", 
+                "error": "Sample limit reached (30 days)"
+            }
 
         # Force sample-only mode and skip human review
         order["report_type"] = "sample"
@@ -511,6 +520,15 @@ def run_audit_sample(self, order: dict) -> dict:
             )
             if isinstance(result_send, dict) and result_send.get("error"):
                 raise RuntimeError(f"send_email failed: {result_send['error']}")
+
+            log_contact_message(
+                email=sample_email,
+                venture="marketing_audit",
+                message_type="sample",
+                subject=f"Your Free Marketing Audit Sample — {url}",
+                body_snippet=body[:200],
+                message_id=result_send.get("message_id") if isinstance(result_send, dict) else None
+            )
 
             # Schedule nurture follow-ups
             from datetime import datetime, timezone, timedelta
@@ -590,7 +608,15 @@ def run_podcast_sample(self, order: dict) -> dict:
     try:
         from ventures.content_studio import pipeline as podcast_pipeline
         from aiplatform.skills.comms.send_email import send_email
+        from aiplatform.database.crm_ops import can_send_sample, log_contact_message
         from pathlib import Path
+
+        if sample_email and not can_send_sample(sample_email, "podcast_notes"):
+            return {
+                "order_id": order.get("order_id"), 
+                "status": "skipped_throttle", 
+                "error": "Sample limit reached (30 days)"
+            }
 
         # Skip human review; pipeline must not send a client delivery email
         order["auto_approve"] = True
@@ -631,6 +657,15 @@ def run_podcast_sample(self, order: dict) -> dict:
             if isinstance(result_send, dict) and result_send.get("error"):
                 raise RuntimeError(f"send_email failed: {result_send['error']}")
 
+            log_contact_message(
+                email=sample_email,
+                venture="podcast_notes",
+                message_type="sample",
+                subject=f"Your Free Podcast Sample — {episode}",
+                body_snippet=body[:200],
+                message_id=result_send.get("message_id") if isinstance(result_send, dict) else None
+            )
+
             # Schedule nurture follow-ups
             from datetime import datetime, timezone, timedelta
             run_nurture_email.apply_async(
@@ -665,6 +700,7 @@ def run_nurture_email(self, email: str, service: str, order_id: str, day: int) -
     """
     try:
         from aiplatform.skills.comms.send_email import send_email
+        from aiplatform.database.crm_ops import can_send_sample, log_contact_message
 
         if service == "podcast":
             if day == 3:
@@ -711,7 +747,15 @@ def run_nurture_email(self, email: str, service: str, order_id: str, day: int) -
                     "<p>— EchoForge</p>"
                 )
 
-        send_email(to=email, subject=subject, body_html=body)
+        result_send = send_email(to=email, subject=subject, body_html=body)
+        log_contact_message(
+            email=email,
+            venture=f'{service}_notes' if service == 'podcast' else 'marketing_audit',
+            message_type='nurture',
+            subject=subject,
+            body_snippet=body[:200],
+            message_id=result_send.get('message_id') if isinstance(result_send, dict) else None
+        )
         return {"email": email, "service": service, "day": day, "status": "sent"}
 
     except Exception as exc:
@@ -745,6 +789,7 @@ def run_weekly_digest(self) -> dict:
         from aiplatform.database.models import Job, CostEvent, RevenueEvent
         from aiplatform.database.session import get_session
         from aiplatform.skills.comms.send_email import send_email
+        from aiplatform.database.crm_ops import can_send_sample, log_contact_message
 
         since = datetime.now(timezone.utc) - timedelta(days=7)
         week_str = since.strftime("%b %d") + " – " + datetime.now(timezone.utc).strftime("%b %d, %Y")
@@ -881,91 +926,27 @@ def check_fiverr_emails(self) -> dict:
             raise self.retry(exc=exc, countdown=300)
         raise
 from celery.signals import task_success
-from aiplatform.database.models import Job, CostEvent
-from aiplatform.database.session import get_session
-import datetime
 from aiplatform.skills.strategy.run_advisor import run_advisor
 
+
+@celery_app.task(name="platform.run_advisor_async")
+def run_advisor_async(advisor_id: str, context_data: dict, job_id: str = None) -> None:
+    """Async wrapper so advisors can be dispatched without blocking pipeline tasks."""
+    run_advisor(advisor_id, context_data, job_id)
+
+
 @task_success.connect
 def advisory_task_success_handler(sender=None, result=None, **kwargs):
-    if not isinstance(result, dict) or "job_id" not in result:
+    """Fire the Product advisor after every completed pipeline task."""
+    if not isinstance(result, dict) or not result.get("job_id"):
         return
-        
     job_id = result["job_id"]
-    with get_session() as db:
-        job = db.query(Job).filter(Job.id == job_id).first()
-        if not job or job.status not in ("delivered", "completed", "approved"):
-            return
-            
-        # Product Manager Rule
-        # If "review_pending" time vs "approved" time is large, trigger PM
-        # For simplicity, we just trigger PM to review the job stats
-        context_data = {
-            "job_id": job.id,
-            "venture": job.venture,
-            "duration": (job.completed_at - job.started_at).total_seconds() if job.completed_at and job.started_at else 0,
-            "status": job.status,
-            "phase_current": job.phase_current
-        }
-        
-        # In a real app we'd query cost_events here, but let's just pass the context
-        try:
-            costs = db.query(CostEvent).filter(CostEvent.job_id == job.id).all()
-            context_data["total_cost"] = sum(c.cost_usd for c in costs)
-        except:
-            context_data["total_cost"] = 0
-            
-        # Dispatch PM (We should probably submit it as an async task but we'll call sync for now, wait run_advisor is blocking. We can use a celery task to run the advisor)
-
-@celery_app.task(name="platform.run_advisor_async")
-def run_advisor_async(advisor_id: str, context_data: dict, job_id: str = None) -> None:
-    from aiplatform.skills.strategy.run_advisor import run_advisor
-    run_advisor(advisor_id, context_data, job_id)
-
-from celery.signals import task_success
-@task_success.connect
-def advisory_task_success_handler(sender=None, result=None, **kwargs):
-    if not isinstance(result, dict) or "job_id" not in result:
-        return
-    job_id = result.get("job_id")
-    if not job_id: return
-    
-    # Needs to be deferred to not block the main process and avoid circular dependencies too heavily
-    run_advisor_async.delay("pm", {"event": "task_success", "job_id": job_id}, job_id)
-
-
-
-
-@celery_app.task(name="platform.run_advisor_async")
-def run_advisor_async(advisor_id: str, context_data: dict, job_id: str = None) -> None:
-    from aiplatform.skills.strategy.run_advisor import run_advisor
-    run_advisor(advisor_id, context_data, job_id)
-
-from celery.signals import task_success
-@task_success.connect
-def advisory_task_success_handler(sender=None, result=None, **kwargs):
-    if not isinstance(result, dict) or "job_id" not in result:
-        return
-    job_id = result.get("job_id")
-    if not job_id: return
-    
-    # Needs to be deferred to not block the main process and avoid circular dependencies too heavily
-    run_advisor_async.delay("pm", {"event": "task_success", "job_id": job_id}, job_id)
-
+    run_advisor_async.delay("product", {"event": "task_success", "job_id": job_id}, job_id)
 
 
 @celery_app.task(name="platform.eo_weekly_review")
 def eo_weekly_review() -> None:
-    # Action: Aggregates all CostEvent and RevenueEvent data for the week to generate a "Weekly Business Overview".
-    from aiplatform.skills.strategy.run_advisor import run_advisor
-    run_advisor("executive", {"event": "weekly_review"})
-
-
-
-@celery_app.task(name="platform.eo_weekly_review")
-def eo_weekly_review() -> None:
-    # Action: Aggregates all CostEvent and RevenueEvent data for the week to generate a "Weekly Business Overview".
-    from aiplatform.skills.strategy.run_advisor import run_advisor
+    """Aggregate weekly cost/revenue data and run the Executive advisor."""
     run_advisor("executive", {"event": "weekly_review"})
 
 
@@ -1097,6 +1078,7 @@ def deliver_accessibility_audit_job(job_id: str, review_notes: str | None = None
     from aiplatform.database.session import SessionLocal
     from aiplatform.database.models import AccessibilityAudit, Job
     from aiplatform.skills.comms.send_email import send_email
+        from aiplatform.database.crm_ops import can_send_sample, log_contact_message
 
     db = SessionLocal()
     try:
@@ -1235,6 +1217,7 @@ def run_send_outreach(self, campaign_id: str, lead_ids: list | None = None, temp
     After each successful send, upserts the Contact record for CRM tracking.
     """
     from aiplatform.skills.comms.send_email import send_email
+        from aiplatform.database.crm_ops import can_send_sample, log_contact_message
     from aiplatform.database.models import Contact, Lead, OutreachTemplate, OutreachSend, OutreachCampaign
     from aiplatform.database.session import SessionLocal
     from datetime import timedelta

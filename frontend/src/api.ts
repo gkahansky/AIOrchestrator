@@ -11,6 +11,11 @@
   ApiKeyTestResult,
   AdvisoryProposal,
   AdvisorConfig,
+  RoadmapFeature,
+  RoadmapItem,
+  RoadmapListResponse,
+  RoadmapItemCreate,
+  RoadmapItemUpdate,
 } from "./types"
 
 const BASE = import.meta.env.VITE_API_URL || "https://api.planbadmin.com"
@@ -250,4 +255,65 @@ export async function updateAdvisorPrompt(id: string, content: string): Promise<
     body: JSON.stringify({ content }),
   })
   if (!res.ok) throw new Error("Failed to update advisor prompt")
+}
+
+// ── Roadmap ──────────────────────────────────────────────────────────────────
+
+export async function fetchRoadmap(): Promise<RoadmapListResponse> {
+  const res = await fetch(`${BASE}/api/platform/strategy/roadmap`, { headers: getHeaders() })
+  return handleResponse<RoadmapListResponse>(res)
+}
+
+export async function fetchRoadmapDone(): Promise<RoadmapItem[]> {
+  const res = await fetch(`${BASE}/api/platform/strategy/roadmap/done`, { headers: getHeaders() })
+  return handleResponse<RoadmapItem[]>(res)
+}
+
+export async function fetchRoadmapFeatures(): Promise<RoadmapFeature[]> {
+  const res = await fetch(`${BASE}/api/platform/strategy/roadmap/features`, { headers: getHeaders() })
+  return handleResponse<RoadmapFeature[]>(res)
+}
+
+export async function createRoadmapFeature(name: string): Promise<RoadmapFeature> {
+  const res = await fetch(`${BASE}/api/platform/strategy/roadmap/features`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ name }),
+  })
+  return handleResponse<RoadmapFeature>(res)
+}
+
+export async function createRoadmapItem(data: RoadmapItemCreate): Promise<RoadmapItem> {
+  const res = await fetch(`${BASE}/api/platform/strategy/roadmap`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(data),
+  })
+  return handleResponse<RoadmapItem>(res)
+}
+
+export async function updateRoadmapItem(id: number, data: RoadmapItemUpdate): Promise<RoadmapItem> {
+  const res = await fetch(`${BASE}/api/platform/strategy/roadmap/${id}`, {
+    method: "PUT",
+    headers: getHeaders(),
+    body: JSON.stringify(data),
+  })
+  return handleResponse<RoadmapItem>(res)
+}
+
+export async function deleteRoadmapItem(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/api/platform/strategy/roadmap/${id}`, {
+    method: "DELETE",
+    headers: getHeaders(),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+}
+
+export async function reorderRoadmapItems(ids: number[]): Promise<void> {
+  const res = await fetch(`${BASE}/api/platform/strategy/roadmap/reorder`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ ids }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
 }

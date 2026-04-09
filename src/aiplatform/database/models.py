@@ -24,6 +24,7 @@ from sqlalchemy import (
     String,
     Text,
     ForeignKey,
+    Boolean,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -236,11 +237,6 @@ PROPOSAL_STATUS_ENUM = Enum(
     name="proposal_status_enum",
 )
 
-ROADMAP_STATUS_ENUM = Enum(
-    "backlog", "in_progress", "completed",
-    name="roadmap_status_enum",
-)
-
 class AdvisoryProposal(Base):
     """
     AI-generated proposals for venture strategy, optimization, or platform codebase.
@@ -259,20 +255,51 @@ class AdvisoryProposal(Base):
 
     job = relationship("Job")
 
+
+class RoadmapFeature(Base):
+    """
+    Available product features used to tag roadmap items.
+    """
+    __tablename__ = "roadmap_features"
+
+    id         = Column(BigInteger, primary_key=True, autoincrement=True)
+    name       = Column(String(255), nullable=False, unique=True)
+    created_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc))
+
+
 class Roadmap(Base):
     """
     Actionable tasks approved from Advisory Proposals or created manually.
+
+    Status values:
+      not_started         → Product Backlog
+      in_progress         → Work in Progress
+      in_testing          → Work in Progress
+      ready_for_deployment → Work in Progress
+      done                → cleared (surfaced via Recently Done query)
     """
     __tablename__ = "roadmap"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    title = Column(String(500), nullable=False)
-    description = Column(Text, nullable=False)
-    effort_score = Column(SmallInteger, nullable=True) # 1-10
-    margin_potential = Column(SmallInteger, nullable=True) # 1-10
-    status = Column(ROADMAP_STATUS_ENUM, nullable=False, default="backlog", index=True)
+    id               = Column(BigInteger, primary_key=True, autoincrement=True)
+    title            = Column(String(500), nullable=False)
+    description      = Column(Text, nullable=False, default="")
+    effort_score     = Column(SmallInteger, nullable=True)
+    margin_potential = Column(SmallInteger, nullable=True)
 
-    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    # "New feature" | "Bug" | "Feature enhancement"
+    item_type  = Column(String(50), nullable=True, default="New feature")
+    feature_id = Column(BigInteger, ForeignKey("roadmap_features.id", ondelete="SET NULL"), nullable=True)
+
+    # not_started | in_progress | in_testing | ready_for_deployment | done
+    status     = Column(String(50), nullable=False, default="not_started", index=True)
+
+    sort_order   = Column(Integer, nullable=False, default=0)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at   = Column(DateTime(timezone=True), nullable=False,
+                          default=lambda: datetime.now(timezone.utc))
+
+    feature = relationship("RoadmapFeature")
 
 # ── Outreach ───────────────────────────────────────────────────────────────────
 
@@ -412,6 +439,7 @@ class Contact(Base):
 
     # approached | inquired | purchased | unsubscribed
     status      = Column(String(50), nullable=False, default="approached", index=True)
+    is_test_user = Column(Boolean, nullable=False, default=False, server_default="false")
 
     # List of venture slugs this contact was approached from, e.g. ["marketing_audit"]
     ventures_approached  = Column(JSONB, nullable=False, default=list)
@@ -443,3 +471,21 @@ class AccessibilityAudit(Base):
 
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     job = relationship("Job")
+
+class ContactMessage(Base):
+    """
+    Email logs sent to a unified CRM contact.
+    """
+    __tablename__ = "contact_messages"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    contact_id  = Column(UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="CASCADE"), nullable=False, index=True)
+    venture     = Column(String(50), nullable=False, index=True) # marketing_audit, podcast_notes, accessibility
+    message_type = Column(String(50), nullable=False, index=True) # sample, nurture, outreach, delivery
+    subject     = Column(String(500), nullable=False)
+    body_snippet = Column(Text, nullable=True)
+    message_id  = Column(String(255), nullable=True) # Resend ID
+
+    sent_at     = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    contact     = relationship("Contact", backref="messages")

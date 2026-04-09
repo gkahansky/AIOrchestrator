@@ -161,15 +161,55 @@ export interface AdvisoryProposal {
   created_at: string
 }
 
-export interface Roadmap {
+export type RoadmapItemType = "New feature" | "Bug" | "Feature enhancement"
+
+export type RoadmapStatus =
+  | "not_started"
+  | "in_progress"
+  | "in_testing"
+  | "ready_for_deployment"
+  | "done"
+
+export interface RoadmapFeature {
+  id: number
+  name: string
+  created_at: string
+}
+
+export interface RoadmapItem {
   id: number
   title: string
   description: string
-  effort_score: number | null
-  margin_potential: number | null
-  status: string
+  item_type: RoadmapItemType | null
+  feature_id: number | null
+  feature_name: string | null
+  status: RoadmapStatus
+  sort_order: number
+  completed_at: string | null
   created_at: string
 }
+
+export interface RoadmapListResponse {
+  backlog: RoadmapItem[]
+  wip: RoadmapItem[]
+}
+
+export interface RoadmapItemCreate {
+  title: string
+  description: string
+  item_type: RoadmapItemType
+  feature_id: number | null
+  status: RoadmapStatus
+}
+
+export interface RoadmapItemUpdate {
+  title?: string
+  description?: string
+  item_type?: RoadmapItemType
+  feature_id?: number | null
+  status?: RoadmapStatus
+}
+
 export interface AdvisorConfig {
   id: string
   model: string

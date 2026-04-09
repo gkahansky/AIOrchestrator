@@ -1,14 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+import json
 
 from aiplatform.database.session import get_session
-from aiplatform.database.models import AdvisoryProposal, Roadmap
+from aiplatform.database.models import AdvisoryProposal, Roadmap, RoadmapFeature
 from aiplatform.webapp.auth import require_auth
 
 router = APIRouter()
+
+ITEM_TYPES = ["New feature", "Bug", "Feature enhancement"]
+WIP_STATUSES = {"in_progress", "in_testing", "ready_for_deployment"}
 
 class ProposalResponse(BaseModel):
     id: uuid.UUID
@@ -58,15 +62,20 @@ def approve_proposal(proposal_id: uuid.UUID, user: str = Depends(require_auth)):
             raise HTTPException(status_code=400, detail=f"Cannot approve proposal with status {proposal.status}")
             
         proposal.status = "approved"
-        
-        # Generate a roadmap item
-        # Try to extract title/description from content, or just use category
+
         title = f"[{proposal.advisor_id.title()}] {proposal.category}"
-        
+        content = proposal.content
+        if isinstance(content, dict):
+            description = json.dumps(content, ensure_ascii=False)
+        else:
+            description = str(content)
+
         roadmap_item = Roadmap(
-            title=title,
-            description=proposal.content,
-            status="backlog"
+            title=title[:500],
+            description=description,
+            item_type="New feature",
+            status="not_started",
+            sort_order=0,
         )
         db.add(roadmap_item)
         db.commit()
@@ -130,14 +139,198 @@ def update_advisor_prompt(advisor_id: str, prompt_data: AdvisorPromptRequest, us
     registry_path = Path(__file__).parent.parent.parent.parent / "registry" / "advisors.json"
     with open(registry_path, "r") as f:
         advisors = json.load(f)
-        
+
     if advisor_id not in advisors:
         raise HTTPException(status_code=404, detail="Advisor not found")
-        
+
     ref = advisors[advisor_id].get("prompt_ref", advisor_id + "_v1")
     prompt_file = registry_path.parent / "prompts" / f"{ref}.md"
-    
+
     with open(prompt_file, "w", encoding="utf-8") as pf:
         pf.write(prompt_data.content)
-        
+
     return {"status": "success", "advisor_id": advisor_id}
+
+
+# ── Roadmap Features ───────────────────────────────────────────────────────────
+
+class FeatureResponse(BaseModel):
+    id: int
+    name: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class FeatureCreate(BaseModel):
+    name: str = Field(..., max_length=255)
+
+
+@router.get("/roadmap/features", response_model=List[FeatureResponse])
+def list_features(user: str = Depends(require_auth)):
+    with get_session() as db:
+        return db.query(RoadmapFeature).order_by(RoadmapFeature.name).all()
+
+
+@router.post("/roadmap/features", response_model=FeatureResponse, status_code=201)
+def create_feature(body: FeatureCreate, user: str = Depends(require_auth)):
+    with get_session() as db:
+        existing = db.query(RoadmapFeature).filter(RoadmapFeature.name == body.name).first()
+        if existing:
+            return existing
+        feat = RoadmapFeature(name=body.name)
+        db.add(feat)
+        db.commit()
+        db.refresh(feat)
+        return feat
+
+
+# ── Roadmap Items ──────────────────────────────────────────────────────────────
+
+class RoadmapItemResponse(BaseModel):
+    id: int
+    title: str
+    description: str
+    item_type: Optional[str]
+    feature_id: Optional[int]
+    feature_name: Optional[str]
+    status: str
+    sort_order: int
+    completed_at: Optional[datetime]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class RoadmapItemCreate(BaseModel):
+    title: str = Field(..., max_length=100)
+    description: str = Field("", max_length=500)
+    item_type: str = Field("New feature")
+    feature_id: Optional[int] = None
+    status: str = Field("not_started")
+
+
+class RoadmapItemUpdate(BaseModel):
+    title: Optional[str] = Field(None, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
+    item_type: Optional[str] = None
+    feature_id: Optional[int] = None
+    status: Optional[str] = None
+
+
+class ReorderRequest(BaseModel):
+    ids: List[int]  # ordered list of item IDs — first = highest priority
+
+
+def _item_to_dict(item: Roadmap) -> dict:
+    return {
+        "id": item.id,
+        "title": item.title,
+        "description": item.description or "",
+        "item_type": item.item_type,
+        "feature_id": item.feature_id,
+        "feature_name": item.feature.name if item.feature else None,
+        "status": item.status,
+        "sort_order": item.sort_order or 0,
+        "completed_at": item.completed_at.isoformat() if item.completed_at else None,
+        "created_at": item.created_at.isoformat(),
+    }
+
+
+@router.get("/roadmap")
+def list_roadmap_items(user: str = Depends(require_auth)):
+    """Return backlog and WIP items grouped."""
+    with get_session() as db:
+        items = (
+            db.query(Roadmap)
+            .filter(Roadmap.status != "done")
+            .order_by(Roadmap.sort_order.asc(), Roadmap.created_at.asc())
+            .all()
+        )
+        backlog = [_item_to_dict(i) for i in items if i.status == "not_started"]
+        wip = [_item_to_dict(i) for i in items if i.status in WIP_STATUSES]
+        return {"backlog": backlog, "wip": wip}
+
+
+@router.get("/roadmap/done")
+def list_done_items(user: str = Depends(require_auth)):
+    """Return items completed in the last 30 days."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    with get_session() as db:
+        items = (
+            db.query(Roadmap)
+            .filter(Roadmap.status == "done", Roadmap.completed_at >= cutoff)
+            .order_by(Roadmap.completed_at.desc())
+            .all()
+        )
+        return [_item_to_dict(i) for i in items]
+
+
+@router.post("/roadmap", status_code=201)
+def create_roadmap_item(body: RoadmapItemCreate, user: str = Depends(require_auth)):
+    with get_session() as db:
+        # Sort new backlog items below existing ones
+        max_order = db.query(Roadmap).filter(Roadmap.status == "not_started").count()
+        item = Roadmap(
+            title=body.title,
+            description=body.description,
+            item_type=body.item_type,
+            feature_id=body.feature_id,
+            status="not_started",
+            sort_order=max_order,
+        )
+        db.add(item)
+        db.commit()
+        db.refresh(item)
+        if item.feature_id:
+            _ = item.feature  # eager-load
+        return _item_to_dict(item)
+
+
+@router.put("/roadmap/{item_id}")
+def update_roadmap_item(item_id: int, body: RoadmapItemUpdate, user: str = Depends(require_auth)):
+    with get_session() as db:
+        item = db.query(Roadmap).filter(Roadmap.id == item_id).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Item not found")
+
+        if body.title is not None:
+            item.title = body.title
+        if body.description is not None:
+            item.description = body.description
+        if body.item_type is not None:
+            item.item_type = body.item_type
+        if body.feature_id is not None or "feature_id" in body.model_fields_set:
+            item.feature_id = body.feature_id
+        if body.status is not None:
+            if body.status == "done" and item.status != "done":
+                item.completed_at = datetime.now(timezone.utc)
+            item.status = body.status
+
+        db.commit()
+        db.refresh(item)
+        if item.feature_id:
+            _ = item.feature
+        return _item_to_dict(item)
+
+
+@router.delete("/roadmap/{item_id}", status_code=204)
+def delete_roadmap_item(item_id: int, user: str = Depends(require_auth)):
+    with get_session() as db:
+        item = db.query(Roadmap).filter(Roadmap.id == item_id).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Item not found")
+        db.delete(item)
+        db.commit()
+
+
+@router.post("/roadmap/reorder")
+def reorder_roadmap_items(body: ReorderRequest, user: str = Depends(require_auth)):
+    """Update sort_order for a list of items (position in list = priority)."""
+    with get_session() as db:
+        for position, item_id in enumerate(body.ids):
+            db.query(Roadmap).filter(Roadmap.id == item_id).update({"sort_order": position})
+        db.commit()
+    return {"ok": True}

@@ -106,6 +106,14 @@ function ItemForm({ item, features, onSave, onCancel, onAddFeature, isSaving }: 
         </h2>
 
         <div className="space-y-4">
+          {/* ID — read-only when editing */}
+          {!isNew && (
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <span className="font-medium text-gray-700">ID:</span>
+              <span className="font-mono bg-gray-100 px-2 py-0.5 rounded text-gray-600">#{item?.id}</span>
+            </div>
+          )}
+
           {/* Title */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -494,36 +502,6 @@ function RoadmapTab() {
         <p className="text-xs text-gray-400">{backlog.length} in backlog · {wip.length} in progress</p>
       </div>
 
-      {/* Product Backlog */}
-      <section>
-        <h2 className="text-base font-semibold text-gray-800 mb-3 flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-gray-400 inline-block"></span>
-          Product Backlog
-          <span className="text-xs text-gray-400 font-normal ml-1">({backlog.length})</span>
-        </h2>
-        {backlog.length === 0 ? (
-          <div className="text-gray-400 italic text-sm py-6 text-center border border-dashed border-gray-200 rounded-lg">
-            No backlog items. Click "+ Add Item" to start.
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {backlog.map(item => (
-              <ItemRow
-                key={item.id}
-                item={item}
-                canDelete
-                onEdit={openEdit}
-                onDelete={handleDelete}
-                onDragStart={handleDragStart}
-                onDragOver={handleDragOver}
-                onDrop={() => handleDrop("backlog")}
-                isDragOver={dragOverItemId === item.id}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-
       {/* Work in Progress */}
       <section>
         <h2 className="text-base font-semibold text-gray-800 mb-3 flex items-center gap-2">
@@ -547,6 +525,36 @@ function RoadmapTab() {
                 onDragStart={handleDragStart}
                 onDragOver={handleDragOver}
                 onDrop={() => handleDrop("wip")}
+                isDragOver={dragOverItemId === item.id}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Product Backlog */}
+      <section>
+        <h2 className="text-base font-semibold text-gray-800 mb-3 flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-gray-400 inline-block"></span>
+          Product Backlog
+          <span className="text-xs text-gray-400 font-normal ml-1">({backlog.length})</span>
+        </h2>
+        {backlog.length === 0 ? (
+          <div className="text-gray-400 italic text-sm py-6 text-center border border-dashed border-gray-200 rounded-lg">
+            No backlog items. Click "+ Add Item" to start.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {backlog.map(item => (
+              <ItemRow
+                key={item.id}
+                item={item}
+                canDelete
+                onEdit={openEdit}
+                onDelete={handleDelete}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDrop={() => handleDrop("backlog")}
                 isDragOver={dragOverItemId === item.id}
               />
             ))}

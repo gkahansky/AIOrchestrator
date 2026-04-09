@@ -518,3 +518,7 @@ Add to `/platform/registry/skills.json`:
 | D-19 | Pipeline + Email Fixes | ✅ done | Drive upload before review gate; delivery email recipient fallback; Drive link fallback chain; openai in requirements. | 2026-04-05 |
 | D-20 | Drive Auth Unified — OAuth Token (AII-137) | ✅ done | create_gdoc.py and drive_organise.py were hardcoded to service account; unified to get_drive_service() from _drive_auth.py. Eliminates storageQuotaExceeded. | 2026-04-05 |
 | D-21 | Podcast Order Form — File Upload + Full Fields (AII-138) | ✅ done | Audio file upload replaces URL. Full form fields: email, show, episode, host, guest, instructions. Delivery email + Google Doc sharing fixed. | 2026-04-05 |
+| D-22 | Cold Outreach Pipeline | ✅ done | Lead discovery (7 channels), A/B email composition, human review gate, Resend send, open-tracking, A/B analysis. Admin UI in Marketing page. | 2026-04-08 |
+| D-23 | Advisory Board Activation | ✅ done | Real claude-sonnet-4-6 API calls in run_advisor.py. Fixed pm→product ID mismatch, removed duplicate worker defs, architect webhook live. | 2026-04-09 |
+| D-24 | Strategy Room — Roadmap Tab | ✅ done | Backlog + WIP sections, drag-drop reorder, recently done, feature dropdown, roadmap_features table, status enum→varchar migration. | 2026-04-09 |
+| D-25 | Strategy Room Redesign | ✅ done | Architectural Curator design. Agent cards with skills, proposals per agent, prompt editor, chat (up to 5 sessions), manual triggers. New /chat and /trigger endpoints. | 2026-04-09 |

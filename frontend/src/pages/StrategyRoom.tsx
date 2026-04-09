@@ -172,7 +172,7 @@ function AgentPromptEditor({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-slate-950 w-full max-w-3xl rounded-2xl overflow-hidden shadow-2xl border border-white/10 flex flex-col max-h-[85vh]">
+      <div className="bg-slate-950 w-full max-w-5xl rounded-2xl overflow-hidden shadow-2xl border border-white/10 flex flex-col max-h-[90vh]">
         {/* Editor header */}
         <div className="flex items-center justify-between px-6 py-4 bg-slate-900 border-b border-white/5 shrink-0">
           <div className="flex items-center gap-4">
@@ -196,7 +196,7 @@ function AgentPromptEditor({
         <textarea
           value={text}
           onChange={e => setText(e.target.value)}
-          className="flex-1 bg-slate-950 text-slate-200 font-mono text-sm leading-relaxed p-6 resize-none focus:outline-none min-h-0 overflow-y-auto"
+          className="flex-1 bg-slate-950 text-slate-200 font-mono text-base leading-relaxed p-8 resize-none focus:outline-none min-h-0 overflow-y-auto"
           spellCheck={false}
         />
 
@@ -453,6 +453,7 @@ function AgentCard({
   advisor,
   proposals,
   selected,
+  runningSkill,
   onToggleSelect,
   onPrompt,
   onProposals,
@@ -462,6 +463,7 @@ function AgentCard({
   advisor: AdvisorConfig
   proposals: AdvisoryProposal[]
   selected: boolean
+  runningSkill: string | null
   onToggleSelect: () => void
   onPrompt: () => void
   onProposals: () => void
@@ -518,26 +520,37 @@ function AgentCard({
           Skills &amp; Capabilities
         </h5>
         <div className="grid grid-cols-2 gap-2">
-          {meta.skills.map(skill => (
-            <button
-              key={skill.name}
-              onClick={() => onTriggerSkill(skill)}
-              className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left group/skill ${
-                skill.todo
-                  ? "bg-surface-container text-on-surface-variant opacity-60 cursor-default"
-                  : "bg-surface-container-low hover:bg-surface-container-high text-on-surface"
-              }`}
-              disabled={skill.todo}
-              title={skill.todo ? "Coming soon" : `Run ${skill.name}`}
-            >
-              <span className="truncate">{skill.name}</span>
-              {skill.todo ? (
-                <span className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wide opacity-50 ml-1 shrink-0">TODO</span>
-              ) : (
-                <span className="material-symbols-outlined text-xs opacity-0 group-hover/skill:opacity-100 transition-opacity text-primary shrink-0">bolt</span>
-              )}
-            </button>
-          ))}
+          {meta.skills.map(skill => {
+            const skillKey = `${advisor.id}:${skill.name}`
+            const isRunning = runningSkill === skillKey
+            return (
+              <button
+                key={skill.name}
+                onClick={() => onTriggerSkill(skill)}
+                className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left group/skill ${
+                  skill.todo
+                    ? "bg-surface-container text-on-surface-variant opacity-60 cursor-default"
+                    : isRunning
+                    ? "bg-primary/10 text-primary cursor-wait"
+                    : "bg-surface-container-low hover:bg-surface-container-high text-on-surface"
+                }`}
+                disabled={skill.todo || isRunning}
+                title={skill.todo ? "Coming soon" : isRunning ? "Running…" : `Run ${skill.name}`}
+              >
+                <span className="truncate">{skill.name}</span>
+                {skill.todo ? (
+                  <span className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wide opacity-50 ml-1 shrink-0">TODO</span>
+                ) : isRunning ? (
+                  <svg className="w-3 h-3 animate-spin text-primary shrink-0 ml-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>
+                ) : (
+                  <span className="material-symbols-outlined text-xs opacity-0 group-hover/skill:opacity-100 transition-opacity text-primary shrink-0">bolt</span>
+                )}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -748,6 +761,7 @@ function AgentsTab() {
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([])
   const [activeChatId, setActiveChatId] = useState<string | null>(null)
   const [showChat, setShowChat] = useState(false)
+  const [runningSkill, setRunningSkill] = useState<string | null>(null)
 
   const { data: advisors = [] } = useQuery<AdvisorConfig[]>({
     queryKey: ["strategy_advisors"],
@@ -872,11 +886,15 @@ function AgentsTab() {
 
   async function handleTriggerSkill(advisorId: string, skill: SkillDef) {
     if (skill.todo) return
+    const key = `${advisorId}:${skill.name}`
+    setRunningSkill(key)
     try {
       await triggerAdvisor(advisorId)
       queryClient.invalidateQueries({ queryKey: ["strategy_proposals"] })
     } catch (e: unknown) {
       console.error("Trigger failed", e)
+    } finally {
+      setRunningSkill(null)
     }
   }
 
@@ -922,6 +940,7 @@ function AgentsTab() {
             advisor={advisor}
             proposals={proposals}
             selected={selectedAgents.has(advisor.id)}
+            runningSkill={runningSkill}
             onToggleSelect={() => toggleAgent(advisor.id)}
             onPrompt={() => setPromptAdvisorId(advisor.id)}
             onProposals={() => setProposalsAdvisorId(advisor.id)}
@@ -1300,39 +1319,49 @@ function RoadmapTab() {
   const wip = roadmap?.wip ?? []
 
   return (
-    <div className="space-y-8">
-      {/* Controls */}
-      <div className="flex flex-wrap justify-between items-center gap-3">
-        <div className="flex gap-3">
+    <div className="space-y-10">
+      {/* Page header */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <h3 className="text-3xl font-extrabold font-headline text-on-surface tracking-tight mb-1">Product Roadmap</h3>
+          <p className="text-on-surface-variant text-sm font-label">
+            {backlog.length} in backlog · {wip.length} in progress
+          </p>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={handleShowDone}
+            className="px-4 py-2.5 border border-outline-variant/40 text-on-surface text-sm font-medium rounded-xl hover:bg-surface-container transition-all"
+          >
+            <span className="material-symbols-outlined text-sm align-middle mr-1.5">history</span>
+            Recently Done
+          </button>
           <button
             onClick={() => { setEditingItem(null); setShowForm(true) }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white shadow-sm hover:brightness-110 transition-all"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white shadow-float hover:brightness-110 transition-all"
             style={{ background: "linear-gradient(135deg, #003d9b 0%, #0052cc 100%)" }}
           >
             <span className="material-symbols-outlined text-sm">add</span>
             Add Item
           </button>
-          <button
-            onClick={handleShowDone}
-            className="px-4 py-2.5 border border-outline-variant/40 text-on-surface text-sm font-medium rounded-xl hover:bg-surface-container transition-all"
-          >
-            Recently Done
-          </button>
         </div>
-        <p className="text-xs text-on-surface-variant">
-          {backlog.length} in backlog · {wip.length} in progress
-        </p>
       </div>
 
       {/* WIP section */}
-      <section>
-        <h2 className="text-sm font-bold text-on-surface mb-3 flex items-center gap-2 font-headline">
-          <span className="w-2 h-2 rounded-full bg-primary inline-block" />
-          Work in Progress
-          <span className="text-xs text-on-surface-variant font-normal ml-0.5">({wip.length})</span>
-        </h2>
+      <section className="bg-surface-container-lowest rounded-2xl shadow-card p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>
+              trending_up
+            </span>
+          </div>
+          <div>
+            <h2 className="text-lg font-bold font-headline text-on-surface">Work in Progress</h2>
+            <p className="text-xs text-on-surface-variant">{wip.length} active item{wip.length !== 1 ? "s" : ""} · drag to reorder</p>
+          </div>
+        </div>
         {wip.length === 0 ? (
-          <div className="text-on-surface-variant italic text-sm py-8 text-center bg-surface-container-low rounded-xl">
+          <div className="text-on-surface-variant italic text-sm py-10 text-center bg-surface-container-low rounded-xl">
             No items in progress.
           </div>
         ) : (
@@ -1351,15 +1380,21 @@ function RoadmapTab() {
       </section>
 
       {/* Backlog section */}
-      <section>
-        <h2 className="text-sm font-bold text-on-surface mb-3 flex items-center gap-2 font-headline">
-          <span className="w-2 h-2 rounded-full bg-outline-variant inline-block" />
-          Product Backlog
-          <span className="text-xs text-on-surface-variant font-normal ml-0.5">({backlog.length})</span>
-        </h2>
+      <section className="bg-surface-container-lowest rounded-2xl shadow-card p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-xl bg-surface-container flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-on-surface-variant" style={{ fontVariationSettings: "'FILL' 1" }}>
+              format_list_bulleted
+            </span>
+          </div>
+          <div>
+            <h2 className="text-lg font-bold font-headline text-on-surface">Product Backlog</h2>
+            <p className="text-xs text-on-surface-variant">{backlog.length} item{backlog.length !== 1 ? "s" : ""} queued · drag to prioritize</p>
+          </div>
+        </div>
         {backlog.length === 0 ? (
-          <div className="text-on-surface-variant italic text-sm py-8 text-center bg-surface-container-low rounded-xl border-2 border-dashed border-outline-variant/40">
-            No backlog items. Click "+ Add Item" to start.
+          <div className="text-on-surface-variant italic text-sm py-10 text-center bg-surface-container-low rounded-xl border-2 border-dashed border-outline-variant/40">
+            No backlog items yet. Click "+ Add Item" to start building your roadmap.
           </div>
         ) : (
           <div className="space-y-2">

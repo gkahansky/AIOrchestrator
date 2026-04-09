@@ -105,7 +105,7 @@ def advisor_diagnostics(user: str = Depends(require_auth)):
     return result
 
 
-@router.get("/proposals", response_model=List[ProposalResponse])
+@router.get("/proposals")
 def get_proposals(status: Optional[str] = None, advisor_id: Optional[str] = None, user: str = Depends(require_auth)):
     with get_session() as db:
         query = db.query(AdvisoryProposal)
@@ -113,57 +113,63 @@ def get_proposals(status: Optional[str] = None, advisor_id: Optional[str] = None
             query = query.filter(AdvisoryProposal.status == status)
         if advisor_id:
             query = query.filter(AdvisoryProposal.advisor_id == advisor_id)
+        rows = query.order_by(AdvisoryProposal.priority.asc(), AdvisoryProposal.created_at.desc()).all()
+        return [
+            {
+                "id": str(r.id),
+                "advisor_id": r.advisor_id,
+                "category": r.category,
+                "content": r.content,
+                "status": r.status,
+                "priority": r.priority,
+                "job_id": str(r.job_id) if r.job_id else None,
+                "created_at": r.created_at.isoformat(),
+            }
+            for r in rows
+        ]
 
-        # Order by priority (lower is high priority) and newest first
-        return query.order_by(AdvisoryProposal.priority.asc(), AdvisoryProposal.created_at.desc()).all()
-
-@router.post("/proposals/{proposal_id}/approve", response_model=ProposalResponse)
+@router.post("/proposals/{proposal_id}/approve")
 def approve_proposal(proposal_id: uuid.UUID, user: str = Depends(require_auth)):
     with get_session() as db:
         proposal = db.query(AdvisoryProposal).filter(AdvisoryProposal.id == proposal_id).first()
         if not proposal:
             raise HTTPException(status_code=404, detail="Proposal not found")
-            
         if proposal.status != "pending_review":
             raise HTTPException(status_code=400, detail=f"Cannot approve proposal with status {proposal.status}")
-            
-        proposal.status = "approved"
 
+        proposal.status = "approved"
         title = f"[{proposal.advisor_id.title()}] {proposal.category}"
         content = proposal.content
-        if isinstance(content, dict):
-            description = json.dumps(content, ensure_ascii=False)
-        else:
-            description = str(content)
-
-        roadmap_item = Roadmap(
-            title=title[:500],
-            description=description,
-            item_type="New feature",
-            status="not_started",
-            sort_order=0,
-        )
-        db.add(roadmap_item)
+        description = json.dumps(content, ensure_ascii=False) if isinstance(content, dict) else str(content)
+        db.add(Roadmap(title=title[:500], description=description, item_type="New feature", status="not_started", sort_order=0))
         db.commit()
         db.refresh(proposal)
-        
-        return proposal
+        return {
+            "id": str(proposal.id), "advisor_id": proposal.advisor_id,
+            "category": proposal.category, "content": proposal.content,
+            "status": proposal.status, "priority": proposal.priority,
+            "job_id": str(proposal.job_id) if proposal.job_id else None,
+            "created_at": proposal.created_at.isoformat(),
+        }
 
-@router.post("/proposals/{proposal_id}/reject", response_model=ProposalResponse)
+@router.post("/proposals/{proposal_id}/reject")
 def reject_proposal(proposal_id: uuid.UUID, user: str = Depends(require_auth)):
     with get_session() as db:
         proposal = db.query(AdvisoryProposal).filter(AdvisoryProposal.id == proposal_id).first()
         if not proposal:
             raise HTTPException(status_code=404, detail="Proposal not found")
-            
         if proposal.status != "pending_review":
             raise HTTPException(status_code=400, detail=f"Cannot reject proposal with status {proposal.status}")
-            
         proposal.status = "rejected"
         db.commit()
         db.refresh(proposal)
-        
-        return proposal
+        return {
+            "id": str(proposal.id), "advisor_id": proposal.advisor_id,
+            "category": proposal.category, "content": proposal.content,
+            "status": proposal.status, "priority": proposal.priority,
+            "job_id": str(proposal.job_id) if proposal.job_id else None,
+            "created_at": proposal.created_at.isoformat(),
+        }
 
 import os
 import json

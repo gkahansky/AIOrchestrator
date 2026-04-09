@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
-  fetchProposals, fetchAdvisorRuns, approveProposal, rejectProposal,
+  fetchProposals, fetchAdvisorRuns, fetchAdvisorDiagnostics,
+  approveProposal, rejectProposal,
   fetchAdvisors, updateAdvisorPrompt,
   fetchRoadmap, fetchRoadmapDone, fetchRoadmapFeatures,
   createRoadmapFeature, createRoadmapItem, updateRoadmapItem,
@@ -763,6 +764,7 @@ function AgentsTab() {
   const [showChat, setShowChat] = useState(false)
   const [runningSkill, setRunningSkill] = useState<string | null>(null)
   const [triggerResult, setTriggerResult] = useState<{ type: "success" | "error"; msg: string } | null>(null)
+  const [showDiag, setShowDiag] = useState(false)
 
   const { data: advisors = [] } = useQuery<AdvisorConfig[]>({
     queryKey: ["strategy_advisors"],
@@ -780,6 +782,13 @@ function AgentsTab() {
     queryKey: ["advisor_runs"],
     queryFn: () => fetchAdvisorRuns(10),
     refetchInterval: 60_000,
+  })
+
+  const { data: diag, refetch: refetchDiag, isFetching: diagLoading } = useQuery<Record<string, unknown>>({
+    queryKey: ["advisor_diagnostics"],
+    queryFn: fetchAdvisorDiagnostics,
+    enabled: showDiag,
+    staleTime: 0,
   })
 
   // Ensure all 4 advisors are shown even before API loads (use static meta as fallback)
@@ -910,10 +919,13 @@ function AgentsTab() {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Unknown error"
       setTriggerResult({ type: "error", msg })
+      // errors stay until dismissed; only auto-clear success
     } finally {
       setRunningSkill(null)
-      setTimeout(() => setTriggerResult(null), 10_000)
     }
+    // auto-dismiss success after 10s
+    setTriggerResult(prev => prev?.type === "success" ? prev : prev)
+    setTimeout(() => setTriggerResult(prev => prev?.type === "success" ? null : prev), 10_000)
   }
 
   return (
@@ -989,22 +1001,67 @@ function AgentsTab() {
         ))}
       </div>
 
-      {/* Run history */}
-      {recentRuns.length > 0 && (
-        <div className="mt-10 bg-surface-container-lowest rounded-2xl shadow-card overflow-hidden">
-          <div className="px-6 py-4 border-b border-surface-container flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center">
-                <span className="material-symbols-outlined text-sm text-on-surface-variant">history</span>
-              </div>
-              <h3 className="text-sm font-bold font-headline text-on-surface">Recent Agent Runs</h3>
+      {/* Run history — always visible */}
+      <div className="mt-10 bg-surface-container-lowest rounded-2xl shadow-card overflow-hidden">
+        <div className="px-6 py-4 border-b border-surface-container flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center">
+              <span className="material-symbols-outlined text-sm text-on-surface-variant">history</span>
             </div>
+            <h3 className="text-sm font-bold font-headline text-on-surface">Recent Agent Runs</h3>
+            {recentRuns.length > 0 && (
+              <span className="text-xs text-on-surface-variant">({recentRuns.length})</span>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => { setShowDiag(v => !v); if (!showDiag) refetchDiag() }}
+              className="text-xs text-on-surface-variant hover:text-on-surface font-medium flex items-center gap-1"
+            >
+              <span className="material-symbols-outlined text-sm">bug_report</span>
+              Diagnostics
+            </button>
             <button onClick={() => refetchRuns()} className="text-xs text-primary hover:underline font-medium">Refresh</button>
           </div>
+        </div>
+
+        {/* Diagnostics panel */}
+        {showDiag && (
+          <div className="px-6 py-4 bg-slate-950 text-slate-300 text-xs font-mono border-b border-surface-container">
+            {diagLoading ? (
+              <span className="text-slate-400">Loading diagnostics…</span>
+            ) : diag ? (
+              <div className="space-y-1">
+                {Object.entries(diag).map(([k, v]) => (
+                  <div key={k}>
+                    <span className="text-slate-500">{k}: </span>
+                    <span className={
+                      v === true ? "text-emerald-400" :
+                      v === false ? "text-red-400" :
+                      typeof v === "string" && v.startsWith("error") ? "text-red-400" :
+                      "text-slate-200"
+                    }>
+                      {typeof v === "object" ? JSON.stringify(v, null, 2) : String(v)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <span className="text-slate-400">No data</span>
+            )}
+          </div>
+        )}
+
+        {recentRuns.length === 0 ? (
+          <div className="px-6 py-10 text-center">
+            <span className="material-symbols-outlined text-3xl text-on-surface-variant/40 block mb-2">history</span>
+            <p className="text-sm text-on-surface-variant">No runs yet. Click a skill button to trigger an agent.</p>
+            <p className="text-xs text-on-surface-variant/60 mt-1">Click "Diagnostics" above to check DB and API connectivity.</p>
+          </div>
+        ) : (
           <div className="divide-y divide-surface-container">
             {recentRuns.map(run => {
               const meta = AGENT_META[run.advisor_id]
-              const isSuccess = run.status !== "failed"
               return (
                 <div key={String(run.id)} className="flex items-center gap-4 px-6 py-3">
                   <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${meta?.iconBg ?? "bg-surface-container"}`}>
@@ -1039,8 +1096,8 @@ function AgentsTab() {
               )
             })}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Ongoing chats indicator (bottom bar) */}
       {chatSessions.length > 0 && !showChat && (

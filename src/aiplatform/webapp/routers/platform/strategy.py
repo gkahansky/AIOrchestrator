@@ -41,16 +41,68 @@ class RoadmapResponse(BaseModel):
         orm_mode = True
         from_attributes = True
 
-@router.get("/advisors/runs", response_model=List[ProposalResponse])
+@router.get("/advisors/runs")
 def get_advisor_runs(limit: int = 20, user: str = Depends(require_auth)):
     """Return the most recent advisor proposals across all statuses (run history)."""
     with get_session() as db:
-        return (
+        rows = (
             db.query(AdvisoryProposal)
             .order_by(AdvisoryProposal.created_at.desc())
             .limit(limit)
             .all()
         )
+        return [
+            {
+                "id": str(r.id),
+                "advisor_id": r.advisor_id,
+                "category": r.category,
+                "content": r.content,
+                "status": r.status,
+                "priority": r.priority,
+                "job_id": str(r.job_id) if r.job_id else None,
+                "created_at": r.created_at.isoformat(),
+            }
+            for r in rows
+        ]
+
+
+@router.get("/advisors/diagnostics")
+def advisor_diagnostics(user: str = Depends(require_auth)):
+    """Returns DB connectivity status, proposal counts, and env checks."""
+    import os
+    result: dict = {}
+
+    # DB check
+    try:
+        with get_session() as db:
+            total = db.query(AdvisoryProposal).count()
+            pending = db.query(AdvisoryProposal).filter(AdvisoryProposal.status == "pending_review").count()
+        result["db"] = "ok"
+        result["proposal_total"] = total
+        result["proposal_pending"] = pending
+    except Exception as exc:
+        result["db"] = f"error: {exc}"
+        result["proposal_total"] = None
+        result["proposal_pending"] = None
+
+    # Env check
+    result["anthropic_key_set"] = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    result["database_url_set"] = bool(os.environ.get("DATABASE_URL"))
+
+    # Registry check
+    try:
+        registry_path = Path(__file__).parent.parent.parent.parent / "registry" / "advisors.json"
+        with open(registry_path, "r") as f:
+            advisors = json.load(f)
+        result["registry"] = list(advisors.keys())
+    except Exception as exc:
+        result["registry"] = f"error: {exc}"
+
+    # Prompt files check
+    prompts_dir = Path(__file__).parent.parent.parent.parent / "registry" / "prompts"
+    result["prompts"] = {p.name: p.stat().st_size for p in prompts_dir.glob("*.md")} if prompts_dir.exists() else "missing"
+
+    return result
 
 
 @router.get("/proposals", response_model=List[ProposalResponse])

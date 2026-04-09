@@ -329,6 +329,13 @@ export async function fetchAdvisorRuns(limit = 20): Promise<AdvisoryProposal[]> 
   return handleResponse<AdvisoryProposal[]>(res)
 }
 
+export async function fetchAdvisorDiagnostics(): Promise<Record<string, unknown>> {
+  const res = await fetch(`${BASE}/api/platform/strategy/advisors/diagnostics`, {
+    headers: getHeaders(),
+  })
+  return handleResponse<Record<string, unknown>>(res)
+}
+
 export async function triggerAdvisor(advisorId: string): Promise<{ status: string; proposal?: { id: string; category: string; priority: number } }> {
   const res = await fetch(`${BASE}/api/platform/strategy/advisors/${advisorId}/trigger`, {
     method: "POST",

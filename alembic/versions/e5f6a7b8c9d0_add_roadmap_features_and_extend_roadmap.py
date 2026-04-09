@@ -53,14 +53,14 @@ def upgrade() -> None:
     # 4. Set defaults for new columns on existing rows
     op.execute("UPDATE roadmap SET item_type = 'New feature', sort_order = 0")
 
-    # 5. Migrate old status enum values to new string values
+    # 5. Convert status column from enum to varchar FIRST (must happen before value updates)
+    op.execute("ALTER TABLE roadmap ALTER COLUMN status TYPE VARCHAR(50) USING status::text")
+    op.execute("DROP TYPE IF EXISTS roadmap_status_enum")
+
+    # 6. Now migrate old status string values to new values
     op.execute("UPDATE roadmap SET status = 'not_started' WHERE status = 'backlog'")
     op.execute("UPDATE roadmap SET status = 'done' WHERE status = 'completed'")
     # 'in_progress' stays as-is
-
-    # 6. Change status column from enum to varchar
-    op.execute("ALTER TABLE roadmap ALTER COLUMN status TYPE VARCHAR(50) USING status::text")
-    op.execute("DROP TYPE IF EXISTS roadmap_status_enum")
 
     # 7. Add FK constraint for feature_id
     op.create_foreign_key(

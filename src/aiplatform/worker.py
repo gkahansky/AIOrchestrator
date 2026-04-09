@@ -1078,7 +1078,7 @@ def deliver_accessibility_audit_job(job_id: str, review_notes: str | None = None
     from aiplatform.database.session import SessionLocal
     from aiplatform.database.models import AccessibilityAudit, Job
     from aiplatform.skills.comms.send_email import send_email
-        from aiplatform.database.crm_ops import can_send_sample, log_contact_message
+    from aiplatform.database.crm_ops import can_send_sample, log_contact_message
 
     db = SessionLocal()
     try:
@@ -1217,7 +1217,7 @@ def run_send_outreach(self, campaign_id: str, lead_ids: list | None = None, temp
     After each successful send, upserts the Contact record for CRM tracking.
     """
     from aiplatform.skills.comms.send_email import send_email
-        from aiplatform.database.crm_ops import can_send_sample, log_contact_message
+    from aiplatform.database.crm_ops import can_send_sample, log_contact_message
     from aiplatform.database.models import Contact, Lead, OutreachTemplate, OutreachSend, OutreachCampaign
     from aiplatform.database.session import SessionLocal
     from datetime import timedelta

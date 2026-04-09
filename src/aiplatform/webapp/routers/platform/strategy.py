@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import Any, List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
 import json
@@ -18,12 +18,12 @@ class ProposalResponse(BaseModel):
     id: uuid.UUID
     advisor_id: str
     category: str
-    content: str
+    content: Any  # JSONB in DB — can be dict or str
     status: str
     priority: int
     job_id: Optional[uuid.UUID]
     created_at: datetime
-    
+
     class Config:
         orm_mode = True
         from_attributes = True
@@ -40,6 +40,18 @@ class RoadmapResponse(BaseModel):
     class Config:
         orm_mode = True
         from_attributes = True
+
+@router.get("/advisors/runs", response_model=List[ProposalResponse])
+def get_advisor_runs(limit: int = 20, user: str = Depends(require_auth)):
+    """Return the most recent advisor proposals across all statuses (run history)."""
+    with get_session() as db:
+        return (
+            db.query(AdvisoryProposal)
+            .order_by(AdvisoryProposal.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
 
 @router.get("/proposals", response_model=List[ProposalResponse])
 def get_proposals(status: Optional[str] = None, advisor_id: Optional[str] = None, user: str = Depends(require_auth)):
@@ -332,7 +344,7 @@ def delete_roadmap_item(item_id: int, user: str = Depends(require_auth)):
 
 @router.post("/advisors/{advisor_id}/trigger")
 def trigger_advisor(advisor_id: str, user: str = Depends(require_auth)):
-    """Manually dispatch an advisor run as a Celery task."""
+    """Run an advisor synchronously and return the resulting proposal."""
     registry_path = Path(__file__).parent.parent.parent.parent / "registry" / "advisors.json"
     with open(registry_path, "r") as f:
         advisors = json.load(f)
@@ -340,11 +352,12 @@ def trigger_advisor(advisor_id: str, user: str = Depends(require_auth)):
         raise HTTPException(status_code=404, detail="Advisor not found")
 
     try:
-        from aiplatform.worker import run_advisor_async
-        task = run_advisor_async.delay(advisor_id, {"event": "manual_trigger"})
-        return {"status": "queued", "task_id": str(task.id)}
+        from aiplatform.skills.strategy.run_advisor import run_advisor
+        result = run_advisor(advisor_id, {"event": "manual_trigger"})
+        return {"status": "completed", "proposal": result}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to dispatch advisor: {exc}")
+        import traceback
+        raise HTTPException(status_code=500, detail=f"Advisor run failed: {exc}\n{traceback.format_exc()}")
 
 
 # ── Agent Chat ────────────────────────────────────────────────────────────────

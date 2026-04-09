@@ -322,12 +322,19 @@ export async function reorderRoadmapItems(ids: number[]): Promise<void> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
 }
 
-export async function triggerAdvisor(advisorId: string): Promise<{ status: string; task_id: string }> {
+export async function fetchAdvisorRuns(limit = 20): Promise<AdvisoryProposal[]> {
+  const res = await fetch(`${BASE}/api/platform/strategy/advisors/runs?limit=${limit}`, {
+    headers: getHeaders(),
+  })
+  return handleResponse<AdvisoryProposal[]>(res)
+}
+
+export async function triggerAdvisor(advisorId: string): Promise<{ status: string; proposal?: { id: string; category: string; priority: number } }> {
   const res = await fetch(`${BASE}/api/platform/strategy/advisors/${advisorId}/trigger`, {
     method: "POST",
     headers: getHeaders(),
   })
-  return handleResponse<{ status: string; task_id: string }>(res)
+  return handleResponse<{ status: string; proposal?: { id: string; category: string; priority: number } }>(res)
 }
 
 export async function chatWithAdvisors(body: ChatRequest): Promise<ChatApiResponse> {

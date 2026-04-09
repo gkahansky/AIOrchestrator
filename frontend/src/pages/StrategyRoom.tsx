@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
-  fetchProposals, approveProposal, rejectProposal,
+  fetchProposals, fetchAdvisorRuns, approveProposal, rejectProposal,
   fetchAdvisors, updateAdvisorPrompt,
   fetchRoadmap, fetchRoadmapDone, fetchRoadmapFeatures,
   createRoadmapFeature, createRoadmapItem, updateRoadmapItem,
@@ -762,6 +762,7 @@ function AgentsTab() {
   const [activeChatId, setActiveChatId] = useState<string | null>(null)
   const [showChat, setShowChat] = useState(false)
   const [runningSkill, setRunningSkill] = useState<string | null>(null)
+  const [triggerResult, setTriggerResult] = useState<{ type: "success" | "error"; msg: string } | null>(null)
 
   const { data: advisors = [] } = useQuery<AdvisorConfig[]>({
     queryKey: ["strategy_advisors"],
@@ -773,6 +774,12 @@ function AgentsTab() {
     queryKey: ["strategy_proposals"],
     queryFn: () => fetchProposals({ status: "pending_review" }),
     refetchInterval: 30_000,
+  })
+
+  const { data: recentRuns = [], refetch: refetchRuns } = useQuery<AdvisoryProposal[]>({
+    queryKey: ["advisor_runs"],
+    queryFn: () => fetchAdvisorRuns(10),
+    refetchInterval: 60_000,
   })
 
   // Ensure all 4 advisors are shown even before API loads (use static meta as fallback)
@@ -888,18 +895,50 @@ function AgentsTab() {
     if (skill.todo) return
     const key = `${advisorId}:${skill.name}`
     setRunningSkill(key)
+    setTriggerResult(null)
     try {
-      await triggerAdvisor(advisorId)
+      const resp = await triggerAdvisor(advisorId)
       queryClient.invalidateQueries({ queryKey: ["strategy_proposals"] })
+      refetchRuns()
+      const p = resp.proposal
+      setTriggerResult({
+        type: "success",
+        msg: p
+          ? `${AGENT_META[advisorId]?.displayName ?? advisorId} created proposal: "${p.category}" (priority ${p.priority})`
+          : `${AGENT_META[advisorId]?.displayName ?? advisorId} completed successfully.`,
+      })
     } catch (e: unknown) {
-      console.error("Trigger failed", e)
+      const msg = e instanceof Error ? e.message : "Unknown error"
+      setTriggerResult({ type: "error", msg })
     } finally {
       setRunningSkill(null)
+      setTimeout(() => setTriggerResult(null), 10_000)
     }
   }
 
   return (
     <>
+      {/* Trigger result toast */}
+      {triggerResult && (
+        <div className={`fixed top-20 right-6 z-50 max-w-sm w-full rounded-xl shadow-float px-5 py-4 flex items-start gap-3 transition-all ${
+          triggerResult.type === "success"
+            ? "bg-emerald-50 border border-emerald-200"
+            : "bg-red-50 border border-red-200"
+        }`}>
+          <span className={`material-symbols-outlined text-lg shrink-0 mt-0.5 ${
+            triggerResult.type === "success" ? "text-emerald-600" : "text-red-600"
+          }`} style={{ fontVariationSettings: "'FILL' 1" }}>
+            {triggerResult.type === "success" ? "check_circle" : "error"}
+          </span>
+          <p className={`text-sm font-medium leading-snug ${
+            triggerResult.type === "success" ? "text-emerald-800" : "text-red-800"
+          }`}>{triggerResult.msg}</p>
+          <button onClick={() => setTriggerResult(null)} className="ml-auto shrink-0 text-on-surface-variant hover:text-on-surface">
+            <span className="material-symbols-outlined text-sm">close</span>
+          </button>
+        </div>
+      )}
+
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10">
         <div>
@@ -949,6 +988,59 @@ function AgentsTab() {
           />
         ))}
       </div>
+
+      {/* Run history */}
+      {recentRuns.length > 0 && (
+        <div className="mt-10 bg-surface-container-lowest rounded-2xl shadow-card overflow-hidden">
+          <div className="px-6 py-4 border-b border-surface-container flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center">
+                <span className="material-symbols-outlined text-sm text-on-surface-variant">history</span>
+              </div>
+              <h3 className="text-sm font-bold font-headline text-on-surface">Recent Agent Runs</h3>
+            </div>
+            <button onClick={() => refetchRuns()} className="text-xs text-primary hover:underline font-medium">Refresh</button>
+          </div>
+          <div className="divide-y divide-surface-container">
+            {recentRuns.map(run => {
+              const meta = AGENT_META[run.advisor_id]
+              const isSuccess = run.status !== "failed"
+              return (
+                <div key={String(run.id)} className="flex items-center gap-4 px-6 py-3">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${meta?.iconBg ?? "bg-surface-container"}`}>
+                    <span className={`material-symbols-outlined text-sm ${meta?.iconColor ?? "text-on-surface-variant"}`}
+                      style={{ fontVariationSettings: "'FILL' 1" }}>
+                      {meta?.icon ?? "smart_toy"}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-on-surface truncate">
+                      {meta?.displayName ?? run.advisor_id}
+                      <span className="text-on-surface-variant font-normal ml-2">— {run.category}</span>
+                    </p>
+                    <p className="text-xs text-on-surface-variant truncate">
+                      {typeof run.content === "object" && run.content !== null
+                        ? (run.content as Record<string, string>).summary ?? JSON.stringify(run.content).slice(0, 100)
+                        : String(run.content).slice(0, 100)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                      run.status === "pending_review" ? "bg-yellow-100 text-yellow-700" :
+                      run.status === "approved" ? "bg-emerald-100 text-emerald-700" :
+                      run.status === "rejected" ? "bg-red-100 text-red-700" :
+                      "bg-surface-container text-on-surface-variant"
+                    }`}>{run.status.replace("_", " ")}</span>
+                    <span className="text-xs text-on-surface-variant">
+                      {new Date(run.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Ongoing chats indicator (bottom bar) */}
       {chatSessions.length > 0 && !showChat && (

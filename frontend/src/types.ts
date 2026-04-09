@@ -154,11 +154,38 @@ export interface AdvisoryProposal {
   id: string
   advisor_id: string
   category: string
-  content: string
+  content: string | Record<string, unknown>
   status: string
   priority: number
   job_id: string | null
   created_at: string
+}
+
+// ── Strategy Chat ─────────────────────────────────────────────────────────────
+
+export interface ChatMessage {
+  id: string
+  role: "user" | "assistant"
+  advisor_id?: string   // set on assistant messages
+  content: string
+  ts: number
+}
+
+export interface ChatSession {
+  id: string
+  name: string
+  advisor_ids: string[]
+  messages: ChatMessage[]
+  loading: boolean
+}
+
+export interface ChatRequest {
+  advisor_ids: string[]
+  messages: Pick<ChatMessage, "role" | "advisor_id" | "content">[]
+}
+
+export interface ChatApiResponse {
+  responses: { advisor_id: string; content: string }[]
 }
 
 export type RoadmapItemType = "New feature" | "Bug" | "Feature enhancement"

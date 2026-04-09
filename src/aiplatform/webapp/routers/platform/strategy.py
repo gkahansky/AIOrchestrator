@@ -42,12 +42,14 @@ class RoadmapResponse(BaseModel):
         from_attributes = True
 
 @router.get("/proposals", response_model=List[ProposalResponse])
-def get_proposals(status: Optional[str] = None, user: str = Depends(require_auth)):
+def get_proposals(status: Optional[str] = None, advisor_id: Optional[str] = None, user: str = Depends(require_auth)):
     with get_session() as db:
         query = db.query(AdvisoryProposal)
         if status:
             query = query.filter(AdvisoryProposal.status == status)
-        
+        if advisor_id:
+            query = query.filter(AdvisoryProposal.advisor_id == advisor_id)
+
         # Order by priority (lower is high priority) and newest first
         return query.order_by(AdvisoryProposal.priority.asc(), AdvisoryProposal.created_at.desc()).all()
 
@@ -324,6 +326,97 @@ def delete_roadmap_item(item_id: int, user: str = Depends(require_auth)):
             raise HTTPException(status_code=404, detail="Item not found")
         db.delete(item)
         db.commit()
+
+
+# ── Advisor Manual Trigger ────────────────────────────────────────────────────
+
+@router.post("/advisors/{advisor_id}/trigger")
+def trigger_advisor(advisor_id: str, user: str = Depends(require_auth)):
+    """Manually dispatch an advisor run as a Celery task."""
+    registry_path = Path(__file__).parent.parent.parent.parent / "registry" / "advisors.json"
+    with open(registry_path, "r") as f:
+        advisors = json.load(f)
+    if advisor_id not in advisors:
+        raise HTTPException(status_code=404, detail="Advisor not found")
+
+    try:
+        from aiplatform.worker import run_advisor_async
+        task = run_advisor_async.delay(advisor_id, {"event": "manual_trigger"})
+        return {"status": "queued", "task_id": str(task.id)}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to dispatch advisor: {exc}")
+
+
+# ── Agent Chat ────────────────────────────────────────────────────────────────
+
+class ChatMessageIn(BaseModel):
+    role: str             # "user" or "assistant"
+    content: str
+    advisor_id: Optional[str] = None  # set for assistant messages
+
+
+class ChatRequest(BaseModel):
+    advisor_ids: List[str]
+    messages: List[ChatMessageIn]
+
+
+@router.post("/chat")
+def chat_with_advisors(body: ChatRequest, user: str = Depends(require_auth)):
+    """
+    Send a conversation to one or more advisors and receive their responses.
+    Each advisor gets only the user messages + its own prior replies.
+    """
+    import anthropic
+
+    registry_path = Path(__file__).parent.parent.parent.parent / "registry" / "advisors.json"
+    prompts_dir = registry_path.parent / "prompts"
+
+    with open(registry_path, "r") as f:
+        registry = json.load(f)
+
+    client = anthropic.Anthropic()
+    responses = []
+
+    for advisor_id in body.advisor_ids:
+        if advisor_id not in registry:
+            continue
+
+        config = registry[advisor_id]
+        prompt_ref = config.get("prompt_ref", f"{advisor_id}_v1")
+        prompt_file = prompts_dir / f"{prompt_ref}.md"
+        system_prompt = prompt_file.read_text(encoding="utf-8") if prompt_file.exists() else (
+            "You are a strategic business advisor. Provide concise, actionable insights."
+        )
+
+        # Build per-advisor message thread (user msgs + own assistant replies only)
+        thread = []
+        for msg in body.messages:
+            if msg.role == "user":
+                thread.append({"role": "user", "content": msg.content})
+            elif msg.role == "assistant" and msg.advisor_id == advisor_id:
+                thread.append({"role": "assistant", "content": msg.content})
+
+        if not thread or thread[-1]["role"] != "user":
+            continue
+
+        try:
+            result = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=1024,
+                system=system_prompt,
+                messages=thread,
+            )
+            responses.append({
+                "advisor_id": advisor_id,
+                "content": result.content[0].text,
+            })
+        except Exception as exc:
+            responses.append({
+                "advisor_id": advisor_id,
+                "content": f"[Error: {exc}]",
+            })
+
+    return {"responses": responses}
 
 
 @router.post("/roadmap/reorder")

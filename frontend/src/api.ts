@@ -16,6 +16,8 @@
   RoadmapListResponse,
   RoadmapItemCreate,
   RoadmapItemUpdate,
+  ChatRequest,
+  ChatApiResponse,
 } from "./types"
 
 const BASE = import.meta.env.VITE_API_URL || "https://api.planbadmin.com"
@@ -216,12 +218,14 @@ export async function updateApiKey(service: string, value: string): Promise<ApiK
   return handleResponse<ApiKey>(res)
 }
 
-// ── Strategy Room ──
-// -- Strategy Room --
-export async function fetchProposals(): Promise<AdvisoryProposal[]> {
-  const res = await fetch(`${BASE}/api/platform/strategy/proposals?status=pending_review`, { headers: getHeaders() })
-  if (!res.ok) throw new Error("Failed to fetch proposals")
-  return res.json()
+// ── Strategy Room ──────────────────────────────────────────────────────────────
+
+export async function fetchProposals(params?: { status?: string; advisor_id?: string }): Promise<AdvisoryProposal[]> {
+  const url = new URL(`${BASE}/api/platform/strategy/proposals`)
+  url.searchParams.set("status", params?.status ?? "pending_review")
+  if (params?.advisor_id) url.searchParams.set("advisor_id", params.advisor_id)
+  const res = await fetch(url.toString(), { headers: getHeaders() })
+  return handleResponse<AdvisoryProposal[]>(res)
 }
 
 export async function approveProposal(id: string): Promise<AdvisoryProposal> {
@@ -316,4 +320,21 @@ export async function reorderRoadmapItems(ids: number[]): Promise<void> {
     body: JSON.stringify({ ids }),
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
+}
+
+export async function triggerAdvisor(advisorId: string): Promise<{ status: string; task_id: string }> {
+  const res = await fetch(`${BASE}/api/platform/strategy/advisors/${advisorId}/trigger`, {
+    method: "POST",
+    headers: getHeaders(),
+  })
+  return handleResponse<{ status: string; task_id: string }>(res)
+}
+
+export async function chatWithAdvisors(body: ChatRequest): Promise<ChatApiResponse> {
+  const res = await fetch(`${BASE}/api/platform/strategy/chat`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(body),
+  })
+  return handleResponse<ChatApiResponse>(res)
 }

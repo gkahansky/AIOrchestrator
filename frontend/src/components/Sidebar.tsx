@@ -41,7 +41,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
       <div className="px-6 pt-7 pb-6 flex items-center justify-between">
         <div>
           <div className="font-headline font-black text-xl text-on-surface tracking-tight">
-            AI-Infra
+            Plan B
           </div>
           <div className="text-[10px] font-label font-medium uppercase tracking-[0.15em] text-on-surface-variant mt-0.5">
             Infrastructure Admin

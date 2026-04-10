@@ -110,7 +110,7 @@ export default function Login() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="font-headline font-black text-3xl text-on-surface mb-1">AI-Infra</div>
+          <div className="font-headline font-black text-3xl text-on-surface mb-1">Plan B</div>
           <div className="text-xs font-label font-medium uppercase tracking-[0.18em] text-on-surface-variant">
             Infrastructure Admin
           </div>
@@ -143,7 +143,7 @@ export default function Login() {
         </div>
 
         <p className="text-center text-xs text-on-surface-variant mt-6 font-label">
-          EchoForge &middot; AI-Infra Platform v0.1
+          EchoForge &middot; Plan B Platform v0.1
         </p>
       </div>
     </div>

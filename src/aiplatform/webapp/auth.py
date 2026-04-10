@@ -29,12 +29,17 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 _bearer = HTTPBearer(auto_error=False)
 
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
-ALLOWED_EMAIL    = os.environ.get("ALLOWED_EMAIL", "")
+ALLOWED_EMAIL    = os.environ.get("ALLOWED_EMAIL", "")  # kept for backward compat
 JWT_SECRET       = os.environ.get("JWT_SECRET", "")
 JWT_ALGORITHM    = "HS256"
 JWT_EXPIRY_HOURS = 24
 
-_auth_disabled = not (GOOGLE_CLIENT_ID and ALLOWED_EMAIL and JWT_SECRET)
+# ALLOWED_EMAILS supports comma-separated list: "a@x.com,b@y.com"
+# Falls back to ALLOWED_EMAIL for backward compatibility.
+_raw = os.environ.get("ALLOWED_EMAILS", ALLOWED_EMAIL)
+ALLOWED_EMAILS: set[str] = {e.strip().lower() for e in _raw.split(",") if e.strip()}
+
+_auth_disabled = not (GOOGLE_CLIENT_ID and ALLOWED_EMAILS and JWT_SECRET)
 
 
 def create_session_token(email: str) -> str:

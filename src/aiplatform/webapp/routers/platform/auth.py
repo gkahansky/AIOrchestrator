@@ -17,7 +17,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
 from aiplatform.webapp.auth import (
-    ALLOWED_EMAIL,
+    ALLOWED_EMAILS,
     GOOGLE_CLIENT_ID,
     JWT_EXPIRY_HOURS,
     _auth_disabled,
@@ -56,7 +56,7 @@ def google_login(req: GoogleAuthRequest) -> GoogleAuthResponse:
     claims = verify_google_credential(req.credential)
     email: str = claims.get("email", "")
 
-    if not email or email.lower() != ALLOWED_EMAIL.lower():
+    if not email or email.lower() not in ALLOWED_EMAILS:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This Google account is not authorised to access this platform.",

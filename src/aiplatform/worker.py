@@ -95,12 +95,13 @@ celery_app.conf.update(
             "schedule": 604800,
             "options": {"expires": 3600},
         },
-        # Check for new Fiverr order emails every 15 minutes
-        "fiverr-email-check": {
-            "task": "platform.check_fiverr_emails",
-            "schedule": 900,
-            "options": {"expires": 300},
-        },
+        # DISABLED — Google token lacks gmail.modify scope (only Drive scopes granted).
+        # Re-enable after re-running OAuth flow with gmail.modify scope and updating GOOGLE_TOKEN_PATH.
+        # "fiverr-email-check": {
+        #     "task": "platform.check_fiverr_emails",
+        #     "schedule": 900,
+        #     "options": {"expires": 300},
+        # },
     },
     beat_schedule_filename="/tmp/celerybeat-schedule",
 )

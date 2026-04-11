@@ -10,6 +10,25 @@ const VENTURES = [
   { id: "accessibility_audit", label: "Accessibility Audit", icon: "accessibility_new" },
 ]
 
+const PLATFORMS = [
+  { id: "email",     label: "Email",     icon: "mail" },
+  { id: "fiverr",    label: "Fiverr",    icon: "work" },
+  { id: "reddit",    label: "Reddit",    icon: "forum" },
+  { id: "linkedin",  label: "LinkedIn",  icon: "person_search" },
+  { id: "facebook",  label: "Facebook",  icon: "groups" },
+  { id: "instagram", label: "Instagram", icon: "photo_camera" },
+]
+
+function PlatformBadge({ platform }: { platform: string }) {
+  const p = PLATFORMS.find(x => x.id === platform)
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">
+      <span className="material-symbols-outlined text-[12px]">{p?.icon ?? "send"}</span>
+      {p?.label ?? platform}
+    </span>
+  )
+}
+
 const STATUS_COLORS: Record<string, string> = {
   new:            "bg-surface-container text-on-surface-variant",
   email_sent:     "bg-primary/10 text-primary",
@@ -219,14 +238,15 @@ function FindLeadsModal({
 // ── Template card ─────────────────────────────────────────────────────────────
 
 function TemplateCard({
-  template, campaignId, onSaved,
-}: { template: any; campaignId: string; onSaved: () => void }) {
+  template, campaignId, platform, onSaved,
+}: { template: any; campaignId: string; platform: string; onSaved: () => void }) {
   const qc = useQueryClient()
   const [editing, setEditing] = useState(false)
   const [subject, setSubject] = useState(template.subject)
   const [body, setBody] = useState(template.body_text || "")
   const [saving, setSaving] = useState(false)
   const [approving, setApproving] = useState(false)
+  const isEmail = platform === "email"
 
   async function save() {
     setSaving(true)
@@ -278,16 +298,18 @@ function TemplateCard({
       <div className="p-5 space-y-3">
         {editing ? (
           <>
+            {isEmail && (
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Subject</label>
+                <input
+                  value={subject}
+                  onChange={e => setSubject(e.target.value)}
+                  className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface"
+                />
+              </div>
+            )}
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Subject</label>
-              <input
-                value={subject}
-                onChange={e => setSubject(e.target.value)}
-                className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Body</label>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Message</label>
               <textarea
                 value={body}
                 onChange={e => setBody(e.target.value)}
@@ -308,10 +330,12 @@ function TemplateCard({
           </>
         ) : (
           <>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Subject</p>
-              <p className="text-sm font-label text-on-surface">{template.subject}</p>
-            </div>
+            {isEmail && template.subject && (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Subject</p>
+                <p className="text-sm font-label text-on-surface">{template.subject}</p>
+              </div>
+            )}
             {template.tone_notes && (
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Tone & Angle</p>
@@ -421,8 +445,11 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
   if (isLoading) return <div className="p-8 text-center text-sm text-on-surface-variant">Loading…</div>
   if (!campaign) return null
 
+  const campaignPlatform = campaign.platform || "email"
+  const isEmailCampaign = campaignPlatform === "email"
+
   const tabs = [
-    { id: "templates", label: "Email Templates", icon: "mail" },
+    { id: "templates", label: "Message Templates", icon: "mail" },
     { id: "leads",     label: `Leads (${leadsData?.total ?? 0})`, icon: "group" },
     { id: "stats",     label: "A/B Results", icon: "bar_chart" },
   ]
@@ -449,6 +476,7 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
               <div className="flex items-center gap-3 mb-2">
                 <h2 className="font-headline font-bold text-lg text-on-surface">{campaign.name}</h2>
                 <StatusBadge status={campaign.status} />
+                <PlatformBadge platform={campaignPlatform} />
               </div>
               {campaign.goal && (
                 <p className="text-sm text-on-surface-variant leading-relaxed">{campaign.goal}</p>
@@ -468,8 +496,9 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
                 className="flex items-center gap-1.5 px-3 py-2 bg-surface-container text-on-surface text-xs font-label font-semibold rounded-lg hover:bg-surface-dim disabled:opacity-50 transition-colors"
               >
                 <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
-                {actionLoading === "compose" ? "Composing…" : "Generate Emails"}
+                {actionLoading === "compose" ? "Composing…" : "Compose Messages"}
               </button>
+              {isEmailCampaign && (
               <button
                 onClick={() => triggerAction("send", {}, "send")}
                 disabled={!!actionLoading}
@@ -478,6 +507,7 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
                 <span className="material-symbols-outlined text-[14px]">send</span>
                 {actionLoading === "send" ? "Sending…" : "Send Approved"}
               </button>
+              )}
               <button
                 onClick={deleteCampaign}
                 disabled={deleting}
@@ -535,12 +565,12 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
             {!campaign.templates?.length ? (
               <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-8 text-center">
                 <span className="material-symbols-outlined text-[40px] text-on-surface-variant/30 block mb-3">mail_outline</span>
-                <p className="text-sm text-on-surface-variant">No email templates yet.</p>
-                <p className="text-xs text-on-surface-variant mt-1">Click "Generate Emails" to create A/B/C variants using Claude.</p>
+                <p className="text-sm text-on-surface-variant">No message templates yet.</p>
+                <p className="text-xs text-on-surface-variant mt-1">Click "Compose Messages" to create A/B/C variants using Claude.</p>
               </div>
             ) : (
               campaign.templates.map((t: any) => (
-                <TemplateCard key={t.id} template={t} campaignId={campaignId}
+                <TemplateCard key={t.id} template={t} campaignId={campaignId} platform={campaignPlatform}
                   onSaved={() => qc.invalidateQueries({ queryKey: ["campaign", campaignId] })} />
               ))
             )}
@@ -561,7 +591,7 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-surface-container-low border-b border-outline-variant/10">
-                      {["Name", "Email", "Channel", "Source URL", "Company / Website", "Notes", "Status"].map(h => (
+                      {["Name", "Email / Handle", "Channel", "Source URL", "Company / Website", "Notes", "Status"].map(h => (
                         <th key={h} className="px-4 py-2.5 text-left text-[10px] font-label font-semibold uppercase tracking-wider text-on-surface-variant whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -571,7 +601,11 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
                       <tr key={l.id} className="hover:bg-surface-container-low/40 transition-colors">
                         <td className="px-4 py-3 text-sm font-label text-on-surface whitespace-nowrap">{l.name || "—"}</td>
                         <td className="px-4 py-3 text-xs font-label text-primary">
-                          {l.email ? <a href={`mailto:${l.email}`} className="hover:underline">{l.email}</a> : "—"}
+                          {l.email
+                            ? <a href={`mailto:${l.email}`} className="hover:underline">{l.email}</a>
+                            : l.platform_username
+                            ? <span className="text-on-surface-variant">{l.platform_username}</span>
+                            : "—"}
                         </td>
                         <td className="px-4 py-3">
                           <span className="text-xs font-label text-on-surface-variant">{l.source_channel}</span>
@@ -683,6 +717,20 @@ function ContactsSection() {
   const [searchInput, setSearchInput] = useState("")
   const [statusFilter, setStatusFilter] = useState("")
   const { data, isLoading } = useContacts(page, search, statusFilter)
+  const qc = useQueryClient()
+
+  async function updateContact(id: string, is_test_user: boolean) {
+    try {
+      await fetch(`${API}/api/outreach/contacts/${id}`, {
+        method: "PATCH",
+        headers: { ...authHeader(), "Content-Type": "application/json" },
+        body: JSON.stringify({ is_test_user }),
+      })
+      qc.invalidateQueries({ queryKey: ["contacts"] })
+    } catch (e) {
+      console.error("Failed to update contact:", e)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -728,7 +776,7 @@ function ContactsSection() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-surface-container-low border-b border-outline-variant/10">
-                  {["Name", "Email", "Company", "Status", "Ventures", "Last Activity"].map(h => (
+                    {["Name", "Email", "Company", "Status", "Test User", "Ventures", "Last Activity"].map(h => (
                     <th key={h} className="px-4 py-2.5 text-left text-[10px] font-label font-semibold uppercase tracking-wider text-on-surface-variant whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -741,8 +789,14 @@ function ContactsSection() {
                       <a href={`mailto:${c.email}`} className="hover:underline">{c.email}</a>
                     </td>
                     <td className="px-4 py-3 text-xs text-on-surface-variant">{c.company || "—"}</td>
-                    <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
-                    <td className="px-4 py-3 text-xs text-on-surface-variant">
+                    <td className="px-4 py-3"><StatusBadge status={c.status} /></td>                      <td className="px-4 py-3 text-center">
+                        <input
+                          type="checkbox"
+                          defaultChecked={c.is_test_user}
+                          onChange={(e) => updateContact(c.id, e.target.checked)}
+                          className="h-4 w-4 bg-surface-container border-outline-variant/30 rounded text-primary focus:ring-primary"
+                        />
+                      </td>                    <td className="px-4 py-3 text-xs text-on-surface-variant">
                       {(c.ventures_approached || []).join(", ").replace(/_/g, " ") || "—"}
                     </td>
                     <td className="px-4 py-3 text-xs text-on-surface-variant whitespace-nowrap">
@@ -784,6 +838,9 @@ function CampaignCard({ campaign, selected, onClick }: { campaign: any; selected
         <p className="text-sm font-label font-semibold text-on-surface leading-tight">{campaign.name}</p>
         <StatusBadge status={campaign.status} />
       </div>
+      <div className="flex items-center gap-2 mb-2">
+        <PlatformBadge platform={campaign.platform || "email"} />
+      </div>
       <div className="flex items-center gap-4 text-xs font-label text-on-surface-variant">
         <span>{campaign.leads_count} leads</span>
         <span>{campaign.total_sends} sent</span>
@@ -804,6 +861,7 @@ export default function Marketing() {
   const [showNewCampaign, setShowNewCampaign] = useState(false)
   const [newName, setNewName]         = useState("")
   const [newGoal, setNewGoal]         = useState("")
+  const [newPlatform, setNewPlatform] = useState("email")
   const [creating, setCreating]       = useState(false)
   const qc = useQueryClient()
 
@@ -815,12 +873,13 @@ export default function Marketing() {
     const r = await fetch(`${API}/api/outreach/campaigns`, {
       method: "POST",
       headers: { ...authHeader(), "Content-Type": "application/json" },
-      body: JSON.stringify({ venture: activeVenture, name: newName.trim(), goal: newGoal.trim() || null }),
+      body: JSON.stringify({ venture: activeVenture, name: newName.trim(), goal: newGoal.trim() || null, platform: newPlatform }),
     })
     if (r.ok) {
       const created = await r.json()
       setNewName("")
       setNewGoal("")
+      setNewPlatform("email")
       setShowNewCampaign(false)
       qc.invalidateQueries({ queryKey: ["campaigns", activeVenture] })
       setSelectedCampaignId(created.id)
@@ -899,15 +958,28 @@ export default function Marketing() {
                     />
                   </div>
                   <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Platform</label>
+                    <select
+                      value={newPlatform}
+                      onChange={e => setNewPlatform(e.target.value)}
+                      className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface"
+                    >
+                      {PLATFORMS.map(p => (
+                        <option key={p.id} value={p.id}>{p.label}</option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-on-surface-variant mt-1">Controls message format, tone rules, and character limits.</p>
+                  </div>
+                  <div>
                     <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Campaign Goal</label>
                     <textarea
                       value={newGoal}
                       onChange={e => setNewGoal(e.target.value)}
-                      placeholder="Describe the goal in detail — who we're targeting, what we want them to do, and any specific context that should inform lead search and email composition."
+                      placeholder="Describe the goal in detail — who we're targeting, what we want them to do, and any specific context that should inform lead search and message composition."
                       rows={4}
                       className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface resize-none leading-relaxed"
                     />
-                    <p className="text-[10px] text-on-surface-variant mt-1">This is used by Claude when generating search criteria and writing emails.</p>
+                    <p className="text-[10px] text-on-surface-variant mt-1">This is used by Claude when generating search criteria and composing messages.</p>
                   </div>
                   <div className="flex gap-2">
                     <button onClick={createCampaign} disabled={creating || !newName.trim()}

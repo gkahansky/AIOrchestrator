@@ -1,23 +1,29 @@
 """
 Skill: compose_outreach
-Write cold outreach emails that feel personal, not AI-generated.
+Write outreach messages that feel personal, not AI-generated.
 
-Generates A/B/C variants per campaign. Each variant uses a different
-tone and angle but always:
-  - References something specific about the lead's situation
-  - Leads with value/insight, not a sales pitch
-  - Has one clear, low-friction CTA
-  - Is short (under 150 words body)
+Generates A/B/C variants per campaign. Behaviour is controlled by `platform`:
+
+  email     — subject + HTML + plain-text cold email (original behaviour)
+  reddit    — comment reply to a post; adds value first, CTA is secondary
+  fiverr    — short conversational message to a buyer request or gig inquiry
+  linkedin  — concise connection message or post comment
+  facebook  — group comment or short message
+  instagram — comment under a relevant post
+
+Each platform has its own tone rules, character limits, and CTA style.
+New platforms can be added by extending PLATFORM_RULES.
 
 Input:
-    lead        (dict): Lead record with notes, website_url, company, name
-    venture     (str):  marketing_audit | content_studio | accessibility_audit
-    variant     (str):  "A" | "B" | "C"
-    campaign_goal (str): e.g. "get them to try the free audit"
-    extra_context (str): any custom context to inject (optional)
+    lead          (dict): Lead record
+    venture       (str):  marketing_audit | content_studio | accessibility_audit
+    variant       (str):  "A" | "B" | "C"
+    campaign_goal (str):  e.g. "get them to try the free audit"
+    extra_context (str):  any custom context to inject (optional)
+    platform      (str):  email | reddit | fiverr | linkedin | facebook | instagram
 
-Output:
-    {subject, body_html, body_text, tone_notes, cost_usd}
+Output (email):    {subject, body_html, body_text, tone_notes, variant, cost_usd}
+Output (non-email): {subject: None, body_html: None, body_text, tone_notes, variant, cost_usd}
 """
 
 from __future__ import annotations
@@ -29,14 +35,14 @@ import anthropic
 
 log = logging.getLogger(__name__)
 
-# ── Venture context blocks ─────────────────────────────────────────────────────
+# ── Venture context ────────────────────────────────────────────────────────────
 
 _VENTURE_CONTEXT = {
     "marketing_audit": {
         "service": "website marketing audit",
         "offer": "free instant website score (no sign-up needed)",
         "cta_url": "https://echoforge.biz/#marketing-audit",
-        "value_prop": "We score websites on SEO, messaging clarity, conversion rate, and competitive positioning — and you get a free score before deciding if you want the full report.",
+        "value_prop": "We score websites on SEO, messaging clarity, conversion, and competitive positioning — free score before deciding on the full report.",
         "sender_name": os.environ.get("OUTREACH_SENDER_NAME", "Gal"),
         "sender_role": "founder, EchoForge",
     },
@@ -44,7 +50,7 @@ _VENTURE_CONTEXT = {
         "service": "podcast show notes service",
         "offer": "free sample show notes from a 10-minute clip",
         "cta_url": "https://echoforge.biz/#podcast",
-        "value_prop": "We turn podcast audio into professional show notes, timestamps, transcripts, and social posts — automatically. First 10 minutes free, no card needed.",
+        "value_prop": "We turn podcast audio into show notes, timestamps, transcripts, and social posts automatically. First 10 minutes free.",
         "sender_name": os.environ.get("OUTREACH_SENDER_NAME", "Gal"),
         "sender_role": "founder, EchoForge",
     },
@@ -52,29 +58,130 @@ _VENTURE_CONTEXT = {
         "service": "WCAG accessibility audit",
         "offer": "free automated accessibility scan report",
         "cta_url": "https://echoforge.biz/#accessibility",
-        "value_prop": "We run an automated WCAG 2.1/2.2 scan on your site and give you a prioritised list of violations with code examples showing exactly how to fix each one.",
+        "value_prop": "We run a WCAG 2.1/2.2 scan and give you a prioritised list of violations with exact code fixes.",
         "sender_name": os.environ.get("OUTREACH_SENDER_NAME", "Gal"),
         "sender_role": "founder, EchoForge",
     },
 }
 
-# ── Variant tone guides ────────────────────────────────────────────────────────
+# ── Variant tones ──────────────────────────────────────────────────────────────
 
 _VARIANT_TONES = {
     "A": {
         "tone": "direct and specific",
-        "angle": "Lead with one specific observation about their situation from your research. Be concrete. Sound like you actually looked at their thing.",
+        "angle": "Lead with one concrete observation about their situation. Sound like you actually looked at their thing.",
         "cta_style": "soft ask — 'worth a look?'",
     },
     "B": {
         "tone": "peer-to-peer, casual",
-        "angle": "Sound like a fellow builder / podcaster / developer sharing something useful they found, not a vendor pitching. Use 'I' a lot. Keep it conversational.",
+        "angle": "Sound like a fellow builder sharing something useful, not a vendor pitching. Use 'I' a lot.",
         "cta_style": "curiosity hook — 'curious what your score would be'",
     },
     "C": {
         "tone": "value-first, no pitch",
-        "angle": "Lead with a genuinely useful insight or observation about their niche/space first. Mention what you do only in passing. Let the CTA be secondary.",
+        "angle": "Lead with a genuinely useful insight about their niche. Mention the service only in passing.",
         "cta_style": "low pressure — 'no obligation, just sharing'",
+    },
+}
+
+# ── Platform rules ─────────────────────────────────────────────────────────────
+# Each entry defines the message format, hard constraints, and CTA guidance.
+# Add new platforms here without touching any other code.
+
+PLATFORM_RULES: dict[str, dict] = {
+    "email": {
+        "label": "Cold email",
+        "has_subject": True,
+        "has_html": True,
+        "char_limit": None,
+        "format_note": (
+            "Write a cold outreach email: subject line + body. "
+            "80–140 words. Short paragraphs. Include one CTA link. "
+            "End with sender name. Include {{UNSUBSCRIBE_URL}} placeholder on its own line after signature."
+        ),
+        "banned": [
+            "I hope this email finds you well", "I wanted to reach out",
+            "just checking in", "synergy", "leverage", "game-changer",
+            "cutting-edge", "revolutionize", "excited to share", "touch base",
+            "circle back", "at your earliest convenience",
+        ],
+        "output_fields": '{"subject": "...", "body_text": "...", "tone_notes": "..."}',
+    },
+    "reddit": {
+        "label": "Reddit comment",
+        "has_subject": False,
+        "has_html": False,
+        "char_limit": 1000,
+        "format_note": (
+            "Write a Reddit comment reply to a post from the lead. "
+            "Start by adding genuine value — answer their question or share a relevant insight. "
+            "Mention the service only naturally at the end, if it fits. "
+            "Never start with 'Hey' or 'Hi'. No bullet-point lists. No em-dashes. "
+            "Under 150 words. Conversational, human, Reddit-native tone. "
+            "Avoid anything that reads like an ad or cold pitch."
+        ),
+        "banned": ["check out our", "we offer", "our service", "sign up", "click here"],
+        "output_fields": '{"body_text": "...", "tone_notes": "..."}',
+    },
+    "fiverr": {
+        "label": "Fiverr message",
+        "has_subject": False,
+        "has_html": False,
+        "char_limit": 500,
+        "format_note": (
+            "Write a short Fiverr message to a buyer who posted a request for a related service. "
+            "Be direct and professional — Fiverr buyers want to know: can you do it, how fast, for how much. "
+            "Reference exactly what they asked for. Keep it under 100 words. "
+            "End with a clear next step (offer to send a sample or ask a clarifying question). "
+            "No subject line. Plain text only."
+        ),
+        "banned": ["I hope this message finds you", "synergy", "game-changer"],
+        "output_fields": '{"body_text": "...", "tone_notes": "..."}',
+    },
+    "linkedin": {
+        "label": "LinkedIn message",
+        "has_subject": False,
+        "has_html": False,
+        "char_limit": 300,
+        "format_note": (
+            "Write a LinkedIn connection request message or post comment. "
+            "Connection messages: under 300 characters. Professional but warm. "
+            "Reference something specific about their profile or recent post. "
+            "One sentence about why you're reaching out. No pitch in the request itself — "
+            "save that for after they connect. "
+            "Comment style: add a substantive observation or question first, mention the service briefly."
+        ),
+        "banned": ["I came across your profile", "synergy", "leverage", "excited to connect"],
+        "output_fields": '{"body_text": "...", "tone_notes": "..."}',
+    },
+    "facebook": {
+        "label": "Facebook comment/message",
+        "has_subject": False,
+        "has_html": False,
+        "char_limit": 500,
+        "format_note": (
+            "Write a Facebook group comment or short DM. "
+            "Group comments: add value to the thread first — answer the question or share insight. "
+            "Mention the service only if directly relevant and only briefly. "
+            "Under 120 words. Friendly, casual, community-native. No hard sell."
+        ),
+        "banned": ["check out my", "DM me", "click the link in bio", "game-changer"],
+        "output_fields": '{"body_text": "...", "tone_notes": "..."}',
+    },
+    "instagram": {
+        "label": "Instagram comment",
+        "has_subject": False,
+        "has_html": False,
+        "char_limit": 300,
+        "format_note": (
+            "Write an Instagram comment under a relevant post. "
+            "Under 80 words. Acknowledge the post genuinely first. "
+            "If mentioning the service, do it in 1 sentence max — never make it the opener. "
+            "No hashtags in the comment. No links (Instagram doesn't allow clickable links in comments). "
+            "Conversational and authentic — comments that read like ads get ignored."
+        ),
+        "banned": ["link in bio", "DM for details", "check out", "game-changer", "hashtag"],
+        "output_fields": '{"body_text": "...", "tone_notes": "..."}',
     },
 }
 
@@ -86,49 +193,37 @@ def compose_outreach(
     variant: str = "A",
     campaign_goal: str = "",
     extra_context: str = "",
+    platform: str = "email",
 ) -> dict:
     """
-    Write a cold outreach email for a lead.
+    Write an outreach message for a lead on the specified platform.
 
-    Args:
-        lead:           Lead dict (name, notes, website_url, company, source_channel)
-        venture:        marketing_audit | content_studio | accessibility_audit
-        variant:        A, B, or C — controls tone/angle
-        campaign_goal:  What we want them to do (defaults to venture free offer)
-        extra_context:  Any extra info to inject (e.g. personalised finding)
-
-    Returns:
-        {subject, body_html, body_text, tone_notes, cost_usd}
+    Returns a dict with keys: subject, body_html, body_text, tone_notes, variant, cost_usd.
+    subject and body_html are None for non-email platforms.
     """
     if venture not in _VENTURE_CONTEXT:
         raise ValueError(f"Unknown venture: {venture}")
     if variant not in _VARIANT_TONES:
         raise ValueError(f"Variant must be A, B, or C. Got: {variant}")
+    if platform not in PLATFORM_RULES:
+        raise ValueError(f"Unknown platform: {platform}. Known: {list(PLATFORM_RULES)}")
 
-    vc = _VENTURE_CONTEXT[venture]
+    vc   = _VENTURE_CONTEXT[venture]
     tone = _VARIANT_TONES[variant]
+    pr   = PLATFORM_RULES[platform]
     goal = campaign_goal or f"Get them to try the {vc['offer']}"
 
-    lead_name = lead.get("name", "").split()[0] if lead.get("name") else ""
-    lead_notes = lead.get("notes", "No specific context available.")
-    lead_website = lead.get("website_url", "")
-    lead_company = lead.get("company", "")
-    lead_channel = lead.get("source_channel", "")
+    lead_name     = lead.get("name", "").split()[0] if lead.get("name") else ""
+    lead_notes    = lead.get("notes", "No specific context available.")
+    lead_website  = lead.get("website_url", "")
+    lead_company  = lead.get("company", "")
+    lead_channel  = lead.get("source_channel", "")
+    lead_username = lead.get("platform_username", "")
+    source_url    = lead.get("source_url", "")
 
-    # Determine which variant angle fits this lead best (context-aware hint)
-    lead_type_hint = ""
-    notes_lower = lead_notes.lower()
-    channel_lower = lead_channel.lower()
-    if any(w in notes_lower for w in ["podcast", "episode", "show", "recording", "interview"]):
-        lead_type_hint = "This person is a podcaster or content creator. Peer-to-peer casual tone (Variant B style) tends to resonate best, but follow the assigned variant tone."
-    elif any(w in notes_lower for w in ["saas", "startup", "app", "product", "launch", "mvp"]):
-        lead_type_hint = "This person is a startup founder or product builder. Value-first tone works well — lead with insight before mentioning your service."
-    elif any(w in notes_lower for w in ["agency", "freelance", "client", "web design", "developer"]):
-        lead_type_hint = "This person is a developer or agency owner. They respond to specifics and concrete outcomes — avoid vague value props."
-    elif "reddit" in channel_lower:
-        lead_type_hint = "Found on Reddit — they are comfortable with informal, direct communication. Avoid anything that reads like a marketing email."
+    banned_str = "\n".join(f'   - "{b}"' for b in pr["banned"])
 
-    prompt = f"""You are writing a cold outreach email for {vc['sender_name']} ({vc['sender_role']}).
+    prompt = f"""You are writing a {pr['label']} for {vc['sender_name']} ({vc['sender_role']}).
 
 SERVICE: {vc['service']}
 VALUE PROP: {vc['value_prop']}
@@ -136,12 +231,11 @@ FREE OFFER: {vc['offer']}
 CTA URL: {vc['cta_url']}
 
 LEAD CONTEXT:
-- Name/handle: {lead_name or 'not known'}
+- Name/handle: {lead_name or lead_username or 'not known'}
 - Company/site: {lead_company or lead_website or 'not known'}
-- Where found: {lead_channel}
+- Where found: {lead_channel}{f' — {source_url}' if source_url else ''}
 - What we know about them: {lead_notes}
 {f'- Extra context: {extra_context}' if extra_context else ''}
-{f'- Lead type hint: {lead_type_hint}' if lead_type_hint else ''}
 
 CAMPAIGN GOAL: {goal}
 
@@ -149,35 +243,21 @@ TONE: {tone['tone']}
 ANGLE: {tone['angle']}
 CTA STYLE: {tone['cta_style']}
 
-RULES (follow every one — failure to comply means the email will not be used):
-1. Subject line: max 8 words. No emoji, no ALL CAPS, no exclamation marks.
-   Never start the subject with "I". Sentence case only (capitalise first word and proper nouns).
-2. Body: 80–140 words. Short paragraphs — 1 to 2 sentences each.
-3. Grammar and style: write like an educated native English speaker.
-   - Every sentence must start with a capital letter.
-   - Proper nouns (company names, product names, people's names) must be capitalised correctly.
-   - No comma splices, no run-on sentences.
-   - Use contractions naturally (it's, we've, I'd) — they make it sound human.
-   - No sentence fragments unless deliberately used for effect (e.g. "Worth a look?" is fine).
-4. Banned phrases — never use any of these:
-   "I hope this email finds you well", "I wanted to reach out", "just checking in",
-   "synergy", "leverage", "game-changer", "cutting-edge", "revolutionize",
-   "excited to share", "touch base", "circle back", "at your earliest convenience",
-   "I trust this email", "please do not hesitate", "as per my last email"
-5. Do not invent details about the lead that aren't in the notes above.
-6. Include exactly one CTA. Make it low-friction — a link or a yes/no question.
-   Place the CTA in its own short paragraph near the end.
-7. End with a blank line then sign: {vc['sender_name']}
-   (no title, no company name in the sign-off — keep it human).
-8. Include this exact placeholder on its own line at the very end, after the signature:
-   {{{{UNSUBSCRIBE_URL}}}}
+PLATFORM INSTRUCTIONS:
+{pr['format_note']}
+{f'Character limit: {pr["char_limit"]} characters.' if pr['char_limit'] else ''}
 
-Write the email now. Output JSON only:
-{{
-  "subject": "...",
-  "body_text": "full plain-text email including sign-off and unsubscribe placeholder",
-  "tone_notes": "one sentence explaining the specific angle and why it fits this lead"
-}}"""
+BANNED PHRASES (never use any of these):
+{banned_str}
+
+GENERAL RULES:
+- Do not invent details about the lead that aren't in the notes above.
+- Every sentence starts with a capital letter. Proper nouns capitalised correctly.
+- Write like an educated native English speaker — no comma splices, no fragments unless deliberate.
+- Sound human. Not like a template. Not like a bot.
+
+Write the message now. Output JSON only:
+{pr['output_fields']}"""
 
     client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
 
@@ -193,15 +273,12 @@ Write the email now. Output JSON only:
         text = re.sub(r"\s*```$", "", text)
         data = json.loads(text)
 
-        input_tokens  = msg.usage.input_tokens
-        output_tokens = msg.usage.output_tokens
-        cost_usd = (input_tokens * 3 + output_tokens * 15) / 1_000_000
+        cost_usd = (msg.usage.input_tokens * 3 + msg.usage.output_tokens * 15) / 1_000_000
 
-        subject   = data.get("subject", "")
-        body_text = data.get("body_text", "")
+        subject    = data.get("subject") if pr["has_subject"] else None
+        body_text  = data.get("body_text", "")
+        body_html  = _text_to_html(body_text) if pr["has_html"] and body_text else None
         tone_notes = data.get("tone_notes", "")
-
-        body_html = _text_to_html(body_text)
 
         return {
             "subject":    subject,
@@ -209,11 +286,12 @@ Write the email now. Output JSON only:
             "body_text":  body_text,
             "tone_notes": tone_notes,
             "variant":    variant,
+            "platform":   platform,
             "cost_usd":   round(cost_usd, 6),
         }
 
     except Exception as e:
-        log.error("compose_outreach failed: %s", e)
+        log.error("compose_outreach failed (platform=%s venture=%s): %s", platform, venture, e)
         raise
 
 
@@ -222,19 +300,16 @@ def compose_all_variants(
     venture: str,
     campaign_goal: str = "",
     extra_context: str = "",
+    platform: str = "email",
 ) -> list[dict]:
-    """
-    Compose A, B, and C variants for a lead. Returns list of 3 email dicts.
-    Each dict includes the 'variant' key.
-    """
+    """Compose A, B, and C variants. Returns list of 3 message dicts."""
     results = []
     total_cost = 0.0
     for variant in ("A", "B", "C"):
-        email = compose_outreach(lead, venture, variant, campaign_goal, extra_context)
-        total_cost += email.get("cost_usd", 0)
-        results.append(email)
-
-    log.info("compose_all_variants: 3 variants composed, total cost $%.4f", total_cost)
+        msg = compose_outreach(lead, venture, variant, campaign_goal, extra_context, platform)
+        total_cost += msg.get("cost_usd", 0)
+        results.append(msg)
+    log.info("compose_all_variants: 3 variants composed (platform=%s), total cost $%.4f", platform, total_cost)
     return results
 
 
@@ -242,6 +317,7 @@ def compose_all_variants(
 
 def _text_to_html(text: str) -> str:
     """Convert plain text email body to minimal HTML."""
+    import html as _html
     lines = text.strip().split("\n")
     html_lines = []
     for line in lines:
@@ -249,6 +325,5 @@ def _text_to_html(text: str) -> str:
         if not stripped:
             html_lines.append("<br>")
         else:
-            import html
-            html_lines.append(f"<p style='margin:0 0 8px 0;'>{html.escape(stripped)}</p>")
+            html_lines.append(f"<p style='margin:0 0 8px 0;'>{_html.escape(stripped)}</p>")
     return "\n".join(html_lines)

@@ -40,6 +40,7 @@ from aiplatform.webapp.auth import require_auth
 router = APIRouter()
 
 VALID_VENTURES = {"marketing_audit", "content_studio", "accessibility_audit"}
+VALID_PLATFORMS = {"email", "fiverr", "reddit", "linkedin", "facebook", "instagram"}
 
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
@@ -48,11 +49,13 @@ class CampaignCreate(BaseModel):
     venture: str
     name: str
     goal: str | None = None
+    platform: str = "email"
 
 class CampaignPatch(BaseModel):
     name: str | None = None
     status: str | None = None
     goal: str | None = None
+    platform: str | None = None
 
 class TemplatePatch(BaseModel):
     subject: str | None = None
@@ -67,6 +70,7 @@ class LeadCreate(BaseModel):
     source_url: str | None = None
     name: str | None = None
     email: str | None = None
+    platform_username: str | None = None
     website_url: str | None = None
     company: str | None = None
     notes: str | None = None
@@ -75,6 +79,7 @@ class LeadCreate(BaseModel):
 class LeadPatch(BaseModel):
     status: str | None = None
     email: str | None = None
+    platform_username: str | None = None
     notes: str | None = None
     campaign_id: str | None = None
 
@@ -98,6 +103,7 @@ class ContactPatch(BaseModel):
     company: str | None = None
     website_url: str | None = None
     status: str | None = None
+    is_test_user: bool | None = None
     features_of_interest: dict | None = None
 
 
@@ -135,31 +141,34 @@ def _template_to_dict(t: OutreachTemplate) -> dict:
 
 def _lead_to_dict(l: Lead) -> dict:
     return {
-        "id":             str(l.id),
-        "venture":        l.venture,
-        "source_channel": l.source_channel,
-        "source_url":     l.source_url,
-        "name":           l.name,
-        "email":          l.email,
-        "website_url":    l.website_url,
-        "company":        l.company,
-        "notes":          l.notes,
-        "status":         l.status,
-        "campaign_id":    str(l.campaign_id) if l.campaign_id else None,
-        "created_at":     l.created_at.isoformat(),
-        "updated_at":     l.updated_at.isoformat(),
+        "id":               str(l.id),
+        "venture":          l.venture,
+        "source_channel":   l.source_channel,
+        "source_url":       l.source_url,
+        "name":             l.name,
+        "email":            l.email,
+        "platform_username": l.platform_username,
+        "website_url":      l.website_url,
+        "company":          l.company,
+        "notes":            l.notes,
+        "status":           l.status,
+        "campaign_id":      str(l.campaign_id) if l.campaign_id else None,
+        "created_at":       l.created_at.isoformat(),
+        "updated_at":       l.updated_at.isoformat(),
     }
 
 def _contact_to_dict(c: Contact) -> dict:
     return {
         "id":                   str(c.id),
         "email":                c.email,
+        "usernames":            c.usernames or {},
         "name":                 c.name,
         "phone":                c.phone,
         "address":              c.address,
         "company":              c.company,
         "website_url":          c.website_url,
         "status":               c.status,
+        "is_test_user":         c.is_test_user,
         "ventures_approached":  c.ventures_approached or [],
         "features_of_interest": c.features_of_interest or {},
         "last_activity_at":     c.last_activity_at.isoformat() if c.last_activity_at else None,
@@ -181,6 +190,7 @@ def _campaign_to_dict(c: OutreachCampaign, db: Any) -> dict:
         "name":            c.name,
         "status":          c.status,
         "goal":            c.goal,
+        "platform":        c.platform or "email",
         "leads_count":     leads_count,
         "templates_count": len(templates),
         "total_sends":     total_sends,
@@ -214,7 +224,9 @@ def create_campaign(
 ) -> dict:
     if req.venture not in VALID_VENTURES:
         raise HTTPException(status_code=400, detail=f"venture must be one of {VALID_VENTURES}")
-    c = OutreachCampaign(venture=req.venture, name=req.name, goal=req.goal, status="draft")
+    if req.platform not in VALID_PLATFORMS:
+        raise HTTPException(status_code=400, detail=f"platform must be one of {VALID_PLATFORMS}")
+    c = OutreachCampaign(venture=req.venture, name=req.name, goal=req.goal, status="draft", platform=req.platform)
     db.add(c)
     db.commit()
     db.refresh(c)
@@ -242,9 +254,13 @@ def patch_campaign(
     db=Depends(get_db),
 ) -> dict:
     c = _campaign_or_404(campaign_id, db)
-    if req.name is not None:   c.name = req.name
-    if req.status is not None: c.status = req.status
-    if req.goal is not None:   c.goal = req.goal
+    if req.name is not None:     c.name = req.name
+    if req.status is not None:   c.status = req.status
+    if req.goal is not None:     c.goal = req.goal
+    if req.platform is not None:
+        if req.platform not in VALID_PLATFORMS:
+            raise HTTPException(status_code=400, detail=f"platform must be one of {VALID_PLATFORMS}")
+        c.platform = req.platform
     db.commit()
     db.refresh(c)
     return _campaign_to_dict(c, db)
@@ -297,6 +313,44 @@ def generate_search_prompt(
     }
 
     venture_desc = venture_descriptions.get(c.venture, c.venture)
+    campaign_platform = c.platform or "email"
+
+    platform_search_guidance = {
+        "email": (
+            "Search strategy: web, LinkedIn, Reddit — capture business email and website URL. "
+            "Search queries should target Google and Reddit for pain-signal posts."
+        ),
+        "fiverr": (
+            "Search strategy: Fiverr buyer requests only. "
+            "Search queries should be Fiverr 'buyer requests' search terms that surface people actively posting requests "
+            "for the service. Capture the buyer's Fiverr username (not email). "
+            "Queries should be short Fiverr search terms, not Google queries."
+        ),
+        "reddit": (
+            "Search strategy: Reddit posts and threads only. "
+            "Search queries should be Reddit-specific (subreddit names + keyword combos). "
+            "Capture the poster's Reddit username (u/username). "
+            "Target posts where the person is asking for help with the exact problem this service solves."
+        ),
+        "linkedin": (
+            "Search strategy: LinkedIn profiles and posts. "
+            "Search queries should target LinkedIn search and Google site:linkedin.com. "
+            "Capture the person's LinkedIn profile URL or username. "
+            "Target roles or companies that are a strong fit for the service."
+        ),
+        "facebook": (
+            "Search strategy: Facebook groups and public posts. "
+            "Search queries should identify relevant Facebook groups and surface posts asking for help. "
+            "Capture the person's Facebook profile name or group post URL."
+        ),
+        "instagram": (
+            "Search strategy: Instagram posts and profiles. "
+            "Search queries should identify relevant hashtags and accounts. "
+            "Capture the Instagram @username. Target accounts that post content related to the pain points."
+        ),
+    }
+
+    platform_note = platform_search_guidance.get(campaign_platform, "")
 
     prompt = f"""You are helping build a lead generation search criteria prompt for a cold outreach campaign.
 
@@ -304,21 +358,23 @@ VENTURE: {c.venture}
 SERVICE: {venture_desc}
 CAMPAIGN NAME: {c.name}
 CAMPAIGN GOAL: {c.goal or "Not specified — use the venture's default goal (get leads to try the free offer)"}
+PLATFORM: {campaign_platform.upper()} — {platform_note}
 
 Generate a structured lead search criteria prompt that will be used to:
-1. Search Reddit, web, and other channels for potential customers
+1. Search for potential customers on {campaign_platform}
 2. Guide an AI model in qualifying whether each result is a good lead
 
 The prompt must be structured with these sections:
 - TARGET PROFILE: who we're looking for (role, business type, size, stage)
 - PAIN SIGNALS: what phrases, questions, or behaviors indicate they need this service
 - DISQUALIFIERS: what signals mean this is NOT a good lead
+- IDENTIFIER TO CAPTURE: exactly what contact identifier to save (e.g. email, Fiverr username, Reddit u/handle)
 - CONTEXT NOTES: any nuances the searcher or qualifier should know
-- SEARCH QUERIES: 4-6 specific Reddit/web search queries to run (each on its own line)
+- SEARCH QUERIES: 4-6 specific search queries for {campaign_platform} (each on its own line)
 
 Write the prompt now. Make it specific, practical, and directly usable as instructions to an AI model.
 Do NOT include any preamble — output the structured prompt directly, starting with "TARGET PROFILE:".
-Keep the total under 400 words."""
+Keep the total under 450 words."""
 
     client = _anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
     msg = client.messages.create(
@@ -396,10 +452,16 @@ def list_leads(
 
 @router.post("/leads", status_code=status.HTTP_201_CREATED)
 def create_lead(req: LeadCreate, _: str = Depends(require_auth), db=Depends(get_db)) -> dict:
+    if not req.email and not req.platform_username:
+        raise HTTPException(
+            status_code=400,
+            detail="Lead must have at least one reachable identifier: email or platform_username.",
+        )
     campaign_uuid = _uuid.UUID(req.campaign_id) if req.campaign_id else None
     l = Lead(
         venture=req.venture, source_channel=req.source_channel,
         source_url=req.source_url, name=req.name, email=req.email,
+        platform_username=req.platform_username,
         website_url=req.website_url, company=req.company,
         notes=req.notes, campaign_id=campaign_uuid, status="new",
     )
@@ -414,10 +476,11 @@ def patch_lead(lead_id: str, req: LeadPatch, _: str = Depends(require_auth), db=
     l = db.get(Lead, _uuid.UUID(lead_id))
     if not l:
         raise HTTPException(status_code=404, detail="Lead not found")
-    if req.status is not None:      l.status = req.status
-    if req.email is not None:       l.email = req.email
-    if req.notes is not None:       l.notes = req.notes
-    if req.campaign_id is not None: l.campaign_id = _uuid.UUID(req.campaign_id)
+    if req.status is not None:           l.status = req.status
+    if req.email is not None:            l.email = req.email
+    if req.platform_username is not None: l.platform_username = req.platform_username
+    if req.notes is not None:            l.notes = req.notes
+    if req.campaign_id is not None:      l.campaign_id = _uuid.UUID(req.campaign_id)
     db.commit()
     db.refresh(l)
     return _lead_to_dict(l)
@@ -462,6 +525,7 @@ def patch_contact(
     if req.company is not None:              c.company = req.company
     if req.website_url is not None:          c.website_url = req.website_url
     if req.status is not None:               c.status = req.status
+    if req.is_test_user is not None:         c.is_test_user = req.is_test_user
     if req.features_of_interest is not None: c.features_of_interest = req.features_of_interest
     db.commit()
     db.refresh(c)
@@ -494,11 +558,15 @@ def trigger_compose(
 
     sample_lead = db.query(Lead).filter(Lead.campaign_id == c.id).first()
     lead_dict = _lead_to_dict(sample_lead) if sample_lead else {
-        "name": "", "notes": "", "website_url": "", "company": "", "source_channel": "web",
+        "name": "", "notes": "", "website_url": "", "company": "",
+        "source_channel": "web", "platform_username": None,
     }
 
     from aiplatform.skills.comms.compose_outreach import compose_all_variants
-    variants = compose_all_variants(lead_dict, c.venture, c.goal or "", req.extra_context)
+    variants = compose_all_variants(
+        lead_dict, c.venture, c.goal or "", req.extra_context,
+        platform=c.platform or "email",
+    )
 
     regenerate = set(req.regenerate_variants) if req.regenerate_variants else {"A", "B", "C"}
 
@@ -591,30 +659,30 @@ def unsubscribe(send_id: str, db=Depends(get_db)):
         if send:
             # Mark the send
             send.status = "unsubscribed"
-            # Look up the lead email
+            # Look up the lead
             lead = db.get(Lead, send.lead_id)
-            if lead and lead.email:
-                # Upsert Contact record as unsubscribed
-                contact = db.query(Contact).filter(Contact.email == lead.email).first()
-                now = datetime.now(timezone.utc)
-                if contact:
-                    contact.status = "unsubscribed"
-                    contact.unsubscribed_at = now
-                    contact.last_activity_at = now
-                else:
-                    contact = Contact(
-                        email=lead.email,
-                        name=lead.name,
-                        company=lead.company,
-                        website_url=lead.website_url,
-                        status="unsubscribed",
-                        ventures_approached=[lead.venture] if lead.venture else [],
-                        last_activity_at=now,
-                        unsubscribed_at=now,
-                    )
-                    db.add(contact)
-                # Also update lead status
+            if lead:
                 lead.status = "unsubscribed"
+                # Only upsert a Contact record if we have an email identifier
+                if lead.email:
+                    contact = db.query(Contact).filter(Contact.email == lead.email).first()
+                    now = datetime.now(timezone.utc)
+                    if contact:
+                        contact.status = "unsubscribed"
+                        contact.unsubscribed_at = now
+                        contact.last_activity_at = now
+                    else:
+                        contact = Contact(
+                            email=lead.email,
+                            name=lead.name,
+                            company=lead.company,
+                            website_url=lead.website_url,
+                            status="unsubscribed",
+                            ventures_approached=[lead.venture] if lead.venture else [],
+                            last_activity_at=now,
+                            unsubscribed_at=now,
+                        )
+                        db.add(contact)
             db.commit()
     except Exception:
         pass

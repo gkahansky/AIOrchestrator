@@ -323,20 +323,25 @@ class Lead(Base):
     """
     A potential customer found via automated or manual research.
     Tracks contact info, discovery source, and outreach status.
+
+    At least one of `email` or `platform_username` must be non-null —
+    enforced in the router before insert. A lead with no reachable identifier
+    is silently discarded during find-leads.
     """
     __tablename__ = "leads"
 
-    id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    venture        = Column(String(50), nullable=False, index=True)
-    source_channel = Column(String(100), nullable=False)   # reddit, web_search, linkedin, producthunt
-    source_url     = Column(String(2048), nullable=True)   # URL where they were found
-    name           = Column(String(255), nullable=True)
-    email          = Column(String(255), nullable=True, index=True)
-    website_url    = Column(String(2048), nullable=True)   # their website (for audit leads)
-    company        = Column(String(255), nullable=True)
-    notes          = Column(Text, nullable=True)           # AI-extracted context about them
-    status         = Column(String(50), nullable=False, default="new", index=True)
-    campaign_id    = Column(UUID(as_uuid=True), ForeignKey("outreach_campaigns.id", ondelete="SET NULL"), nullable=True)
+    id                = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    venture           = Column(String(50), nullable=False, index=True)
+    source_channel    = Column(String(100), nullable=False)   # reddit, fiverr, linkedin, web_search …
+    source_url        = Column(String(2048), nullable=True)   # URL of the post / profile where found
+    name              = Column(String(255), nullable=True)
+    email             = Column(String(255), nullable=True, index=True)
+    platform_username = Column(String(255), nullable=True)    # e.g. "u/johndoe", "fiverr:john_doe"
+    website_url       = Column(String(2048), nullable=True)   # their website (audit leads)
+    company           = Column(String(255), nullable=True)
+    notes             = Column(Text, nullable=True)           # AI-extracted context about them
+    status            = Column(String(50), nullable=False, default="new", index=True)
+    campaign_id       = Column(UUID(as_uuid=True), ForeignKey("outreach_campaigns.id", ondelete="SET NULL"), nullable=True)
 
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -348,15 +353,26 @@ class Lead(Base):
 class OutreachCampaign(Base):
     """
     A named outreach campaign targeting a specific venture's audience.
-    Contains multiple A/B template variants.
+    Contains multiple A/B message variants.
+
+    `platform` controls how leads are found and how messages are composed:
+      email    — cold email via Resend (default, existing behaviour)
+      fiverr   — respond to buyer requests / approach sellers on Fiverr
+      reddit   — comment replies on relevant subreddit posts
+      linkedin — connection messages or post comments
+      facebook — group post comments or DMs
+      instagram — post/reel comments or DMs
+    Additional platforms can be added without schema changes.
     """
     __tablename__ = "outreach_campaigns"
 
-    id      = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    venture = Column(String(50), nullable=False, index=True)
-    name    = Column(String(255), nullable=False)
-    status  = Column(String(50), nullable=False, default="draft", index=True)
-    goal    = Column(Text, nullable=True)   # e.g. "Convert freelancers to podcast notes clients"
+    id       = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    venture  = Column(String(50), nullable=False, index=True)
+    name     = Column(String(255), nullable=False)
+    status   = Column(String(50), nullable=False, default="draft", index=True)
+    goal     = Column(Text, nullable=True)
+    # Platform this campaign targets — drives compose style and send mechanism
+    platform = Column(String(50), nullable=False, default="email")
 
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -368,22 +384,34 @@ class OutreachCampaign(Base):
 
 class OutreachTemplate(Base):
     """
-    An email template variant within a campaign (A/B/C testing).
-    Tracks sends, opens, and replies per variant.
+    A message variant within a campaign (A/B/C testing).
+    Platform-agnostic: email uses subject + body_html + body_text;
+    all other platforms (Reddit, Fiverr, LinkedIn, Instagram, Facebook …)
+    use only `message_body` (plain text / markdown).
+
+    Column semantics by platform:
+      email     — subject (required), body_html (rendered), body_text (plain fallback)
+      reddit    — message_body only (markdown OK, ~10k char limit)
+      fiverr    — message_body only (plain text, ~2k chars)
+      linkedin  — message_body only (plain text, 300 chars for connection, 1250 InMail)
+      facebook  — message_body only (plain text / markdown)
+      instagram — message_body only (plain text, 2200 chars)
     """
     __tablename__ = "outreach_templates"
 
-    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    campaign_id = Column(UUID(as_uuid=True), ForeignKey("outreach_campaigns.id", ondelete="CASCADE"), nullable=False, index=True)
-    variant     = Column(String(10), nullable=False)   # "A", "B", "C"
-    subject     = Column(String(500), nullable=False)
-    body_html   = Column(Text, nullable=False)
-    body_text   = Column(Text, nullable=True)
-    tone_notes  = Column(Text, nullable=True)          # notes on the tone/approach used
-    sends_count = Column(Integer, nullable=False, default=0)
-    opens_count = Column(Integer, nullable=False, default=0)
+    id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    campaign_id   = Column(UUID(as_uuid=True), ForeignKey("outreach_campaigns.id", ondelete="CASCADE"), nullable=False, index=True)
+    variant       = Column(String(10), nullable=False)    # "A", "B", "C"
+    # Email-specific fields (null for non-email platforms)
+    subject       = Column(String(500), nullable=True)
+    body_html     = Column(Text, nullable=True)
+    # Universal content field — plain text body for all platforms
+    body_text     = Column(Text, nullable=True)
+    tone_notes    = Column(Text, nullable=True)
+    sends_count   = Column(Integer, nullable=False, default=0)
+    opens_count   = Column(Integer, nullable=False, default=0)
     replies_count = Column(Integer, nullable=False, default=0)
-    approved    = Column(String(10), nullable=False, default="pending")  # pending, approved, rejected
+    approved      = Column(String(10), nullable=False, default="pending")  # pending, approved, rejected
 
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -430,7 +458,11 @@ class Contact(Base):
     __tablename__ = "contacts"
 
     id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email       = Column(String(255), nullable=False, unique=True, index=True)
+    # email is nullable — contacts found via social platforms may not have one.
+    # At least one of email or usernames must be non-null (enforced in router).
+    email       = Column(String(255), nullable=True, unique=True, index=True)
+    # usernames: platform → handle mapping, e.g. {"reddit": "u/johndoe", "fiverr": "john_doe"}
+    usernames   = Column(JSONB, nullable=True)
     name        = Column(String(255), nullable=True)
     phone       = Column(String(50), nullable=True)
     address     = Column(Text, nullable=True)

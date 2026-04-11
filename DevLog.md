@@ -64,3 +64,12 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-09 10:43 |  | dec38c3 | Roadmap: WIP section on top, backlog below; show ID in edit form |
 | 2026-04-09 10:53 |  | cc19798 | Activate Advisory Board — real LLM calls, remove duplicates, wire architect webhook |
 | 2026-04-09 13:07 |  | 0a0f160 | Strategy Room redesign — Architectural Curator design system + full agent interactivity (chat, proposals per agent, prompt editor, manual triggers) |
+| 2026-04-09 13:41 |  | dcb6fa6 | AII-XXX Update docs â€” DevLog fix, ROADMAP done entries D-22â€“D-25, Pipeline Status table |
+| 2026-04-09 14:26 |  | 6d8585e | Fix IndentationError in worker.py â€” two misindented crm_ops imports crashed uvicorn on startup |
+| 2026-04-09 14:49 |  | b8eac57 | Strategy Room UX â€” larger prompt editor, skill spinners, roadmap redesign |
+| 2026-04-09 15:45 |  | 6bbc07d | Fix advisor trigger: sync execution, content type bug, run history panel |
+| 2026-04-09 15:54 |  | ba46e09 | Add advisor diagnostics endpoint and always-visible run history panel |
+| 2026-04-09 15:58 |  | 987e872 | Fix proposals endpoints â€” remove Pydantic response_model causing 500 on JSONB content |
+| 2026-04-09 |  | (pending) | Multi-platform outreach — add platform field to campaigns, platform_username to leads, 6-platform compose_outreach skill, platform-aware router and Marketing UI |
+| 2026-04-10 12:38 |  | 660be9c | Support multiple allowed emails via ALLOWED_EMAILS env var |
+| 2026-04-10 12:41 |  | ece88ea | Rebrand AI-Infra â†’ Plan B in sidebar, login page, and browser title |

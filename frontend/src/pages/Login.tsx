@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 
 const BASE = import.meta.env.VITE_API_URL || "https://api.planbadmin.com"
 
@@ -22,6 +22,13 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [clientId, setClientId] = useState<string | null>(null)
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+
+  const reason = searchParams.get("reason")
+  const sessionMessage =
+    reason === "session_expired"
+      ? "Your session has expired. Please sign in again."
+      : null
 
   // Fetch public auth config from API (gets the Google Client ID)
   useEffect(() => {
@@ -133,6 +140,12 @@ export default function Login() {
               {/* Google renders its own button here */}
               <div id="google-signin-btn" />
             </div>
+          )}
+
+          {sessionMessage && (
+            <p className="mt-4 text-xs font-label text-on-surface-variant bg-surface-container px-3 py-2.5 rounded-lg border border-outline-variant/30">
+              {sessionMessage}
+            </p>
           )}
 
           {error && (

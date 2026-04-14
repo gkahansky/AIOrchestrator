@@ -18,10 +18,11 @@ function asString(v: unknown): string {
 
 export function extractJobLinks(outputData: Record<string, unknown>) {
   const candidates = [
-    { label: "Open Document",   url: asString(outputData.drive_report_link),  icon: "description" },
-    { label: "Open Folder",     url: asString(outputData.drive_folder_link),   icon: "folder_open" },
-    { label: "Open Google Doc", url: asString(outputData.gdoc_url),            icon: "description" },
-    { label: "Open Sample PDF", url: asString(outputData.drive_sample_pdf_link) || asString(outputData.drive_sample_PDF_link), icon: "picture_as_pdf" },
+    { label: "Open Document",         url: asString(outputData.drive_report_link),          icon: "description" },
+    { label: "Open Folder",           url: asString(outputData.drive_folder_link),           icon: "folder_open" },
+    { label: "Open Google Doc",       url: asString(outputData.gdoc_url),                   icon: "description" },
+    { label: "Open Sample PDF",       url: asString(outputData.drive_sample_pdf_link) || asString(outputData.drive_sample_PDF_link), icon: "picture_as_pdf" },
+    { label: "Accessibility Report",  url: asString(outputData.drive_accessibility_pdf_link), icon: "accessibility_new" },
   ]
   const seen = new Set<string>()
   return candidates.filter(({ url }) => {

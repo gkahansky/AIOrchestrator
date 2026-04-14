@@ -83,30 +83,33 @@ def run_order(order: dict, output_dir: str | None = None) -> dict:
         if order["status"] in ("audited", "generating_report"):
             order["status"] = "generating_report"
             _save_order(order, work_dir)
-            paths = _run_phase4_generate(order, report_data, work_dir)
+            paths = _run_phase4_generate(order, report_data, scraped, work_dir)
             order["status"] = "report_ready"
             order["pdf_path"] = str(paths.get("pdf", ""))
             order["md_path"] = str(paths.get("md", ""))
             order["sample_pdf_path"] = str(paths.get("sample_pdf", ""))
             order["sample_md_path"] = str(paths.get("sample_md", ""))
+            order["accessibility_pdf_path"] = str(paths.get("accessibility_pdf", ""))
             _save_order(order, work_dir)
         else:
             paths = {
-                "pdf":        Path(order.get("pdf_path", "")),
-                "md":         Path(order.get("md_path", "")),
-                "sample_pdf": Path(order.get("sample_pdf_path", "")),
-                "sample_md":  Path(order.get("sample_md_path", "")),
+                "pdf":                Path(order.get("pdf_path", "")),
+                "md":                 Path(order.get("md_path", "")),
+                "sample_pdf":         Path(order.get("sample_pdf_path", "")),
+                "sample_md":          Path(order.get("sample_md_path", "")),
+                "accessibility_pdf":  Path(order.get("accessibility_pdf_path", "")),
             }
-        pdf_path        = paths.get("pdf", Path(""))
-        md_path         = paths.get("md", Path(""))
-        sample_pdf_path = paths.get("sample_pdf", Path(""))
-        sample_md_path  = paths.get("sample_md", Path(""))
+        pdf_path              = paths.get("pdf", Path(""))
+        md_path               = paths.get("md", Path(""))
+        sample_pdf_path       = paths.get("sample_pdf", Path(""))
+        sample_md_path        = paths.get("sample_md", Path(""))
+        accessibility_pdf_path = paths.get("accessibility_pdf", Path(""))
 
         # -- Phase 5: Drive upload + human review -------------------------------
         if order["status"] in ("report_ready", "review_pending"):
             # Upload to Drive first so reviewer has links before approving
             if order["status"] == "report_ready":
-                _run_phase5_upload(order, pdf_path, md_path, sample_pdf_path, sample_md_path)
+                _run_phase5_upload(order, pdf_path, md_path, sample_pdf_path, sample_md_path, accessibility_pdf_path)
                 _save_order(order, work_dir)
 
             order["status"] = "review_pending"
@@ -200,14 +203,15 @@ def _run_phase3_audit(order: dict, scraped: dict, work_dir: Path) -> dict:
     return report_data
 
 
-def _run_phase4_generate(order: dict, report_data: dict, work_dir: Path) -> dict:
+def _run_phase4_generate(order: dict, report_data: dict, scraped: dict, work_dir: Path) -> dict:
     """
     Generate reports based on order["report_type"]:
       "both"   (default) → full PDF + full MD + sample PDF + sample MD
       "full"             → full PDF + full MD only
       "sample"           → sample PDF + sample MD only
+    Premium tier also generates a dedicated accessibility PDF.
 
-    Returns dict with keys: pdf, md, sample_pdf, sample_md (Path or None).
+    Returns dict with keys: pdf, md, sample_pdf, sample_md, accessibility_pdf (Path or None).
     """
     report_type = order.get("report_type", "both")
     slug = order["order_id"]
@@ -242,6 +246,24 @@ def _run_phase4_generate(order: dict, report_data: dict, work_dir: Path) -> dict
         paths["sample_pdf"] = sample_pdf_path
         paths["sample_md"]  = sample_md_path
 
+    # Premium tier: generate dedicated accessibility PDF from raw scan data
+    if order.get("tier") == "premium":
+        a11y_data = scraped.get("accessibility_audit", {})
+        if a11y_data and "error" not in a11y_data and a11y_data.get("violations") is not None:
+            try:
+                from aiplatform.skills.audit.generate_accessibility_report import generate_accessibility_report
+                a11y_pdf_path = work_dir / f"{slug}-accessibility.pdf"
+                generate_accessibility_report(a11y_data, str(a11y_pdf_path), tier="premium")
+                paths["accessibility_pdf"] = a11y_pdf_path
+                print(f"    OK Accessibility PDF: {a11y_pdf_path.name} ({a11y_pdf_path.stat().st_size // 1024} KB)")
+            except Exception as exc:
+                print(f"    WARN Accessibility PDF generation failed: {exc}")
+        else:
+            if "error" in a11y_data:
+                print(f"    SKIP Accessibility PDF: scan had errors — {a11y_data['error']}")
+            else:
+                print(f"    SKIP Accessibility PDF: no scan data (tier={order.get('tier')})")
+
     return paths
 
 
@@ -251,6 +273,7 @@ def _run_phase5_upload(
     md_path,
     sample_pdf_path,
     sample_md_path,
+    accessibility_pdf_path=None,
 ) -> None:
     """Upload reports to Drive and store view links on the order dict.
 
@@ -277,6 +300,8 @@ def _run_phase5_upload(
     upload_targets = []
     if full_folder:
         upload_targets += [("full PDF", pdf_path, full_folder), ("full MD", md_path, full_folder)]
+        if accessibility_pdf_path:
+            upload_targets += [("accessibility PDF", accessibility_pdf_path, full_folder)]
     if sample_folder:
         upload_targets += [("sample PDF", sample_pdf_path, sample_folder), ("sample MD", sample_md_path, sample_folder)]
 
@@ -296,6 +321,8 @@ def _run_phase5_upload(
                 order["drive_report_link"] = link
             elif label == "sample PDF":
                 order["drive_sample_pdf_link"] = link
+            elif label == "accessibility PDF":
+                order["drive_accessibility_pdf_link"] = link
             print(f"    OK {label} on Drive: {link}")
         except Exception as exc:
             import traceback

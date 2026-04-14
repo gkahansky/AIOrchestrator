@@ -73,7 +73,7 @@ function NewOrderForm() {
     url: "",
     tier: "snapshot",
     client_email: "",
-    report_type: "both",
+    report_type: "full",
     is_testing: false,
   })
   const [errors, setErrors] = useState<Partial<Record<keyof AuditOrderRequest, string>>>({})

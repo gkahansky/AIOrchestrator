@@ -294,15 +294,28 @@ def _run_phase5_upload(
 
 
 def _run_phase5_notify(order: dict) -> None:
-    """Send review notification email with Drive links."""
+    """Send review notification email with Drive links (or PDF attachments as fallback)."""
     print(f"  Phase 5b: Review notification...")
 
     review_email = config.HUMAN_REVIEW_EMAIL
     if review_email:
         subject = f"[Review] Audit — {order.get('brand_name', order['url'])} ({order['tier'].title()})"
         body = _review_email_html(order)
+
+        # Attach PDFs if Drive is not configured so reviewer can still read the report
+        drive_link = order.get("drive_report_link") or order.get("drive_full_PDF_link")
+        attachments: list[str] = []
+        if not drive_link:
+            for key in ("pdf_path", "sample_pdf_path"):
+                path = order.get(key, "")
+                if path and Path(path).exists():
+                    attachments.append(path)
+            if attachments:
+                print(f"    Attaching {len(attachments)} PDF(s) to review email (no Drive link)")
+
         try:
-            send_email(to=review_email, subject=subject, body_html=body)
+            send_email(to=review_email, subject=subject, body_html=body,
+                       attachments=attachments or None)
             print(f"    OK Review email sent to {review_email}")
         except Exception as exc:
             print(f"    WARN  Review email failed: {exc}")
@@ -311,10 +324,10 @@ def _run_phase5_notify(order: dict) -> None:
     print(f"REVIEW REQUIRED — Order: {order['order_id']}")
     print(f"URL:         {order['url']}")
     print(f"Tier:        {order['tier'].upper()}")
-    if order.get("drive_full_PDF_link"):
-        print(f"Full PDF:    {order['drive_full_PDF_link']}")
-    if order.get("drive_sample_PDF_link"):
-        print(f"Sample PDF:  {order['drive_sample_PDF_link']}")
+    if order.get("drive_report_link") or order.get("drive_full_PDF_link"):
+        print(f"Full PDF:    {order.get('drive_report_link') or order.get('drive_full_PDF_link')}")
+    if order.get("drive_sample_pdf_link") or order.get("drive_sample_PDF_link"):
+        print(f"Sample PDF:  {order.get('drive_sample_pdf_link') or order.get('drive_sample_PDF_link')}")
     print(f"{'-' * 60}\n")
 
 
@@ -330,8 +343,27 @@ def _run_phase6_deliver(order: dict) -> None:
 
     subject = f"Your Marketing Audit — {order.get('brand_name', order['url'])}"
     body = _delivery_email_html(order)
+
+    # If no Drive link is available, attach the PDF directly so the client
+    # always receives their report regardless of Drive configuration.
+    drive_link = (
+        order.get("drive_report_link")
+        or order.get("drive_full_PDF_link")
+        or order.get("drive_sample_pdf_link")
+        or order.get("drive_sample_PDF_link")
+    )
+    attachments: list[str] = []
+    if not drive_link:
+        for key in ("pdf_path", "sample_pdf_path"):
+            path = order.get(key, "")
+            if path and Path(path).exists():
+                attachments.append(path)
+                print(f"    Attaching {key} to delivery email (no Drive link available)")
+                break  # send the first available PDF only
+
     try:
-        send_email(to=client_email, subject=subject, body_html=body)
+        send_email(to=client_email, subject=subject, body_html=body,
+                   attachments=attachments or None)
         print(f"    OK Delivery email sent to {client_email}")
     except Exception as exc:
         print(f"    WARN  Delivery email failed: {exc}")
@@ -491,20 +523,26 @@ def _build_markdown(d: dict) -> str:
 # --- Email templates ----------------------------------------------------------
 
 def _review_email_html(order: dict) -> str:
-    full_link   = order.get("drive_full_PDF_link", "")
-    sample_link = order.get("drive_sample_PDF_link", "")
+    # Check both standard and legacy keys
+    full_link   = order.get("drive_report_link") or order.get("drive_full_PDF_link", "")
+    sample_link = order.get("drive_sample_pdf_link") or order.get("drive_sample_PDF_link", "")
+    folder_link = order.get("drive_folder_link", "")
+
     drive_links = ""
     if full_link:
         drive_links += f'<li><a href="{full_link}">Full report (Google Drive)</a></li>'
     if sample_link:
         drive_links += f'<li><a href="{sample_link}">Sample/censored report (Google Drive)</a></li>'
+    if folder_link:
+        drive_links += f'<li><a href="{folder_link}">Open Drive folder</a></li>'
     if not drive_links:
-        drive_links = "<li>Drive upload failed — check worker logs</li>"
+        drive_links = "<li>Drive not configured — PDFs are in /tmp on the worker</li>"
 
     dashboard_url = os.environ.get("RAILWAY_PUBLIC_URL", "https://planBadmin.com")
-    return f"""
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head><body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:16px">
 <p>Marketing audit report is ready for your review.</p>
-<table>
+<table cellpadding="4">
   <tr><td><b>Order</b></td><td>{order['order_id']}</td></tr>
   <tr><td><b>URL</b></td><td>{order['url']}</td></tr>
   <tr><td><b>Tier</b></td><td>{order['tier'].upper()}</td></tr>
@@ -514,30 +552,33 @@ def _review_email_html(order: dict) -> str:
 <p><b>Reports on Google Drive:</b></p>
 <ul>{drive_links}</ul>
 <p><a href="{dashboard_url}">Approve or reject in the dashboard &rarr;</a></p>
-"""
+</body></html>"""
 
 
 def _delivery_email_html(order: dict) -> str:
-    tier_desc = config.TIERS[order["tier"]]["description"]
-    # Full PDF preferred; fall back to sample PDF for sample-only orders
+    tier_desc = config.TIERS.get(order.get("tier", ""), {}).get("description", "")
+    # Check both standard and legacy keys
     drive_link = (
-        order.get("drive_full_PDF_link")
+        order.get("drive_report_link")
+        or order.get("drive_full_PDF_link")
+        or order.get("drive_sample_pdf_link")
         or order.get("drive_sample_PDF_link")
         or ""
     )
-    drive_section = (
-        f'<p><a href="{drive_link}" style="font-size:16px;font-weight:bold;">View your report in Google Drive &rarr;</a></p>'
-        if drive_link else
-        "<p>Your report is being prepared — we'll follow up shortly with the link.</p>"
-    )
-    return f"""
+    if drive_link:
+        drive_section = f'<p><a href="{drive_link}" style="font-size:16px;font-weight:bold;color:#1a56db;">View your report in Google Drive &rarr;</a></p>'
+    else:
+        drive_section = "<p>Your report is attached to this email as a PDF.</p>"
+
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head><body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:16px">
 <p>Hi,</p>
 <p>Your marketing audit for <b>{order.get('brand_name', order['url'])}</b> is ready.</p>
 <p><b>Package:</b> {tier_desc}</p>
 {drive_section}
 <p>If you have questions or would like to discuss the findings, just reply to this email.</p>
 <p>Thanks,<br>EchoForge Marketing Audit<br>echoforge.biz</p>
-"""
+</body></html>"""
 
 
 # --- Helpers ------------------------------------------------------------------

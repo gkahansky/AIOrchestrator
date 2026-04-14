@@ -598,28 +598,29 @@ def _load_json(path: Path) -> dict:
 
 
 def _review_email_html(order: dict, gdoc: dict) -> str:
-    return f"""
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head><body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:16px">
 <p>A new podcast content package is ready for review.</p>
-<table>
+<table cellpadding="4">
   <tr><td><b>Order</b></td><td>{order['order_id']}</td></tr>
   <tr><td><b>Show</b></td><td>{order.get('show_name')}</td></tr>
   <tr><td><b>Episode</b></td><td>{order.get('episode_title')}</td></tr>
   <tr><td><b>Tier</b></td><td>{order['tier'].upper()}</td></tr>
 </table>
 <p><a href="{gdoc['web_view_link']}">Open Google Doc for review &rarr;</a></p>
-<p>To approve: set status to "approved" in the order JSON and re-run the pipeline,
-or reply APPROVE to this email (Sprint 2+).</p>
-"""
+<p>Approve or reject the order in the <a href="https://planBadmin.com">admin dashboard</a>.</p>
+</body></html>"""
 
 
 def _delivery_email_html(order: dict, gdoc: dict) -> str:
-    tier_desc = config.TIERS[order["tier"]]["description"]
-    return f"""
+    tier_desc = config.TIERS.get(order.get("tier", ""), {}).get("description", "")
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head><body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:16px">
 <p>Hi,</p>
 <p>Your podcast content package for <b>{order.get('episode_title')}</b> is ready!</p>
 <p><b>What's included ({tier_desc}):</b></p>
-<p><a href="{gdoc['web_view_link']}">Access your Google Doc &rarr;</a></p>
+<p><a href="{gdoc['web_view_link']}" style="font-size:16px;font-weight:bold;color:#1a56db;">Access your Google Doc &rarr;</a></p>
 <p>The document is view-only. If you'd like to request edits or have questions,
 please reply to this email.</p>
 <p>Thanks,<br>EchoForge Content Studio<br>echoforge.biz</p>
-"""
+</body></html>"""

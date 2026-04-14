@@ -73,3 +73,13 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-09 |  | (pending) | Multi-platform outreach — add platform field to campaigns, platform_username to leads, 6-platform compose_outreach skill, platform-aware router and Marketing UI |
 | 2026-04-10 12:38 |  | 660be9c | Support multiple allowed emails via ALLOWED_EMAILS env var |
 | 2026-04-10 12:41 |  | ece88ea | Rebrand AI-Infra â†’ Plan B in sidebar, login page, and browser title |
+| 2026-04-11 11:26 |  | 991794a | Multi-platform outreach â€” extend campaigns from email-only to 6 platforms |
+| 2026-04-11 18:29 |  | f6d6fc1 | Redirect to login with message on session expiry |
+| 2026-04-11 20:00 |  | 454226f | Disable fiverr-email-check beat task â€” gmail.modify scope not granted |
+| 2026-04-14 08:51 |  | ea59a62 | Add JobLinks component â€” Drive doc/folder buttons on all order lists and detail page |
+| 2026-04-14 08:57 |  | 9eaf780 | Fix Drive upload silent failure + email delivery for marketing audit |
+| 2026-04-14 09:01 |  | 7d66906 | Add Drive upload diagnostics â€” full traceback + auth path logging |
+| 2026-04-14 09:06 |  | 779a914 | Fix silent credential logging â€” use print() in _materialise_google_credentials |
+| 2026-04-14 09:47 |  | 5ca9ee7 | Change default report_type to 'full' in new audit order form |
+| 2026-04-14 09:51 |  | cf83439 | Fix blank first page in audit PDF â€” remove sticky header |
+| 2026-04-14 10:06 |  | c8341aa | Fix audit findings display â€” render Severity/Finding labels instead of raw dict string |

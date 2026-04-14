@@ -5,9 +5,11 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 """
-Sync ClickUp task statuses → ROADMAP.md.
+DEPRECATED — project management has moved to Jira (project AII, aiinfra.atlassian.net).
+This script is kept for historical reference only and should not be run.
 
-Run weekly or after a sprint review to pull ClickUp status changes back into ROADMAP.md.
+Original purpose: sync task statuses → ROADMAP.md.
+Equivalent functionality now lives in scripts/sync_jira_to_roadmap.py (if built).
 
 Usage:
     python scripts/sync_clickup_to_roadmap.py

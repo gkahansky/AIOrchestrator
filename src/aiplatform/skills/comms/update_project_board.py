@@ -1,23 +1,11 @@
 """
 Skill: update_project_board
-Interact with the ClickUp project board — create, update, and read tasks.
+DEPRECATED — superseded by comms/update_jira_board.py.
 
-This skill knows nothing about any venture. All venture-specific logic
-(which list to use, what roadmap_id to assign) lives in the caller.
+This module contained the legacy project board integration.
+All active code now routes through update_jira_board.py (Jira Cloud REST API v3).
 
-Capabilities:
-    project-board-write  — create_task, update_task_status, add_task_comment
-    project-board-read   — get_task, get_tasks_by_status, get_all_tasks
-
-Error handling:
-    Board sync is observability, not a gate.
-    API failures are logged and returned as error dicts — never raised.
-    The caller decides whether to alert or retry.
-
-ClickUp API:
-    Base: https://api.clickup.com/api/v2
-    Auth: Authorization: {api_key}  (no "Bearer" prefix)
-    Rate: 100 req/min on free tier — warning logged at 80
+Kept for historical reference only. Do not use in new pipelines.
 """
 
 from __future__ import annotations
@@ -31,9 +19,9 @@ import requests
 
 log = logging.getLogger(__name__)
 
-BASE_URL = "https://api.clickup.com/api/v2"
-RATE_WARN_REMAINING = 20       # warn when X requests remain in the window
-_REQUEST_COUNT = 0             # simple per-process counter (not thread-safe, fine for scripts)
+BASE_URL = "https://api.clickup.com/api/v2"  # legacy — no longer active
+RATE_WARN_REMAINING = 20
+_REQUEST_COUNT = 0
 
 
 # ─── Public API ───────────────────────────────────────────────────────────────
@@ -48,7 +36,7 @@ def create_task(
 ) -> dict:
     """
     Capability: project-board-write
-    Create a new task in the specified ClickUp list.
+    Create a new task in the specified list.
 
     custom_fields: {field_name: value} — field IDs are resolved automatically.
     Returns {task_id, url, status} on success, {"error": ...} on failure.
@@ -154,7 +142,7 @@ def get_all_tasks(
     """
     Capability: project-board-read
     Return all tasks in a list regardless of status.
-    Handles ClickUp pagination automatically.
+    Handles pagination automatically.
     Returns [{task_id, name, status, custom_fields, url}].
     """
     api_key = _resolve_key(api_key)
@@ -213,9 +201,9 @@ def find_task_by_roadmap_id(
 # ─── Internal helpers ─────────────────────────────────────────────────────────
 
 def _resolve_key(api_key: str | None) -> str:
-    key = api_key or os.environ.get("CLICKUP_API_KEY", "")
+    key = api_key or ""
     if not key:
-        raise ValueError("CLICKUP_API_KEY not set and no api_key provided.")
+        raise ValueError("No api_key provided. This module is deprecated — use update_jira_board.py instead.")
     return key
 
 
@@ -234,7 +222,7 @@ def _get(path: str, params: dict, api_key: str, retry: int = 1) -> dict:
         if retry > 0:
             time.sleep(5)
             return _get(path, params, api_key, retry - 1)
-        log.error("ClickUp GET %s failed: %s", path, exc)
+        log.error("GET %s failed: %s", path, exc)
         return {"error": str(exc)}
 
 
@@ -249,7 +237,7 @@ def _post(path: str, payload: dict, api_key: str, retry: int = 1) -> dict:
         if retry > 0:
             time.sleep(5)
             return _post(path, payload, api_key, retry - 1)
-        log.error("ClickUp POST %s failed: %s", path, exc)
+        log.error("POST %s failed: %s", path, exc)
         return {"error": str(exc)}
 
 
@@ -264,18 +252,18 @@ def _put(path: str, payload: dict, api_key: str, retry: int = 1) -> dict:
         if retry > 0:
             time.sleep(5)
             return _put(path, payload, api_key, retry - 1)
-        log.error("ClickUp PUT %s failed: %s", path, exc)
+        log.error("PUT %s failed: %s", path, exc)
         return {"error": str(exc)}
 
 
 def _check_rate(response: requests.Response) -> None:
     remaining = response.headers.get("X-RateLimit-Remaining")
     if remaining and int(remaining) <= RATE_WARN_REMAINING:
-        log.warning("ClickUp rate limit: %s requests remaining in window", remaining)
+        log.warning("Rate limit: %s requests remaining in window", remaining)
 
 
 def _normalise_task(raw: dict) -> dict:
-    """Flatten a raw ClickUp task response to a clean dict."""
+    """Flatten a raw task response to a clean dict."""
     status = raw.get("status", {})
     status_name = status.get("status") if isinstance(status, dict) else str(status)
     cf_raw = raw.get("custom_fields", [])
@@ -301,7 +289,7 @@ def _normalise_task(raw: dict) -> dict:
 
 def _resolve_custom_fields(list_id: str, fields: dict, api_key: str) -> list[dict]:
     """
-    Convert {field_name: value} to the ClickUp custom_fields array format.
+    Convert {field_name: value} to the custom_fields array format.
     Discovers field IDs from the list definition.
     Returns [] if no fields can be resolved.
     """

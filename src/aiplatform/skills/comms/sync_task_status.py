@@ -102,7 +102,7 @@ def sync_task_status(
     api_key: str | None = None,           # unused — kept for call-site compatibility
 ) -> dict:
     """
-    Synchronise a task status across ClickUp, ROADMAP.md, and venture CLAUDE.md.
+    Synchronise a task status across Jira, ROADMAP.md, and venture CLAUDE.md.
 
     Returns:
         {

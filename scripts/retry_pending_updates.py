@@ -9,7 +9,7 @@ if hasattr(sys.stderr, "reconfigure"):
 Retry any failed sync operations from logs/pending_updates.json.
 
 Items are added to pending_updates.json whenever update_task.py fails
-to update ClickUp, ROADMAP.md, or a venture CLAUDE.md.
+to update Jira, ROADMAP.md, or a venture CLAUDE.md.
 
 Usage:
     python scripts/retry_pending_updates.py             # retry all

@@ -36,7 +36,7 @@ Complete inventory of every third-party tool, service, API, and library used acr
 | **PyJWT** (`PyJWT>=2.8.0`) | Session tokens | Issues and verifies 24-hour JWT sessions after Google OAuth login |
 | **python-multipart** (`python-multipart>=0.0.9`) | Form + file upload parsing | Handles multipart/form-data for audio file uploads on the podcast sample endpoint |
 | **httpx** (`httpx>=0.27.0`) | Async HTTP client | Async API calls within FastAPI routes |
-| **requests** (`requests>=2.31.0`) | Sync HTTP client | Skills layer: Etsy API, SerpAPI, Slack, Jira, ClickUp, Resend, Pinterest, website scraping |
+| **requests** (`requests>=2.31.0`) | Sync HTTP client | Skills layer: Etsy API, SerpAPI, Slack, Jira, Resend, Pinterest, website scraping |
 
 ---
 
@@ -121,8 +121,7 @@ Complete inventory of every third-party tool, service, API, and library used acr
 
 | Tool | Purpose | Use Cases |
 |---|---|---|
-| **Jira Cloud API v3** | Issue tracking | Create/update/transition tickets, sync pipeline phase status to Jira board (AII project) |
-| **ClickUp API v2** | Task boards | Backlog tracking, per-venture task lists, feature development coordination |
+| **Jira Cloud API v3** | Issue tracking | Create/update/transition tickets, sync pipeline phase status to Jira board (AII project). Skill: `comms/update_jira_board.py` |
 
 ---
 
@@ -196,7 +195,6 @@ No code changes required to swap — set `active: true` in `skills.json`.
 | Gmail | `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD` |
 | Slack | `SLACK_BOT_TOKEN`, `SLACK_REVIEW_CHANNEL`, `SLACK_ALERTS_CHANNEL` |
 | Jira | `JIRA_DOMAIN`, `JIRA_EMAIL`, `JIRA_API_KEY` |
-| ClickUp | `CLICKUP_API_KEY`, `CLICKUP_TEAM_ID`, `CLICKUP_LIST_*` |
 | Pinterest | `PINTEREST_APP_ID`, `PINTEREST_APP_SECRET`, `PINTEREST_ACCESS_TOKEN` |
 | Buffer | `BUFFER_ACCESS_TOKEN` |
 | Database | `DATABASE_URL` |

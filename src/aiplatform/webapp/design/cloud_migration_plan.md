@@ -174,7 +174,7 @@ frontend/                         # React + Vite — DO NOT CREATE until design 
 - All venture `config.py`, `prompts.py` files — zero changes
 - Google Drive as the asset storage layer — zero changes
 - The hard constraint: Etsy listings are NEVER set to `active` — stays in `etsy_upload.py`
-- ClickUp integration — zero changes
+- Jira integration — zero changes
 
 ---
 
@@ -481,7 +481,7 @@ Bulk: Apply ROAS recommendations
 
 ### API Keys
 Table: Service | Key (masked, last 6 chars) | Status | Last used | Test | Edit
-Services: Anthropic, OpenAI, Google AI, SerpAPI, Etsy, Gmail, Slack, Pinterest, Buffer, ClickUp, LangSmith
+Services: Anthropic, OpenAI, Google AI, SerpAPI, Etsy, Gmail, Slack, Pinterest, Buffer, Jira, LangSmith
 Warning banner if any key unset or last test failed.
 
 ### Notification Settings

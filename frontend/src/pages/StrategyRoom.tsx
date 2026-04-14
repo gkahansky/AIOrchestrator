@@ -1422,7 +1422,7 @@ function RoadmapTab() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Parameters<typeof updateRoadmapItem>[1] }) =>
       updateRoadmapItem(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["roadmap"] }); setEditingItem(null) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["roadmap"] }); setEditingItem(null); setShowForm(false) },
   })
   const deleteMutation = useMutation({
     mutationFn: deleteRoadmapItem,

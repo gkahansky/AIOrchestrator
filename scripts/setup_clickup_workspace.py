@@ -5,9 +5,10 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 """
-One-time ClickUp workspace setup script.
+DEPRECATED — project management has moved to Jira (project AII, aiinfra.atlassian.net).
+This script is kept for historical reference only and should not be run.
 
-Automates Steps 2–8 from src/aiplatform/CLAUDE.md:
+Original purpose: one-time workspace setup script.
   - Renames "Market Audit" space → "Marketing Audit"
   - Renames all lists from "List" → "Tasks"
   - Configures shared status set on all spaces

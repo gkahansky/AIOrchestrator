@@ -3,7 +3,7 @@ Skill: log_cost
 Record API/tool spend to the cost_events database table.
 
 Caller passes venture + job_id when available; both are optional so that
-platform-level costs (SerpAPI trend research, ClickUp sync) can be logged
+platform-level costs (SerpAPI trend research, Jira sync) can be logged
 without a job context.
 """
 

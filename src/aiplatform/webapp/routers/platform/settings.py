@@ -35,7 +35,7 @@ router = APIRouter()
 # Services whose keys we manage
 _KNOWN_SERVICES = {
     "anthropic", "openai", "google_ai", "serpapi", "etsy",
-    "gmail", "slack", "pinterest", "buffer", "clickup", "langsmith",
+    "gmail", "slack", "pinterest", "buffer", "jira", "langsmith",
 }
 
 

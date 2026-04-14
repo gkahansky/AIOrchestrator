@@ -168,7 +168,7 @@ class CostEvent(Base):
 
     Replaces the stub log_cost() function in skills/finance/log_cost.py.
     job_id is nullable for platform-level costs not tied to a specific job
-    (e.g. SerpAPI trend research, ClickUp sync calls).
+    (e.g. SerpAPI trend research, Jira sync calls).
     """
 
     __tablename__ = "cost_events"

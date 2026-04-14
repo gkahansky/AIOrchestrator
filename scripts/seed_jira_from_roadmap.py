@@ -210,16 +210,16 @@ FEATURES = [
         ),
         "labels": ["system", "venture-platform"],
         "stories": [
-            ("U-03", "ClickUp Integration — Skill + Seed + Sync Scripts",
+            ("U-03", "Project Management Integration — Jira",
              "Done",
-             "ClickUp workspace live: 5 spaces, 53 tasks seeded. "
-             "Skill: comms/update_project_board.py. "
-             "4-way sync: ClickUp + ROADMAP.md + venture CLAUDE.md + session log. "
-             "Auto git push on done. Scripts: setup/seed/sync/update_task/retry."),
-            ("F-pm-jira", "Jira Migration — Replace ClickUp with Jira",
-             "In Progress",
-             "Migrate all project management from ClickUp to Jira. "
-             "New skill: comms/update_jira_board.py. "
+             "Jira project AII live at aiinfra.atlassian.net. "
+             "Skill: comms/update_jira_board.py. "
+             "4-way sync: Jira + ROADMAP.md + venture CLAUDE.md + session log. "
+             "Auto git push on done. Scripts: seed_jira/update_task/retry."),
+            ("F-pm-jira", "Jira Integration — Active PM Tool",
+             "Done",
+             "Jira is the active project management tool for the AII platform. "
+             "Skill: comms/update_jira_board.py. "
              "Seed script: seed_jira_from_roadmap.py. "
              "Update sync_task_status.py + update_task.py to use Jira."),
             ("H-05", "Human Review Gate",

@@ -5,9 +5,12 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 """
-Seed ClickUp from ROADMAP.md — one-time + idempotent re-run.
+DEPRECATED — superseded by seed_jira_from_roadmap.py.
+Project management has moved from the legacy tool to Jira (project AII, aiinfra.atlassian.net).
+This script is kept for historical reference only and should not be run.
 
-Parses every item in ROADMAP.md and creates a ClickUp task in the correct Space.
+Original purpose: Seed from ROADMAP.md — one-time + idempotent re-run.
+Use seed_jira_from_roadmap.py instead.
 Tasks already matching a `roadmap_id` custom field are skipped (not overwritten).
 
 Usage:

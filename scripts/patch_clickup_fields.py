@@ -6,7 +6,10 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 """
-Patch ClickUp task fields:
+DEPRECATED — project management has moved to Jira (project AII, aiinfra.atlassian.net).
+This script is kept for historical reference only and should not be run.
+
+Original purpose: patch task fields.
 
   1. Venture field  — set the "venture" custom field on every task based on which
                      Space it lives in. Overrides: H-09, M-09 -> "Management Console".

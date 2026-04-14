@@ -252,10 +252,23 @@ def _run_phase5_upload(
     sample_pdf_path,
     sample_md_path,
 ) -> None:
-    """Upload reports to Drive and store view links on the order dict."""
+    """Upload reports to Drive and store view links on the order dict.
+
+    Standardised output keys (shared with content_studio pipeline):
+      drive_report_link       — full PDF (primary document link)
+      drive_folder_link       — Drive folder containing all report files
+      drive_sample_pdf_link   — sample/censored PDF
+    Legacy keys are also written for backward compat with existing DB records.
+    """
     print(f"  Phase 5a: Uploading to Drive...")
     full_folder   = config.DRIVE_AUDIT_ROOT_ID
     sample_folder = config.DRIVE_SAMPLES_FOLDER_ID or config.DRIVE_AUDIT_ROOT_ID
+
+    # Set folder links now — always available regardless of which files upload
+    if full_folder:
+        order["drive_folder_link"] = f"https://drive.google.com/drive/folders/{full_folder}"
+    if sample_folder and sample_folder != full_folder:
+        order["drive_sample_folder_link"] = f"https://drive.google.com/drive/folders/{sample_folder}"
 
     upload_targets = []
     if full_folder:
@@ -268,7 +281,13 @@ def _run_phase5_upload(
             try:
                 res = drive_write(path, folder_id)
                 link = res["web_view_link"]
+                # Legacy key (backward compat)
                 order[f"drive_{label.replace(' ', '_')}_link"] = link
+                # Standardised keys used by extractJobLinks in the frontend
+                if label == "full PDF":
+                    order["drive_report_link"] = link
+                elif label == "sample PDF":
+                    order["drive_sample_pdf_link"] = link
                 print(f"    OK {label} on Drive: {link}")
             except Exception as exc:
                 print(f"    WARN  Drive upload failed ({label}): {exc}")

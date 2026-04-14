@@ -276,6 +276,10 @@ def _run_phase3_package(order: dict, content: dict, work_dir: Path) -> dict:
     # Create per-order folder in Drive if configured
     folder_id = _get_or_create_order_folder(order["order_id"])
 
+    # Set folder link immediately (before uploads, so it persists even if uploads fail)
+    if folder_id:
+        order["drive_folder_link"] = f"https://drive.google.com/drive/folders/{folder_id}"
+
     # Upload transcript + PDFs to Drive
     # Full order files → order folder; sample PDFs → dedicated samples folder
     transcript_path = work_dir / "transcript.txt"
@@ -315,6 +319,11 @@ def _run_phase3_package(order: dict, content: dict, work_dir: Path) -> dict:
 
     gdoc["full_pdf_path"] = str(full_pdf_path)
     gdoc["sample_pdf_path"] = str(sample_pdf_path)
+
+    # Promote the GDoc link to a flat top-level key so the frontend can find it
+    # (extractJobLinks checks order["gdoc_url"], not order["gdoc"]["web_view_link"])
+    order["gdoc_url"] = gdoc.get("web_view_link", "")
+
     return gdoc
 
 

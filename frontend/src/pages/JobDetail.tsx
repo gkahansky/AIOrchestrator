@@ -2,18 +2,13 @@ import { useState } from "react"
 import { useParams, useNavigate, Link } from "react-router-dom"
 import { useJob, useApproveJob, useRejectJob, useRetryJob } from "../hooks/useJobs"
 import StatusBadge from "../components/StatusBadge"
+import JobLinks, { extractJobLinks } from "../components/JobLinks"
 import type { JobStatus } from "../types"
 
 interface PhaseStep {
   name: string
   state: "complete" | "active" | "pending" | "failed"
   timestamp?: string
-}
-
-interface ResourceLink {
-  label: string
-  url: string
-  icon: string
 }
 
 // Statuses where the current phase has actually finished (no spinner)
@@ -79,25 +74,6 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {}
 }
 
-function asString(value: unknown): string {
-  return typeof value === "string" ? value : ""
-}
-
-function buildResourceLinks(outputData: Record<string, unknown>): ResourceLink[] {
-  const candidates: ResourceLink[] = [
-    { label: "Open Document", url: asString(outputData.drive_report_link), icon: "description" },
-    { label: "Open Folder", url: asString(outputData.drive_folder_link), icon: "folder_open" },
-    { label: "Open Google Doc", url: asString(outputData.gdoc_url), icon: "description" },
-    { label: "Open Sample PDF", url: asString(outputData.drive_sample_pdf_link) || asString(outputData.drive_sample_PDF_link), icon: "description" },
-  ]
-
-  const seen = new Set<string>()
-  return candidates.filter((item) => {
-    if (!item.url || !/^https?:\/\//.test(item.url) || seen.has(item.url)) return false
-    seen.add(item.url)
-    return true
-  })
-}
 
 export default function JobDetail() {
   const { id } = useParams<{ id: string }>()
@@ -176,7 +152,7 @@ export default function JobDetail() {
   const isReviewPending = job.status === "review_pending"
   const isFailed = job.status === "failed"
   const outputData = asRecord(job.output_data)
-  const resourceLinks = buildResourceLinks(outputData)
+  const resourceLinks = extractJobLinks(outputData)
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -310,19 +286,8 @@ export default function JobDetail() {
               <div className="px-5 py-4 border-b border-outline-variant/15">
                 <h2 className="font-headline font-bold text-sm text-on-surface">Deliverables</h2>
               </div>
-              <div className="px-5 py-4 flex flex-wrap gap-3">
-                {resourceLinks.map((link) => (
-                  <a
-                    key={`${link.label}-${link.url}`}
-                    href={link.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 text-primary text-sm font-label font-semibold hover:bg-primary/15 transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">{link.icon}</span>
-                    {link.label}
-                  </a>
-                ))}
+              <div className="px-5 py-4">
+                <JobLinks outputData={outputData} variant="card" />
               </div>
             </div>
           )}
@@ -372,22 +337,7 @@ export default function JobDetail() {
 
           {isReviewPending && (
             <>
-              {resourceLinks.length > 0 && (
-                <div className="flex flex-wrap gap-3">
-                  {resourceLinks.map((link) => (
-                    <a
-                      key={`review-${link.label}-${link.url}`}
-                      href={link.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-primary/20 text-primary text-sm font-label font-semibold hover:bg-primary/5 transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">{link.icon}</span>
-                      {link.label}
-                    </a>
-                  ))}
-                </div>
-              )}
+              <JobLinks outputData={outputData} variant="card" />
               <div>
                 <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
                   Notes (optional)

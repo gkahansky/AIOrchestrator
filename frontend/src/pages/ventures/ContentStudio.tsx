@@ -4,6 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query"
 import { fetchPodcastOrders, createPodcastOrder } from "../../api"
 import StatusBadge from "../../components/StatusBadge"
 import PhaseBar from "../../components/PhaseBar"
+import JobLinks from "../../components/JobLinks"
 
 type Tab = "overview" | "new_order" | "orders"
 
@@ -360,12 +361,15 @@ function OrdersList() {
                       {formatDate(job.created_at)}
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => navigate(`/jobs/${job.id}`)}
-                        className="text-xs font-label font-semibold text-primary hover:underline"
-                      >
-                        View
-                      </button>
+                      <div className="flex flex-col gap-1.5">
+                        <JobLinks outputData={job.output_data} />
+                        <button
+                          onClick={() => navigate(`/jobs/${job.id}`)}
+                          className="text-xs font-label font-semibold text-primary hover:underline text-left"
+                        >
+                          View details
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

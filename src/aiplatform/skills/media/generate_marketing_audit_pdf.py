@@ -44,8 +44,9 @@ def generate_pdf_report(report_data: dict, output_path: str) -> None:
         <div class="bg-surface-container-lowest p-6 rounded-xl border border-surface-container shadow-[0_2px_15px_rgba(0,0,0,0.02)] space-y-3 break-inside-avoid">
             <div class="flex justify-between items-start">
                 <span class="material-symbols-outlined {color} text-2xl">speed</span>
+                <span class="text-xs font-bold {color} uppercase tracking-wide">{_html_escape(sev)}</span>
             </div>
-            <h4 class="text-base font-headline font-bold text-primary">{_html_escape(str(f))}</h4>
+            <h4 class="text-base font-headline font-bold text-primary">{_html_escape(f.get("finding", ""))}</h4>
         </div>
         """
 

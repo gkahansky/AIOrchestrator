@@ -260,7 +260,11 @@ def _run_phase5_upload(
       drive_sample_pdf_link   — sample/censored PDF
     Legacy keys are also written for backward compat with existing DB records.
     """
+    import os as _os
     print(f"  Phase 5a: Uploading to Drive...")
+    print(f"    DRIVE_AUDIT_ROOT_ID={config.DRIVE_AUDIT_ROOT_ID!r}")
+    print(f"    GOOGLE_TOKEN_PATH={_os.environ.get('GOOGLE_TOKEN_PATH')!r}  exists={Path(_os.environ.get('GOOGLE_TOKEN_PATH', '')).exists()}")
+    print(f"    GOOGLE_CREDENTIALS_PATH={_os.environ.get('GOOGLE_CREDENTIALS_PATH')!r}  exists={Path(_os.environ.get('GOOGLE_CREDENTIALS_PATH', '')).exists()}")
     full_folder   = config.DRIVE_AUDIT_ROOT_ID
     sample_folder = config.DRIVE_SAMPLES_FOLDER_ID or config.DRIVE_AUDIT_ROOT_ID
 
@@ -277,20 +281,26 @@ def _run_phase5_upload(
         upload_targets += [("sample PDF", sample_pdf_path, sample_folder), ("sample MD", sample_md_path, sample_folder)]
 
     for label, path, folder_id in upload_targets:
-        if path and Path(path).exists() and folder_id:
-            try:
-                res = drive_write(path, folder_id)
-                link = res["web_view_link"]
-                # Legacy key (backward compat)
-                order[f"drive_{label.replace(' ', '_')}_link"] = link
-                # Standardised keys used by extractJobLinks in the frontend
-                if label == "full PDF":
-                    order["drive_report_link"] = link
-                elif label == "sample PDF":
-                    order["drive_sample_pdf_link"] = link
-                print(f"    OK {label} on Drive: {link}")
-            except Exception as exc:
-                print(f"    WARN  Drive upload failed ({label}): {exc}")
+        path_obj = Path(path) if path else None
+        if not path_obj or not str(path_obj) or not path_obj.exists():
+            print(f"    SKIP {label}: path missing or does not exist ({path!r})")
+            continue
+        try:
+            print(f"    Uploading {label}: {path_obj} ({path_obj.stat().st_size // 1024} KB) → folder {folder_id}")
+            res = drive_write(path_obj, folder_id)
+            link = res["web_view_link"]
+            # Legacy key (backward compat)
+            order[f"drive_{label.replace(' ', '_')}_link"] = link
+            # Standardised keys used by extractJobLinks in the frontend
+            if label == "full PDF":
+                order["drive_report_link"] = link
+            elif label == "sample PDF":
+                order["drive_sample_pdf_link"] = link
+            print(f"    OK {label} on Drive: {link}")
+        except Exception as exc:
+            import traceback
+            print(f"    ERROR Drive upload failed ({label}): {exc}")
+            print(traceback.format_exc())
 
 
 def _run_phase5_notify(order: dict) -> None:

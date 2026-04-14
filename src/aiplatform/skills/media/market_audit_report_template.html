@@ -122,12 +122,10 @@
 </div>
 </div>
 </header>
-<main class="px-12 py-10 space-y-24 pb-32 max-w-5xl mx-auto">
-<section class="grid grid-cols-12 gap-8 items-start" id="summary">
-<div class="col-span-12 space-y-4 mb-2">
-<h2 class="text-5xl font-headline font-semibold text-primary leading-tight">Operational <span class="italic font-medium">Stagnation</span> Detected.</h2>
-<p class="text-base text-on-surface-variant font-light max-w-3xl leading-relaxed">{{ summary_p }}</p>
-</div>
+<main class="px-12 py-6 space-y-16 pb-20 max-w-5xl mx-auto">
+<section id="summary">
+<!-- Row 1: Score card + Category performance -->
+<div class="grid grid-cols-12 gap-8 items-start mb-12">
 <div class="col-span-5 bg-surface-container-lowest p-10 rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.02)] border border-surface-container relative overflow-hidden h-full flex flex-col justify-between">
 <div class="absolute top-0 right-0 p-6">
 <span class="text-[9px] font-label uppercase tracking-widest text-outline">{{ audit_status }}</span>
@@ -159,6 +157,12 @@
 <div class="space-y-4 flex-grow">
 {{ category_breakdown_html }}
 </div>
+</div>
+</div>
+<!-- Row 2: Executive summary paragraph -->
+<div class="space-y-3">
+<h2 class="text-3xl font-headline font-semibold text-primary leading-tight">Executive <span class="italic font-medium">Summary</span></h2>
+<p class="text-base text-on-surface-variant font-light max-w-3xl leading-relaxed">{{ summary_p }}</p>
 </div>
 </section>
 <section class="space-y-10" id="findings">

@@ -116,6 +116,6 @@ def generate_pdf_report(report_data: dict, output_path: str) -> None:
             path=str(output_p),
             print_background=True,
             format="A4",
-            margin={"top": "0in", "bottom": "0in", "left": "0in", "right": "0in"}
+            margin={"top": "0.5in", "bottom": "0.5in", "left": "0in", "right": "0in"}
         )
         browser.close()

@@ -14,14 +14,30 @@
 A reusable, multi-agent AI platform powering independent business ventures under two brands:
 
 - **MiroPrintStudio** — Etsy digital image shop (AI-generated wall art)
-- **EchoForge** (echoforge.biz) — Marketing & SEO services (Marketing Audit + Podcast Notes)
+- **EchoForge** (echoforge.biz) — Marketing & SEO services (Marketing Audit + Podcast Notes + Security Audit)
 
 The core principle is that agents, skills, memory, and integrations live in a shared infrastructure layer. Each venture is a lightweight configuration and pipeline on top of that shared layer.
 
 - **Venture A:** MiroPrintStudio — Etsy digital image shop — see `/ventures/etsy/CLAUDE.md`
 - **Venture B:** EchoForge — Podcast show notes — see `/ventures/podcast_notes/CLAUDE.md`
 - **Venture C:** EchoForge — Website marketing audit — see `/ventures/marketing_audit/CLAUDE.md`
-- **Venture D+:** Future ventures — each gets its own directory and CLAUDE.md
+- **Venture D:** EchoForge — Web application security audit — see `/ventures/security_audit/CLAUDE.md`
+- **Venture E+:** Future ventures — each gets its own directory and CLAUDE.md
+
+### Venture D — Security Audit: Architecture Notes
+
+The Security Audit venture shares the following platform components with existing ventures:
+- Celery + Redis orchestration, FastAPI job API, PostgreSQL findings schema, Playwright browser automation, Claude API correlation pipeline, PDF generation, Google Drive artifact storage
+
+It adds components not shared with any other venture (do not move these to `/platform/skills/`):
+- Docker container images per scanning phase (isolated per job, destroyed on completion)
+- `nuclei` template management and update pipeline
+- Rate-limit proxy wrapper (prevent inadvertent DoS during active scanning phases)
+- Scope validation middleware (ensures tools cannot probe out-of-scope hosts — **legally required**)
+- PoC screenshot capture and evidence tagging system
+- MinIO/S3 artifact storage for raw scan output (screenshots, request/response logs)
+
+**Key constraint:** every active scanning phase (Phases 2–5) must validate target ownership before running. See Section 10 of the venture CLAUDE.md for legal/compliance requirements. Never bypass scope validation even in testing.
 
 Adding a new venture means writing a config, a pipeline, and a CLAUDE.md. It does not mean touching `/platform/`.
 

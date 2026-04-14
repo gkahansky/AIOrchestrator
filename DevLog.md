@@ -83,3 +83,4 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-14 09:47 |  | 5ca9ee7 | Change default report_type to 'full' in new audit order form |
 | 2026-04-14 09:51 |  | cf83439 | Fix blank first page in audit PDF â€” remove sticky header |
 | 2026-04-14 10:06 |  | c8341aa | Fix audit findings display â€” render Severity/Finding labels instead of raw dict string |
+| 2026-04-14 11:00 |  | (pending) | Fix Roadmap features dropdown blank — list_features and create_feature were returning raw ORM objects that became detached/expired after session close; serialize to dicts inside the with block |

@@ -242,7 +242,8 @@ class FeatureCreate(BaseModel):
 @router.get("/roadmap/features", response_model=List[FeatureResponse])
 def list_features(user: str = Depends(require_auth)):
     with get_session() as db:
-        return db.query(RoadmapFeature).order_by(RoadmapFeature.name).all()
+        rows = db.query(RoadmapFeature).order_by(RoadmapFeature.name).all()
+        return [{"id": f.id, "name": f.name, "created_at": f.created_at} for f in rows]
 
 
 @router.post("/roadmap/features", response_model=FeatureResponse, status_code=201)
@@ -250,12 +251,12 @@ def create_feature(body: FeatureCreate, user: str = Depends(require_auth)):
     with get_session() as db:
         existing = db.query(RoadmapFeature).filter(RoadmapFeature.name == body.name).first()
         if existing:
-            return existing
+            return {"id": existing.id, "name": existing.name, "created_at": existing.created_at}
         feat = RoadmapFeature(name=body.name)
         db.add(feat)
         db.commit()
         db.refresh(feat)
-        return feat
+        return {"id": feat.id, "name": feat.name, "created_at": feat.created_at}
 
 
 # ── Roadmap Items ──────────────────────────────────────────────────────────────

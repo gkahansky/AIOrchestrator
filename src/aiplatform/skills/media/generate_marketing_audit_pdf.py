@@ -36,17 +36,38 @@ def generate_pdf_report(report_data: dict, output_path: str) -> None:
         """
 
     findings_html = ""
-    for f in report_data.get("findings", [])[:4]:
+    for f in report_data.get("findings", []):
         sev = f.get("severity", "Medium")
         color = "text-secondary" if sev == "Critical" else "text-secondary-container" if sev == "High" else "text-primary"
-        bg_color = "bg-secondary" if sev == "Critical" else "bg-secondary-container" if sev == "High" else "bg-primary"
+
+        # Support both new structured format (problem/impact/fix) and legacy (finding)
+        problem = _html_escape(f.get("problem") or f.get("finding", ""))
+        impact  = _html_escape(f.get("impact", ""))
+        fix     = _html_escape(f.get("fix", ""))
+
+        impact_row = f"""
+            <div>
+                <span class="text-[9px] font-label font-bold uppercase tracking-widest text-on-surface-variant/60">Impact</span>
+                <p class="text-xs font-body text-on-surface-variant mt-0.5">{impact}</p>
+            </div>""" if impact else ""
+
+        fix_row = f"""
+            <div>
+                <span class="text-[9px] font-label font-bold uppercase tracking-widest text-on-surface-variant/60">Resolution</span>
+                <p class="text-xs font-body text-on-surface mt-0.5">{fix}</p>
+            </div>""" if fix else ""
+
         findings_html += f"""
-        <div class="bg-surface-container-lowest p-6 rounded-xl border border-surface-container shadow-[0_2px_15px_rgba(0,0,0,0.02)] space-y-3 break-inside-avoid">
-            <div class="flex justify-between items-start">
-                <span class="material-symbols-outlined {color} text-2xl">speed</span>
+        <div class="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-[0_2px_15px_rgba(0,0,0,0.02)] space-y-3 break-inside-avoid">
+            <div class="flex items-center justify-between">
                 <span class="text-xs font-bold {color} uppercase tracking-wide">{_html_escape(sev)}</span>
             </div>
-            <h4 class="text-base font-headline font-bold text-primary">{_html_escape(f.get("finding", ""))}</h4>
+            <div>
+                <span class="text-[9px] font-label font-bold uppercase tracking-widest text-on-surface-variant/60">Finding</span>
+                <p class="text-sm font-headline font-semibold text-primary mt-0.5">{problem}</p>
+            </div>
+            {impact_row}
+            {fix_row}
         </div>
         """
 

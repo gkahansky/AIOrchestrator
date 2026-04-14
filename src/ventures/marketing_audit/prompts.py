@@ -98,7 +98,12 @@ suggestions, and real metric targets where possible.
     "Growth & Strategy":       {"score": 0-100, "key_finding": "string", "details": "string — 2-3 paragraphs"}
   },
   "findings": [
-    {"severity": "Critical | High | Medium | Low", "finding": "string — specific and actionable"}
+    {
+      "severity": "Critical | High | Medium | Low",
+      "problem": "string — what is wrong, stated as a fact (1-2 sentences)",
+      "impact": "string — business consequence of leaving this unfixed (1-2 sentences)",
+      "fix": "string — specific, actionable resolution steps (1-3 sentences)"
+    }
   ],
   "quick_wins": ["string — specific action, not generic advice"],
   "medium_term": ["string"],

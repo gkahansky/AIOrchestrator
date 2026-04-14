@@ -389,16 +389,22 @@ def generate_sample_pdf(report_data: dict, output_path: str) -> str:
     }
 
     if cf["visible"]:
-        vis_rows = [["Severity", "Finding"]]
+        vis_rows = [["Severity", "Finding", "Impact", "Resolution"]]
         for f in cf["visible"]:
             sev = f.get("severity", "Medium")
+            # Support both new structured format and legacy single-field format
+            problem = f.get("problem") or f.get("finding", "")
+            impact  = f.get("impact", "")
+            fix     = f.get("fix", "")
             vis_rows.append([
                 Paragraph(sev, ParagraphStyle("FS", parent=styles["Normal"],
                           fontSize=8, fontName="Helvetica-Bold",
                           textColor=severity_colors_map.get(sev, COLORS["text"]))),
-                Paragraph(_rt(f.get("finding", "")), body_style),
+                Paragraph(_rt(problem), body_style),
+                Paragraph(_rt(impact), body_style),
+                Paragraph(_rt(fix), body_style),
             ])
-        vis_table = Table(vis_rows, colWidths=[65, 447])
+        vis_table = Table(vis_rows, colWidths=[55, 175, 140, 142])
         vis_table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), COLORS["primary"]),
             ("TEXTCOLOR", (0, 0), (-1, 0), white),

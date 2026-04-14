@@ -246,23 +246,35 @@ def _run_phase4_generate(order: dict, report_data: dict, scraped: dict, work_dir
         paths["sample_pdf"] = sample_pdf_path
         paths["sample_md"]  = sample_md_path
 
-    # Premium tier: generate dedicated accessibility PDF from raw scan data
+    # Premium tier: merge accessibility report into the main audit PDF (single combined document).
+    # Standard/full tiers are unchanged — no accessibility report is generated.
     if order.get("tier") == "premium":
         a11y_data = scraped.get("accessibility_audit", {})
         if a11y_data and "error" not in a11y_data and a11y_data.get("violations") is not None:
             try:
                 from aiplatform.skills.audit.generate_accessibility_report import generate_accessibility_report
-                a11y_pdf_path = work_dir / f"{slug}-accessibility.pdf"
-                generate_accessibility_report(a11y_data, str(a11y_pdf_path), tier="premium")
-                paths["accessibility_pdf"] = a11y_pdf_path
-                print(f"    OK Accessibility PDF: {a11y_pdf_path.name} ({a11y_pdf_path.stat().st_size // 1024} KB)")
+                a11y_tmp_path = work_dir / f"{slug}-a11y-tmp.pdf"
+                generate_accessibility_report(a11y_data, str(a11y_tmp_path), tier="premium")
+                print(f"    OK Accessibility section rendered ({a11y_tmp_path.stat().st_size // 1024} KB)")
+
+                if want_full and "pdf" in paths:
+                    # Merge: marketing audit pages first, then accessibility pages → single deliverable
+                    combined_path = work_dir / f"{slug}-audit-combined.pdf"
+                    _merge_pdfs([str(paths["pdf"]), str(a11y_tmp_path)], str(combined_path))
+                    combined_path.replace(paths["pdf"])  # overwrite audit PDF in-place
+                    a11y_tmp_path.unlink(missing_ok=True)
+                    print(f"    OK Premium combined PDF: {paths['pdf'].name} ({paths['pdf'].stat().st_size // 1024} KB)")
+                else:
+                    # Sample-only order — no full PDF to merge into; store standalone
+                    paths["accessibility_pdf"] = a11y_tmp_path
+                    print(f"    OK Accessibility PDF (standalone): {a11y_tmp_path.name}")
             except Exception as exc:
-                print(f"    WARN Accessibility PDF generation failed: {exc}")
+                print(f"    WARN Accessibility merge failed: {exc}")
         else:
             if "error" in a11y_data:
-                print(f"    SKIP Accessibility PDF: scan had errors — {a11y_data['error']}")
+                print(f"    SKIP Accessibility: scan had errors — {a11y_data['error']}")
             else:
-                print(f"    SKIP Accessibility PDF: no scan data (tier={order.get('tier')})")
+                print(f"    SKIP Accessibility: no scan data (tier={order.get('tier')})")
 
     return paths
 
@@ -406,7 +418,19 @@ def _run_phase6_deliver(order: dict) -> None:
         print(f"    WARN  Delivery email failed: {exc}")
 
 
-# --- PDF generator ------------------------------------------------------------
+# --- PDF helpers --------------------------------------------------------------
+
+def _merge_pdfs(input_paths: list[str], output_path: str) -> None:
+    """Append pages from each input PDF into a single output PDF using pypdf."""
+    from pypdf import PdfWriter
+    writer = PdfWriter()
+    for p in input_paths:
+        path = Path(p)
+        if path.exists():
+            writer.append(str(path))
+    with open(output_path, "wb") as f:
+        writer.write(f)
+
 
 def _generate_pdf(report_data: dict, output_path: str) -> None:
     """

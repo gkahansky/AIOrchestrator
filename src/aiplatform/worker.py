@@ -41,8 +41,7 @@ from celery import Celery
 
 def _materialise_google_credentials() -> None:
     """Write Google credential env vars to disk so Drive auth can find them."""
-    import base64, logging
-    log = logging.getLogger(__name__)
+    import base64
 
     # OAuth user token — preferred, works with personal Google Drive
     token_b64 = os.environ.get("GOOGLE_DRIVE_TOKEN_JSON", "")
@@ -50,9 +49,11 @@ def _materialise_google_credentials() -> None:
         dest = Path(os.environ.get("GOOGLE_TOKEN_PATH", "./google_token.json"))
         try:
             dest.write_bytes(base64.b64decode(token_b64))
-            log.info("Google OAuth token written to %s", dest)
+            print(f"[startup] Google OAuth token written to {dest}", flush=True)
         except Exception as exc:
-            log.warning("Failed to write Google OAuth token: %s", exc)
+            print(f"[startup] ERROR: Failed to write Google OAuth token: {exc}", flush=True)
+    else:
+        print("[startup] WARNING: GOOGLE_DRIVE_TOKEN_JSON is not set — Drive uploads will fall back to service account (may fail on personal Drive folders)", flush=True)
 
     # Service account — fallback for non-Drive operations
     sa_b64 = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
@@ -60,9 +61,11 @@ def _materialise_google_credentials() -> None:
         dest = Path(os.environ.get("GOOGLE_CREDENTIALS_PATH", "./google_credentials.json"))
         try:
             dest.write_bytes(base64.b64decode(sa_b64))
-            log.info("Google service account written to %s", dest)
+            print(f"[startup] Google service account written to {dest}", flush=True)
         except Exception as exc:
-            log.warning("Failed to write Google service account: %s", exc)
+            print(f"[startup] ERROR: Failed to write Google service account: {exc}", flush=True)
+    else:
+        print("[startup] WARNING: GOOGLE_SERVICE_ACCOUNT_JSON is not set — service account fallback unavailable", flush=True)
 
 _materialise_google_credentials()
 

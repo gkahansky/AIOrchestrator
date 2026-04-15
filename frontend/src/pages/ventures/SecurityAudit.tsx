@@ -132,11 +132,51 @@ function Overview() {
 
 // ── New Order ─────────────────────────────────────────────────────────────────
 
+const DEVELOPER_IMPLEMENTATION_NOTES = `
+DEVELOPER IMPLEMENTATION CHECKLIST — Security Audit Order
+
+Before this order form is exposed to public customers (not internal admin), ensure:
+
+1. SCOPE VERIFICATION
+   The order flow requires the customer to add a DNS TXT record:
+     _echoforge-verify.{domain}  TXT  "{scope_token}"
+   The scan will NOT start until this record is detected or manually overridden.
+   Implement a polling "Check DNS" button that calls POST /verify-scope every 15s.
+
+2. ToS / RULES OF ENGAGEMENT GATE
+   The order form must include a mandatory checkbox:
+   "I confirm I own this domain or hold written authorisation to test it.
+    I have read and agree to the Rules of Engagement."
+   This checkbox must be required=true. Do not allow form submission without it.
+   Store the acceptance timestamp and user identity in the order record.
+
+3. AUTHORISATION LETTER UPLOAD (optional — for agency customers)
+   Add a file upload field for a signed authorisation letter (PDF).
+   This satisfies the scope gate for customers who cannot add DNS records
+   (e.g. testing a client's site). Store in Drive alongside the report.
+
+4. CRITICAL FINDING NOTIFICATION
+   If the pipeline sets output_data.critical_finding_alert = true,
+   the UI must display a red banner: "Critical finding discovered — immediate action required."
+   Do not show this only in email. It must be visible in the order detail view.
+
+5. DATA RETENTION NOTICE
+   Display on the order confirmation page:
+   "Your scan data and report will be automatically deleted 30 days after delivery."
+
+6. CREDENTIALS (Professional/Agency tiers)
+   If tier = professional or agency, show an optional credentials section.
+   Advise the customer to create a dedicated test account before providing credentials.
+   Never log or display credentials in the UI after submission.
+`.trim()
+
 function NewOrder({ onSuccess }: { onSuccess: (auditId: string) => void }) {
   const [url, setUrl] = useState("")
   const [tier, setTier] = useState<"starter" | "professional" | "agency">("starter")
   const [clientEmail, setClientEmail] = useState("")
   const [isDemo, setIsDemo] = useState(false)
+  const [tosAccepted, setTosAccepted] = useState(false)
+  const [showDevNotes, setShowDevNotes] = useState(false)
   const [errorMsg, setErrorMsg] = useState("")
 
   const submitMut = useMutation({
@@ -148,83 +188,146 @@ function NewOrder({ onSuccess }: { onSuccess: (auditId: string) => void }) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setErrorMsg("")
-    submitMut.mutate({ url, tier, client_email: clientEmail || undefined, is_testing: isDemo })
+    if (!tosAccepted) {
+      setErrorMsg("You must accept the Rules of Engagement before submitting.")
+      return
+    }
+    submitMut.mutate({ url, tier, client_email: clientEmail || undefined, is_testing: isDemo, tos_accepted: tosAccepted })
   }
 
   return (
-    <form onSubmit={handleSubmit} className="card p-6 max-w-2xl space-y-5">
-      <h2 className="font-headline font-bold text-xl">New Security Audit Order</h2>
+    <div className="max-w-2xl space-y-5">
+      <form onSubmit={handleSubmit} className="card p-6 space-y-5">
+        <h2 className="font-headline font-bold text-xl">New Security Audit Order</h2>
 
-      {errorMsg && (
-        <div className="bg-error/10 text-error p-3 rounded-lg text-sm">{errorMsg}</div>
-      )}
+        {errorMsg && (
+          <div className="bg-error/10 text-error p-3 rounded-lg text-sm">{errorMsg}</div>
+        )}
 
-      <div>
-        <label className="block text-sm font-label font-bold text-on-surface mb-1">Target URL *</label>
-        <input
-          required type="url" value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://example.com"
-          className="w-full bg-surface border border-outline-variant/30 rounded-lg px-3 py-2"
-        />
-        <p className="text-[10px] text-on-surface-variant mt-1 font-body">
-          You must own or have written authorisation to test this domain.
-        </p>
-      </div>
-
-      <div>
-        <label className="block text-sm font-label font-bold text-on-surface mb-1">Package Tier</label>
-        <div className="grid grid-cols-3 gap-3">
-          {TIERS.map((t) => (
-            <label
-              key={t.id}
-              className={`cursor-pointer rounded-lg border p-3 transition-colors ${
-                tier === t.id
-                  ? "border-primary bg-primary/5"
-                  : "border-outline-variant/30 bg-surface hover:bg-surface-container-low"
-              }`}
-            >
-              <input
-                type="radio" name="tier" value={t.id} checked={tier === t.id}
-                onChange={() => setTier(t.id as typeof tier)} className="sr-only"
-              />
-              <div className="font-label font-bold text-sm text-primary">{t.price}</div>
-              <div className="font-label font-semibold text-xs text-on-surface mt-0.5">{t.label}</div>
-              <div className="text-[10px] text-on-surface-variant mt-1">{t.turnaround}</div>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-label font-bold text-on-surface mb-1">Client Email (optional)</label>
-        <input
-          type="email" value={clientEmail}
-          onChange={(e) => setClientEmail(e.target.value)}
-          placeholder="client@company.com"
-          className="w-full bg-surface border border-outline-variant/30 rounded-lg px-3 py-2"
-        />
-      </div>
-
-      <label className="flex items-center gap-3 cursor-pointer bg-surface-container-lowest p-3 rounded-lg border border-outline-variant/30">
-        <input
-          type="checkbox" checked={isDemo} onChange={(e) => setIsDemo(e.target.checked)}
-          className="w-4 h-4 text-primary rounded"
-        />
         <div>
-          <span className="font-label font-bold text-sm block">Demo Mode</span>
-          <span className="text-[10px] text-on-surface-variant font-body">
-            Skips revenue logging. Scan still runs fully — useful for testing.
-          </span>
+          <label className="block text-sm font-label font-bold text-on-surface mb-1">Target URL *</label>
+          <input
+            required type="url" value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://example.com"
+            className="w-full bg-surface border border-outline-variant/30 rounded-lg px-3 py-2"
+          />
+          <p className="text-[10px] text-on-surface-variant mt-1 font-body">
+            You must own or have written authorisation to test this domain.
+          </p>
         </div>
-      </label>
 
-      <div className="flex justify-end">
-        <button type="submit" disabled={submitMut.isPending} className="btn-primary py-2 px-6">
-          {submitMut.isPending ? "Creating order…" : "Create Order"}
+        <div>
+          <label className="block text-sm font-label font-bold text-on-surface mb-1">Package Tier</label>
+          <div className="grid grid-cols-3 gap-3">
+            {TIERS.map((t) => (
+              <label
+                key={t.id}
+                className={`cursor-pointer rounded-lg border p-3 transition-colors ${
+                  tier === t.id
+                    ? "border-primary bg-primary/5"
+                    : "border-outline-variant/30 bg-surface hover:bg-surface-container-low"
+                }`}
+              >
+                <input
+                  type="radio" name="tier" value={t.id} checked={tier === t.id}
+                  onChange={() => setTier(t.id as typeof tier)} className="sr-only"
+                />
+                <div className="font-label font-bold text-sm text-primary">{t.price}</div>
+                <div className="font-label font-semibold text-xs text-on-surface mt-0.5">{t.label}</div>
+                <div className="text-[10px] text-on-surface-variant mt-1">{t.turnaround}</div>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-label font-bold text-on-surface mb-1">Client Email (optional)</label>
+          <input
+            type="email" value={clientEmail}
+            onChange={(e) => setClientEmail(e.target.value)}
+            placeholder="client@company.com"
+            className="w-full bg-surface border border-outline-variant/30 rounded-lg px-3 py-2"
+          />
+        </div>
+
+        {/* Rules of Engagement acceptance — required */}
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-3">
+          <div className="flex items-start gap-3">
+            <span className="material-symbols-outlined text-red-600 text-lg mt-0.5">gavel</span>
+            <div>
+              <h4 className="font-label font-bold text-sm text-red-800">Rules of Engagement</h4>
+              <p className="text-xs text-red-700 mt-1 font-body leading-relaxed">
+                By submitting this order you confirm that you own the target domain or hold a
+                signed written authorisation to test it. Submitting a target you do not have
+                authorisation to test is a criminal offence.{" "}
+                <a
+                  href="/docs/security-audit-tos"
+                  target="_blank"
+                  className="underline font-bold"
+                >
+                  Read full ToS
+                </a>
+              </p>
+            </div>
+          </div>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              required
+              checked={tosAccepted}
+              onChange={(e) => setTosAccepted(e.target.checked)}
+              className="w-4 h-4 text-red-600 rounded border-red-300"
+            />
+            <span className="text-sm font-label font-bold text-red-800">
+              I confirm I own this domain or hold written authorisation to test it.
+              I have read and agree to the Rules of Engagement.
+            </span>
+          </label>
+        </div>
+
+        <label className="flex items-center gap-3 cursor-pointer bg-surface-container-lowest p-3 rounded-lg border border-outline-variant/30">
+          <input
+            type="checkbox" checked={isDemo} onChange={(e) => setIsDemo(e.target.checked)}
+            className="w-4 h-4 text-primary rounded"
+          />
+          <div>
+            <span className="font-label font-bold text-sm block">Demo Mode</span>
+            <span className="text-[10px] text-on-surface-variant font-body">
+              Skips revenue logging. Scan still runs fully — useful for testing.
+            </span>
+          </div>
+        </label>
+
+        <div className="flex justify-end">
+          <button type="submit" disabled={submitMut.isPending || !tosAccepted} className="btn-primary py-2 px-6 disabled:opacity-50">
+            {submitMut.isPending ? "Creating order…" : "Create Order"}
+          </button>
+        </div>
+      </form>
+
+      {/* Developer implementation notes — admin only */}
+      <div className="border border-outline-variant/20 rounded-xl overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setShowDevNotes((v) => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-surface-container-low text-sm font-label font-bold text-on-surface-variant hover:bg-surface-container"
+        >
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[16px]">code</span>
+            Developer Implementation Notes (Public order form requirements)
+          </div>
+          <span className="material-symbols-outlined text-[16px]">
+            {showDevNotes ? "expand_less" : "expand_more"}
+          </span>
         </button>
+        {showDevNotes && (
+          <pre className="p-4 text-[11px] font-mono text-on-surface-variant bg-surface whitespace-pre-wrap leading-relaxed">
+            {DEVELOPER_IMPLEMENTATION_NOTES}
+          </pre>
+        )}
       </div>
-    </form>
+    </div>
   )
 }
 

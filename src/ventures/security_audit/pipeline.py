@@ -72,8 +72,7 @@ def run_order(audit_id: str) -> dict:
         recon_data = run_passive_recon(
             domain=domain,
             hibp_api_key=config.HIBP_API_KEY,
-            censys_api_id=config.CENSYS_API_ID,
-            censys_api_secret=config.CENSYS_API_SECRET,
+            censys_api_key=config.CENSYS_API_KEY,
         )
         audit.phase1_recon_data = recon_data
         db.commit()
@@ -122,7 +121,7 @@ def run_order(audit_id: str) -> dict:
         _update_status(db, audit, job, "uploading", phase=4)
 
         # ── Upload to Drive ───────────────────────────────────────────────────
-        target_root = config.DRIVE_SECURITY_REPORTS_ID or config.DRIVE_SECURITY_ROOT_ID
+        target_root = config.DRIVE_SECURITY_ORDERS_ID or config.DRIVE_SECURITY_ROOT_ID
         drive_report_link = ""
         drive_folder_link = ""
 

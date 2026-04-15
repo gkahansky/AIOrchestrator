@@ -44,3 +44,4 @@ mutagen>=1.47.0
 playwright==1.42.0
 axe-playwright-python==0.1.7
 pypdf>=4.0.0
+dnspython>=2.4.0

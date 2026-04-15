@@ -4,9 +4,13 @@ Security Audit venture configuration.
 
 import os
 
-# Google Drive
-DRIVE_SECURITY_REPORTS_ID = os.environ.get("DRIVE_SECURITY_REPORTS_ID", "")
-DRIVE_SECURITY_ROOT_ID = os.environ.get("DRIVE_SECURITY_ROOT_ID", "")
+# Google Drive folder IDs
+# DRIVE_SECURITY_ROOT_ID    — parent folder (fallback if specific folders not set)
+# DRIVE_SECURITY_ORDERS_ID  — full/paid report PDFs
+# DRIVE_SECURITY_SAMPLES_ID — sample/teaser PDFs (future)
+DRIVE_SECURITY_ROOT_ID    = os.environ.get("DRIVE_SECURITY_ROOT_ID", "")
+DRIVE_SECURITY_ORDERS_ID  = os.environ.get("DRIVE_SECURITY_ORDERS_ID", "") or DRIVE_SECURITY_ROOT_ID
+DRIVE_SECURITY_SAMPLES_ID = os.environ.get("DRIVE_SECURITY_SAMPLES_ID", "") or DRIVE_SECURITY_ROOT_ID
 
 # Human review
 HUMAN_REVIEW_EMAIL = os.environ.get("HUMAN_REVIEW_EMAIL", "")
@@ -14,8 +18,8 @@ AUTO_APPROVE = os.environ.get("AUTO_APPROVE", "false").lower() == "true"
 
 # External API keys (optional — phases degrade gracefully without them)
 HIBP_API_KEY = os.environ.get("HIBP_API_KEY", "")
-CENSYS_API_ID = os.environ.get("CENSYS_API_ID", "")
-CENSYS_API_SECRET = os.environ.get("CENSYS_API_SECRET", "")
+# Censys now uses a single bearer token (not ID+Secret)
+CENSYS_API_KEY = os.environ.get("CENSYS_API_KEY", "")
 
 # Scan rate limiting — max requests per second to any single host
 MAX_REQUESTS_PER_SECOND = int(os.environ.get("SECURITY_MAX_RPS", "2"))

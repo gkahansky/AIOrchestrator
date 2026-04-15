@@ -32,6 +32,8 @@ class SecurityAuditOrderRequest(BaseModel):
     tier: str = "starter"               # starter | professional | agency
     client_email: str | None = None
     is_testing: bool = False
+    # Must be True — Rules of Engagement acknowledgment
+    tos_accepted: bool = False
     # Optional context for authenticated testing (professional tier+)
     auth_username: str | None = None
     auth_password: str | None = None
@@ -73,6 +75,12 @@ def create_security_audit_order(
     The order starts in 'scope_pending' status. The caller must complete
     scope verification (DNS TXT method) before the scan will be queued.
     """
+    if not req.is_testing and not req.tos_accepted:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Rules of Engagement must be accepted before submitting an order.",
+        )
+
     domain = extract_domain(req.url)
     scope_token = generate_scope_token()
     audit_id = str(uuid.uuid4())
@@ -93,6 +101,7 @@ def create_security_audit_order(
     db.add(audit)
     db.flush()
 
+    from datetime import datetime, timezone
     input_payload = {
         "audit_id": audit_id,
         "url": req.url,
@@ -100,6 +109,8 @@ def create_security_audit_order(
         "tier": req.tier,
         "client_email": req.client_email or "",
         "is_testing": req.is_testing,
+        "tos_accepted": req.tos_accepted,
+        "tos_accepted_at": datetime.now(timezone.utc).isoformat() if req.tos_accepted else None,
         "scope_token": scope_token,
         "status": "scope_pending",
     }

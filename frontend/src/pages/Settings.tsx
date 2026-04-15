@@ -1,10 +1,11 @@
 import { useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { fetchApiKeys, testApiKey, updateApiKey, fetchHealth } from "../api"
+import { fetchApiKeys, testApiKey, updateApiKey, fetchHealth, previewDriveCleanup, runDriveCleanup } from "../api"
+import type { CleanupResult } from "../api"
 import type { ApiKey } from "../types"
 
-type Tab = "api_keys" | "notifications" | "environment"
+type Tab = "api_keys" | "notifications" | "environment" | "maintenance"
 
 function HealthDot({ status }: { status: string }) {
   const colors: Record<string, string> = {
@@ -266,6 +267,181 @@ function NotificationsTab() {
   )
 }
 
+function MaintenanceTab() {
+  const [maxAgeDays] = useState(30)
+  const [preview, setPreview] = useState<CleanupResult | null>(null)
+  const [result, setResult] = useState<CleanupResult | null>(null)
+  const [confirmed, setConfirmed] = useState(false)
+
+  const previewMutation = useMutation({
+    mutationFn: () => previewDriveCleanup(maxAgeDays),
+    onSuccess: (data) => {
+      setPreview(data)
+      setResult(null)
+      setConfirmed(false)
+    },
+  })
+
+  const runMutation = useMutation({
+    mutationFn: () => runDriveCleanup(maxAgeDays),
+    onSuccess: (data) => {
+      setResult(data)
+      setPreview(null)
+      setConfirmed(false)
+    },
+  })
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <p className="text-sm font-body text-on-surface-variant">
+        Maintenance tasks for the platform. Operations here are irreversible — use Preview before running.
+      </p>
+
+      {/* Drive Cleanup Card */}
+      <div className="bg-surface-container-lowest rounded-xl shadow-float overflow-hidden">
+        <div className="px-5 py-4 border-b border-outline-variant/15">
+          <h2 className="font-headline font-bold text-sm text-on-surface">Drive 30-Day Retention Cleanup</h2>
+          <p className="text-xs font-body text-on-surface-variant mt-1">
+            Deletes files older than 30 days from security audit and accessibility audit Drive folders only.
+            Never touches other folders. Raw scan artifacts are exempt (deleted by the pipeline on completion).
+          </p>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          {/* Action buttons */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => previewMutation.mutate()}
+              disabled={previewMutation.isPending || runMutation.isPending}
+              className="px-4 py-2 rounded-xl bg-surface-container-low text-on-surface text-sm font-label font-semibold border border-outline-variant/30 hover:bg-surface-container transition-colors disabled:opacity-40"
+            >
+              {previewMutation.isPending ? (
+                <span className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>
+                  Scanning…
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[14px]">preview</span>
+                  Preview
+                </span>
+              )}
+            </button>
+
+            {preview && !result && (
+              <>
+                {!confirmed ? (
+                  <button
+                    onClick={() => setConfirmed(true)}
+                    className="px-4 py-2 rounded-xl bg-error/10 text-error text-sm font-label font-semibold border border-error/30 hover:bg-error/20 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[14px]">delete_sweep</span>
+                      Delete {preview.deleted_count} file{preview.deleted_count !== 1 ? "s" : ""}
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => runMutation.mutate()}
+                    disabled={runMutation.isPending}
+                    className="px-4 py-2 rounded-xl bg-error text-on-error text-sm font-label font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
+                  >
+                    {runMutation.isPending ? (
+                      <span className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>
+                        Deleting…
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[14px]">warning</span>
+                        Confirm — delete {preview.deleted_count} files
+                      </span>
+                    )}
+                  </button>
+                )}
+                {confirmed && (
+                  <button
+                    onClick={() => setConfirmed(false)}
+                    className="text-xs font-label text-on-surface-variant hover:text-on-surface"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Error from mutation */}
+          {(previewMutation.error || runMutation.error) && (
+            <div className="bg-error-container text-on-error-container rounded-xl px-4 py-3 text-sm font-label">
+              {((previewMutation.error || runMutation.error) as Error).message}
+            </div>
+          )}
+
+          {/* Preview results */}
+          {preview && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-4 text-xs font-label text-on-surface-variant">
+                <span>Cutoff: <strong className="text-on-surface">{new Date(preview.cutoff_date).toLocaleDateString()}</strong></span>
+                <span>Folders checked: <strong className="text-on-surface">{preview.folders_checked.length}</strong></span>
+                <span className={preview.deleted_count > 0 ? "text-amber-600 font-semibold" : "text-emerald-600 font-semibold"}>
+                  {preview.deleted_count} file{preview.deleted_count !== 1 ? "s" : ""} would be deleted
+                </span>
+              </div>
+              {preview.errors.length > 0 && (
+                <div className="bg-error-container/50 rounded-lg px-3 py-2 text-xs font-label text-on-error-container space-y-0.5">
+                  {preview.errors.map((e, i) => <div key={i}>{e}</div>)}
+                </div>
+              )}
+              {preview.deleted.length > 0 && (
+                <div className="bg-surface-container-low rounded-xl overflow-hidden border border-outline-variant/15">
+                  <div className="px-4 py-2 bg-surface-container border-b border-outline-variant/10 text-[11px] font-label font-semibold uppercase tracking-wider text-on-surface-variant">
+                    Files to be deleted (dry run)
+                  </div>
+                  <div className="divide-y divide-outline-variant/10 max-h-48 overflow-y-auto">
+                    {preview.deleted.map((f) => (
+                      <div key={f.file_id} className="px-4 py-2 flex items-center justify-between gap-4">
+                        <span className="text-xs font-label text-on-surface truncate">{f.name}</span>
+                        <span className="text-xs font-label text-on-surface-variant whitespace-nowrap">
+                          {new Date(f.modified).toLocaleDateString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {preview.deleted_count === 0 && (
+                <p className="text-xs font-label text-emerald-600 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                  No files older than 30 days — nothing to clean up.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Run results */}
+          {result && (
+            <div className="space-y-3">
+              <div className={`flex items-center gap-2 text-sm font-label font-semibold ${result.error_count > 0 ? "text-amber-600" : "text-emerald-600"}`}>
+                <span className="material-symbols-outlined text-[16px]">
+                  {result.error_count > 0 ? "warning" : "check_circle"}
+                </span>
+                Deleted {result.deleted_count} file{result.deleted_count !== 1 ? "s" : ""}
+                {result.error_count > 0 && ` — ${result.error_count} error${result.error_count !== 1 ? "s" : ""}`}
+              </div>
+              {result.errors.length > 0 && (
+                <div className="bg-error-container/50 rounded-lg px-3 py-2 text-xs font-label text-on-error-container space-y-0.5">
+                  {result.errors.map((e, i) => <div key={i}>{e}</div>)}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function EnvironmentTab() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["health"],
@@ -361,7 +537,10 @@ function EnvironmentTab() {
 export default function Settings() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get("tab") as Tab | null
-  const [activeTab, setActiveTab] = useState<Tab>(tabParam === "environment" ? "environment" : "api_keys")
+  const validTabs: Tab[] = ["api_keys", "notifications", "environment", "maintenance"]
+  const [activeTab, setActiveTab] = useState<Tab>(
+    validTabs.includes(tabParam as Tab) ? (tabParam as Tab) : "api_keys"
+  )
 
   function switchTab(t: Tab) {
     setActiveTab(t)
@@ -372,6 +551,7 @@ export default function Settings() {
     { id: "api_keys", label: "API Keys", icon: "key" },
     { id: "notifications", label: "Notifications", icon: "notifications" },
     { id: "environment", label: "Environment", icon: "monitor_heart" },
+    { id: "maintenance", label: "Maintenance", icon: "build" },
   ]
 
   return (
@@ -406,6 +586,7 @@ export default function Settings() {
       {activeTab === "api_keys" && <ApiKeysTab />}
       {activeTab === "notifications" && <NotificationsTab />}
       {activeTab === "environment" && <EnvironmentTab />}
+      {activeTab === "maintenance" && <MaintenanceTab />}
     </div>
   )
 }

@@ -31,16 +31,16 @@ _UA = "EchoForge-Security-Audit/1.0 (passive recon; contact: security@echoforge.
 
 # ── Public entry point ─────────────────────────────────────────────────────────
 
-def run_passive_recon(domain: str, hibp_api_key: str = "", censys_api_id: str = "",
-                      censys_api_secret: str = "") -> dict:
+def run_passive_recon(domain: str, hibp_api_key: str = "",
+                      censys_api_key: str = "") -> dict:
     """
     Run all passive OSINT checks against a domain.
 
     Args:
-        domain:          The registrable domain (e.g. "example.com").
-        hibp_api_key:    HaveIBeenPwned API key (optional — skips breach check if absent).
-        censys_api_id:   Censys API ID (optional — skips Censys enrichment if absent).
-        censys_api_secret: Censys API secret.
+        domain:        The registrable domain (e.g. "example.com").
+        hibp_api_key:  HaveIBeenPwned API key (optional — skips breach check if absent).
+        censys_api_key: Censys bearer token (optional — skips Censys enrichment if absent).
+                        Get it from search.censys.io → Account → API.
 
     Returns:
         dict with keys: domain, subdomains, dns_records, ip_info, spf_dmarc,
@@ -68,9 +68,8 @@ def run_passive_recon(domain: str, hibp_api_key: str = "", censys_api_id: str = 
     if hibp_api_key:
         _check_hibp(domain, hibp_api_key, results)
 
-    if censys_api_id and censys_api_secret:
-        _enrich_censys(results.get("ip_info", {}).get("ip", ""), censys_api_id,
-                       censys_api_secret, results)
+    if censys_api_key:
+        _enrich_censys(results.get("ip_info", {}).get("ip", ""), censys_api_key, results)
 
     return results
 
@@ -273,15 +272,15 @@ def _check_hibp(domain: str, api_key: str, results: dict) -> None:
 
 # ── Censys host enrichment ────────────────────────────────────────────────────
 
-def _enrich_censys(ip: str, api_id: str, api_secret: str, results: dict) -> None:
+def _enrich_censys(ip: str, api_key: str, results: dict) -> None:
+    """Enrich IP data via Censys API v2 — uses a single bearer token."""
     if not ip:
         return
     try:
         resp = requests.get(
             f"https://search.censys.io/api/v2/hosts/{ip}",
-            auth=(api_id, api_secret),
             timeout=_DEFAULT_TIMEOUT,
-            headers={"User-Agent": _UA},
+            headers={"User-Agent": _UA, "Authorization": f"Bearer {api_key}"},
         )
         if resp.status_code != 200:
             results["errors"].append(f"Censys: {resp.status_code}")

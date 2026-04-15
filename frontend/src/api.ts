@@ -162,6 +162,7 @@ export interface SecurityAuditOrderRequest {
   tier: "starter" | "professional" | "agency"
   client_email?: string
   is_testing?: boolean
+  tos_accepted?: boolean
   auth_username?: string
   auth_password?: string
   auth_login_url?: string
@@ -425,6 +426,32 @@ export async function triggerAdvisor(advisorId: string): Promise<{ status: strin
     headers: getHeaders(),
   })
   return handleResponse<{ status: string; proposal?: { id: string; category: string; priority: number } }>(res)
+}
+
+// ── Admin / Maintenance ───────────────────────────────────────────────────────
+
+export interface CleanupResult {
+  deleted_count: number
+  error_count: number
+  dry_run: boolean
+  cutoff_date: string
+  folders_checked: string[]
+  deleted: { file_id: string; name: string; modified: string; folder_id: string; action: string }[]
+  errors: string[]
+}
+
+export async function previewDriveCleanup(maxAgeDays = 30): Promise<CleanupResult> {
+  const url = new URL(`${BASE}/api/platform/admin/cleanup-drive/preview`)
+  url.searchParams.set("max_age_days", String(maxAgeDays))
+  const res = await fetch(url.toString(), { headers: getHeaders() })
+  return handleResponse<CleanupResult>(res)
+}
+
+export async function runDriveCleanup(maxAgeDays = 30): Promise<CleanupResult> {
+  const url = new URL(`${BASE}/api/platform/admin/cleanup-drive`)
+  url.searchParams.set("max_age_days", String(maxAgeDays))
+  const res = await fetch(url.toString(), { method: "POST", headers: getHeaders() })
+  return handleResponse<CleanupResult>(res)
 }
 
 export async function chatWithAdvisors(body: ChatRequest): Promise<ChatApiResponse> {

@@ -93,3 +93,5 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-14 20:30 |  |  | Extract accessibility_audit into proper venture — config.py + pipeline.py + CLAUDE.md; worker.py tasks thinned to single-line dispatchers |
 | 2026-04-15 08:01 |  | 93f7e26 | Extract accessibility_audit into proper venture structure |
 | 2026-04-15 08:30 |  |  | Security Audit venture infrastructure — DB model, 4 platform skills, pipeline, router, Celery tasks, PDF template, frontend page with scope verification flow |
+| 2026-04-15 10:12 |  | 46f3a7c | Security Audit venture — full infrastructure (MVP Phases 1-3) |
+| 2026-04-15 11:30 |  |  | Security Audit phase C — ToS checkbox + dev notes, Censys bearer token fix, Drive env var alignment, 30-day retention cleanup skill + admin endpoint + Settings Maintenance tab |

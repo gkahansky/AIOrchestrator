@@ -121,12 +121,17 @@ def run_order(audit_id: str) -> dict:
         _update_status(db, audit, job, "uploading", phase=4)
 
         # ── Upload to Drive ───────────────────────────────────────────────────
-        target_root = config.DRIVE_SECURITY_ORDERS_ID or config.DRIVE_SECURITY_ROOT_ID
+        is_testing = input_data.get("is_testing", False)
+        target_root = (
+            config.DRIVE_SECURITY_SAMPLES_ID if is_testing
+            else config.DRIVE_SECURITY_ORDERS_ID
+        ) or config.DRIVE_SECURITY_ROOT_ID
         drive_report_link = ""
         drive_folder_link = ""
 
         if target_root:
-            print(f"[security_audit] Uploading PDF to Drive folder {target_root}", flush=True)
+            folder_label = "samples" if is_testing else "orders"
+            print(f"[security_audit] Uploading PDF to Drive {folder_label} folder {target_root}", flush=True)
             folder_meta = create_folder(audit_id, target_root)
             drive_meta = drive_write(
                 pdf_path,
@@ -138,7 +143,7 @@ def run_order(audit_id: str) -> dict:
             drive_report_link = drive_meta.get("web_view_link", "")
             drive_folder_link = folder_meta.get("web_view_link", "")
         else:
-            print("[security_audit] WARNING: DRIVE_SECURITY_REPORTS_ID not set — skipping Drive upload", flush=True)
+            print("[security_audit] WARNING: No Drive folder configured — skipping upload", flush=True)
 
         # Persist final output
         output = dict(job.output_data or {}) if job else {}

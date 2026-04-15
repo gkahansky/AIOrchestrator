@@ -39,6 +39,15 @@ const ventures: VentureCard[] = [
     status: "active",
   },
   {
+    name: "Security Audit",
+    description: "EchoForge — web application penetration testing & vulnerability reports",
+    to: "/ventures/security-audit",
+    icon: "security",
+    color: "text-error",
+    bgColor: "bg-error-container",
+    status: "active",
+  },
+  {
     name: "MiroPrintStudio",
     description: "Etsy digital image shop — AI-generated wall art",
     to: "/ventures/etsy",

@@ -300,7 +300,7 @@ function NewOrder({ onSuccess }: { onSuccess: (auditId: string) => void }) {
         </label>
 
         <div className="flex justify-end">
-          <button type="submit" disabled={submitMut.isPending || !tosAccepted} className="btn-primary py-2 px-6 disabled:opacity-50">
+          <button type="submit" disabled={submitMut.isPending || !tosAccepted} className="px-6 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-label font-semibold hover:opacity-90 transition-opacity disabled:opacity-40">
             {submitMut.isPending ? "Creating order…" : "Create Order"}
           </button>
         </div>

@@ -540,43 +540,88 @@ function OrderDetail({ auditId, onBack }: { auditId: string; onBack: () => void 
         </div>
       )}
 
-      {/* Drive link */}
-      {outputData.drive_report_link && (
-        <a
-          href={outputData.drive_report_link}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 btn bg-primary text-white hover:bg-primary/90 py-2 px-4 w-fit"
-        >
-          <span className="material-symbols-outlined text-sm">open_in_new</span>
-          View Report PDF
-        </a>
-      )}
-
       {/* Review gate */}
       {status === "review_pending" && (
-        <div className="bg-orange-50 border border-orange-200 rounded-xl p-5 space-y-3">
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-5 space-y-4">
           <h3 className="font-label font-bold text-orange-800">Human Review Required</h3>
+
+          {/* Drive links — open before approving */}
+          <div className="flex gap-3 flex-wrap">
+            {outputData.drive_report_link ? (
+              <a
+                href={outputData.drive_report_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-on-primary text-sm font-label font-semibold hover:opacity-90"
+              >
+                <span className="material-symbols-outlined text-[16px]">picture_as_pdf</span>
+                Open Report PDF
+              </a>
+            ) : (
+              <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-sm text-on-surface-variant font-body">
+                <span className="material-symbols-outlined text-[16px] text-outline">cloud_off</span>
+                Report not uploaded — set DRIVE_SECURITY_ORDERS_ID on Railway
+              </div>
+            )}
+            {outputData.drive_folder_link && (
+              <a
+                href={outputData.drive_folder_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-sm font-label font-semibold text-on-surface hover:bg-surface-container-high"
+              >
+                <span className="material-symbols-outlined text-[16px]">folder_open</span>
+                Open Drive Folder
+              </a>
+            )}
+          </div>
+
           <p className="text-xs text-orange-700 font-body">
-            Review the report PDF above. Verify findings are genuine, PoC evidence is clear,
-            and no out-of-scope hosts were probed.
+            Open the report PDF and verify: findings are genuine, PoC evidence is clear,
+            and no out-of-scope hosts were probed. Then approve or reject below.
           </p>
           <div className="flex gap-3">
             <button
               onClick={() => reviewMut.mutate("approve")}
               disabled={reviewMut.isPending}
-              className="btn-primary py-2 px-5"
+              className="px-5 py-2 rounded-lg bg-primary text-on-primary text-sm font-label font-semibold hover:opacity-90 disabled:opacity-50"
             >
-              Approve
+              Approve & Queue Delivery
             </button>
             <button
               onClick={() => reviewMut.mutate("reject")}
               disabled={reviewMut.isPending}
-              className="btn bg-error/10 text-error hover:bg-error/20 py-2 px-5"
+              className="px-5 py-2 rounded-lg bg-error/10 text-error text-sm font-label font-semibold hover:bg-error/20 disabled:opacity-50"
             >
               Reject
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Drive links for non-review statuses (delivered, approved, etc.) */}
+      {!["review_pending", "scope_pending", "scope_verified", "scanning", "correlating", "uploading"].includes(status) && outputData.drive_report_link && (
+        <div className="flex gap-3 flex-wrap">
+          <a
+            href={outputData.drive_report_link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-on-primary text-sm font-label font-semibold hover:opacity-90"
+          >
+            <span className="material-symbols-outlined text-[16px]">picture_as_pdf</span>
+            Open Report PDF
+          </a>
+          {outputData.drive_folder_link && (
+            <a
+              href={outputData.drive_folder_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-sm font-label font-semibold text-on-surface hover:bg-surface-container-high"
+            >
+              <span className="material-symbols-outlined text-[16px]">folder_open</span>
+              Open Drive Folder
+            </a>
+          )}
         </div>
       )}
 

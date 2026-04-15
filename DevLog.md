@@ -86,3 +86,8 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-14 10:07 |  | 31c7cb3 | Update DevLog for c8341aa — audit findings display fix |
 | 2026-04-14 10:09 |  | ec4fb4c | Wire accessibility PDF into premium marketing audit pipeline |
 | 2026-04-14 17:55 |  | 9f2a254 | Fix Roadmap features dropdown blank — list_features and create_feature returned raw ORM objects that detach/expire after session close; serialize to dicts inside the with block |
+| 2026-04-14 18:13 |  | a180dd9 | Fix edit form not closing after Save Changes on roadmap item |
+| 2026-04-14 18:19 |  | dc234b0 | Split audit findings into Problem / Impact / Resolution |
+| 2026-04-14 18:24 |  | 85bdb09 | Fix audit PDF layout â€” margins, section order, executive summary title |
+| 2026-04-14 19:46 |  | 56c57fb | Add Security Audit venture to root CLAUDE.md + human tasks section |
+| 2026-04-14 20:30 |  |  | Extract accessibility_audit into proper venture — config.py + pipeline.py + CLAUDE.md; worker.py tasks thinned to single-line dispatchers |

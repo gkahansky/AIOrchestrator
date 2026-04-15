@@ -19,10 +19,13 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Use DATABASE_URL env var — override whatever is in alembic.ini
-database_url = os.environ.get(
-    "DATABASE_URL",
-    "postgresql://postgres:dev@localhost:5432/aiinfra",
+# Prefer DATABASE_PUBLIC_URL when running locally via `railway run` —
+# the internal DATABASE_URL uses *.railway.internal hostnames that are only
+# reachable from inside Railway's private network.
+database_url = (
+    os.environ.get("DATABASE_PUBLIC_URL")
+    or os.environ.get("DATABASE_URL")
+    or "postgresql://postgres:dev@localhost:5432/aiinfra"
 )
 # Railway provides postgres:// but SQLAlchemy requires postgresql://
 if database_url.startswith("postgres://"):

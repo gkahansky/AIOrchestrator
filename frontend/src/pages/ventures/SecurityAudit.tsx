@@ -395,9 +395,8 @@ function ScopeVerificationPanel({ auditId, onVerified }: { auditId: string; onVe
           <div className="flex-1">
             <h3 className="font-label font-bold text-blue-900">Awaiting email verification</h3>
             <p className="text-xs text-blue-700 font-body mt-1">
-              A verification email was sent to <strong>admin@{domain}</strong>,{" "}
-              <strong>webmaster@{domain}</strong>, and <strong>security@{domain}</strong>.
-              Ask the domain owner to click the link in that email to authorise the scan.
+              A verification email was sent to the domain contact for <strong>{domain}</strong>.
+              Ask them to click the link in that email to authorise the scan.
               The scan will start automatically once they click.
             </p>
           </div>

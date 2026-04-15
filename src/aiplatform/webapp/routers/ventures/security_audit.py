@@ -131,10 +131,9 @@ def create_security_audit_order(
     db.commit()
     db.refresh(job)
 
-    # Send scope verification email to role addresses at the target domain
-    # (best-effort — never block order creation on email failure)
+    # Send scope verification email — best-effort, never block order creation
     try:
-        _send_scope_verification_email(domain, scope_token, audit_id)
+        _send_scope_verification_email(domain, scope_token, audit_id, client_email=req.client_email)
     except Exception:
         pass
 
@@ -147,10 +146,15 @@ def create_security_audit_order(
     )
 
 
-def _send_scope_verification_email(domain: str, scope_token: str, audit_id: str) -> None:
+def _send_scope_verification_email(
+    domain: str, scope_token: str, audit_id: str, client_email: str | None = None
+) -> None:
     """
-    Send a one-click scope verification email to role addresses at the target domain.
-    The recipient clicks the link to confirm they control the domain.
+    Send a one-click scope verification email.
+
+    Recipient selection:
+      1. If client_email is provided and its domain matches the target domain → send there.
+      2. Otherwise fall back to admin@/webmaster@/security@ role addresses.
     """
     import os
     from aiplatform.skills.comms.send_email import send_email
@@ -158,9 +162,11 @@ def _send_scope_verification_email(domain: str, scope_token: str, audit_id: str)
     base_url = os.environ.get("PUBLIC_API_URL", "https://api.planbadmin.com")
     verify_url = f"{base_url}/api/ventures/security-audit/verify-email?token={scope_token}"
 
-    role_addresses = [f"admin@{domain}", f"webmaster@{domain}", f"security@{domain}"]
-    # Send to all three — whichever inbox they control, they can click
-    to = ", ".join(role_addresses)
+    # Use client_email if it belongs to the target domain; otherwise use role addresses
+    if client_email and client_email.split("@")[-1].lower() == domain.lower():
+        to = client_email
+    else:
+        to = ", ".join([f"admin@{domain}", f"webmaster@{domain}", f"security@{domain}"])
 
     send_email(
         to=to,
@@ -314,8 +320,14 @@ def resend_verification_email(
     if audit.scope_verified:
         raise HTTPException(status_code=400, detail="Scope already verified")
 
+    job = db.query(Job).filter(
+        Job.venture == "security_audit",
+        Job.input_data["audit_id"].astext == audit_id,
+    ).first()
+    client_email = (job.input_data or {}).get("client_email") if job else None
+
     try:
-        _send_scope_verification_email(audit.target_domain, audit.scope_token, audit_id)
+        _send_scope_verification_email(audit.target_domain, audit.scope_token, audit_id, client_email=client_email)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to send email: {exc}")
 

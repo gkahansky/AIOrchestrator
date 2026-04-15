@@ -560,7 +560,7 @@ export default function Settings() {
       <div>
         <h1 className="font-headline font-bold text-2xl text-on-surface">Settings</h1>
         <p className="text-sm font-body text-on-surface-variant mt-0.5">
-          Platform configuration and integrations
+          Platform configuration, integrations and maintenance
         </p>
       </div>
 

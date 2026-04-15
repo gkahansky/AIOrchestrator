@@ -18,8 +18,6 @@ import secrets
 import socket
 from urllib.parse import urlparse
 
-import dns.resolver
-
 
 def generate_scope_token() -> str:
     """Generate a random verification token for this audit."""
@@ -35,6 +33,8 @@ def verify_dns_txt(domain: str, token: str) -> dict:
 
     Returns a verification result dict.
     """
+    import dns.resolver  # lazy — dnspython only needed at verification time
+
     record_name = f"_echoforge-verify.{domain}"
     expected = token
     try:

@@ -282,21 +282,35 @@ def deliver_order(job_id: str, review_notes: str | None = None) -> dict:
         findings_count = output.get("findings_count", 0)
 
         if client_email:
-            if not report_link:
-                raise RuntimeError("Security report Drive link missing — cannot deliver")
+            if report_link:
+                report_section = (
+                    f"<p><a href=\"{report_link}\" style=\"background:#4361ee;color:#fff;"
+                    f"padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;"
+                    f"display:inline-block\">Download your security audit report</a></p>"
+                )
+            else:
+                # Drive not configured — note that report will be shared manually
+                print("[security_audit] WARNING: drive_report_link missing — sending email without report link", flush=True)
+                report_section = (
+                    "<p>Your report PDF has been generated and will be shared with you shortly "
+                    "via a separate email or file share.</p>"
+                )
 
             send_result = send_email(
                 to=client_email,
                 subject=f"Your security audit report is ready — {risk_rating} risk",
                 body_html=(
-                    f"<!DOCTYPE html><html><body>"
+                    f"<!DOCTYPE html><html><body style=\"font-family:sans-serif;max-width:600px;margin:40px auto;color:#1a1a2e\">"
+                    f"<h2>Security Audit Complete</h2>"
                     f"<p>Your security audit for <strong>{target_url}</strong> is complete.</p>"
-                    f"<p><strong>Overall risk: {risk_rating}</strong> | {findings_count} findings identified.</p>"
-                    f"<p><a href=\"{report_link}\">Download your security audit report</a></p>"
+                    f"<p><strong>Overall risk: {risk_rating}</strong> &nbsp;|&nbsp; {findings_count} findings identified.</p>"
+                    f"{report_section}"
                     f"<p>The report includes all findings with CVSS scores, evidence, "
                     f"attack chain analysis, and a prioritised remediation roadmap.</p>"
                     f"<p>Reply to this email if you have questions about any finding "
                     f"or need help prioritising the remediation work.</p>"
+                    f"<hr style=\"border:none;border-top:1px solid #eee;margin:24px 0\">"
+                    f"<p style=\"color:#999;font-size:11px\">EchoForge Security Audit · echoforge.biz</p>"
                     f"</body></html>"
                 ),
             )

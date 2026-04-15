@@ -599,6 +599,21 @@ function OrderDetail({ auditId, onBack }: { auditId: string; onBack: () => void 
         </div>
       )}
 
+      {/* Delivered */}
+      {status === "delivered" && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
+          <span className="material-symbols-outlined text-green-600">check_circle</span>
+          <div>
+            <span className="font-label font-bold text-green-800 text-sm">Report delivered to client</span>
+            {outputData.delivery_email_sent_to && (
+              <p className="text-xs text-green-700 font-body mt-0.5">
+                Email sent to {outputData.delivery_email_sent_to}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Drive links for non-review statuses (delivered, approved, etc.) */}
       {!["review_pending", "scope_pending", "scope_verified", "scanning", "correlating", "uploading"].includes(status) && outputData.drive_report_link && (
         <div className="flex gap-3 flex-wrap">
@@ -625,16 +640,25 @@ function OrderDetail({ auditId, onBack }: { auditId: string; onBack: () => void 
         </div>
       )}
 
-      {/* Deliver */}
+      {/* Deliver — only shows if auto-delivery failed after approval */}
       {status === "approved" && (
-        <div className="bg-green-50 border border-green-200 rounded-xl p-5 space-y-3">
-          <h3 className="font-label font-bold text-green-800">Approved — Ready to Deliver</h3>
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-5 space-y-3">
+          <div className="flex items-start gap-3">
+            <span className="material-symbols-outlined text-yellow-600 text-xl mt-0.5">schedule_send</span>
+            <div>
+              <h3 className="font-label font-bold text-yellow-800">Delivery pending</h3>
+              <p className="text-xs text-yellow-700 font-body mt-1">
+                Auto-delivery was queued on approval. If the client has not received their report after a few minutes,
+                click below to retry.
+              </p>
+            </div>
+          </div>
           <button
             onClick={() => deliverMut.mutate()}
             disabled={deliverMut.isPending}
-            className="btn-primary py-2 px-5"
+            className="px-5 py-2 rounded-lg bg-yellow-600 text-white text-sm font-label font-semibold hover:bg-yellow-700 disabled:opacity-50"
           >
-            {deliverMut.isPending ? "Sending…" : "Send Report to Client"}
+            {deliverMut.isPending ? "Sending…" : "Retry Delivery"}
           </button>
         </div>
       )}

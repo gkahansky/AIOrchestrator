@@ -668,10 +668,7 @@ function OrdersList({ onSelectAudit }: { onSelectAudit: (id: string) => void }) 
 export default function SecurityAudit() {
   const [tab, setTab] = useState<Tab>("overview")
   const [selectedAuditId, setSelectedAuditId] = useState<string | null>(null)
-  const [pendingAuditId, setPendingAuditId] = useState<string | null>(null)
-
   function handleNewOrderSuccess(auditId: string) {
-    setPendingAuditId(auditId)
     setSelectedAuditId(auditId)
     setTab("detail")
   }

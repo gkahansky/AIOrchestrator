@@ -131,12 +131,59 @@ def create_security_audit_order(
     db.commit()
     db.refresh(job)
 
+    # Send scope verification email to role addresses at the target domain
+    # (best-effort — never block order creation on email failure)
+    try:
+        _send_scope_verification_email(domain, scope_token, audit_id)
+    except Exception:
+        pass
+
     return SecurityAuditOrderResponse(
         audit_id=audit_id,
         job_id=str(job.id),
         scope_token=scope_token,
         scope_dns_record=f"_echoforge-verify.{domain}  TXT  \"{scope_token}\"",
         status="scope_pending",
+    )
+
+
+def _send_scope_verification_email(domain: str, scope_token: str, audit_id: str) -> None:
+    """
+    Send a one-click scope verification email to role addresses at the target domain.
+    The recipient clicks the link to confirm they control the domain.
+    """
+    import os
+    from aiplatform.skills.comms.send_email import send_email
+
+    base_url = os.environ.get("PUBLIC_API_URL", "https://api.planbadmin.com")
+    verify_url = f"{base_url}/api/ventures/security-audit/verify-email?token={scope_token}"
+
+    role_addresses = [f"admin@{domain}", f"webmaster@{domain}", f"security@{domain}"]
+    # Send to all three — whichever inbox they control, they can click
+    to = ", ".join(role_addresses)
+
+    send_email(
+        to=to,
+        subject=f"Confirm security audit authorisation for {domain}",
+        body_html=f"""<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:600px;margin:40px auto;color:#1a1a2e">
+<h2 style="color:#1a1a2e">Security Audit Authorisation Request</h2>
+<p>Someone has requested a security audit for <strong>{domain}</strong> through EchoForge.</p>
+<p>If you authorise this audit, click the button below. This confirms you own or manage this domain and consent to the scan.</p>
+<p style="margin:32px 0">
+  <a href="{verify_url}"
+     style="background:#4361ee;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
+    Yes, I authorise this security audit
+  </a>
+</p>
+<p style="color:#666;font-size:13px">
+  If you did not request this audit and do not wish to proceed, simply ignore this email — no scan will run without your confirmation.
+</p>
+<p style="color:#666;font-size:13px">
+  This link expires in 72 hours. Audit ID: {audit_id}
+</p>
+<hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+<p style="color:#999;font-size:11px">EchoForge Security Audit · echoforge.biz · Questions? Reply to this email.</p>
+</body></html>""",
     )
 
 
@@ -168,6 +215,111 @@ def list_security_audit_orders(
         }
         for a in audits
     ]
+
+
+# ── Email scope verification (public — no auth) ───────────────────────────────
+
+@router.get("/verify-email")
+def verify_scope_via_email(
+    token: str,
+    db: Session = Depends(get_db),
+):
+    """
+    One-click email verification link — no auth required.
+    Customer clicks this from their inbox to confirm domain ownership.
+    On success, queues the scan automatically.
+    """
+    from datetime import datetime, timezone
+    from fastapi.responses import HTMLResponse
+    from aiplatform.webapp.worker import run_security_audit_job
+
+    audit = db.query(SecurityAudit).filter(
+        SecurityAudit.scope_token == token
+    ).first()
+
+    if not audit:
+        return HTMLResponse(content=_verification_page(
+            success=False,
+            message="Invalid or expired verification link."
+        ), status_code=404)
+
+    if audit.scope_verified:
+        return HTMLResponse(content=_verification_page(
+            success=True,
+            domain=audit.target_domain,
+            message="This domain is already verified. Your scan is underway."
+        ))
+
+    audit.scope_verified = True
+    audit.scope_verified_at = datetime.now(timezone.utc)
+    audit.scope_method = "email"
+    audit.status = "scope_verified"
+
+    job = db.query(Job).filter(
+        Job.venture == "security_audit",
+        Job.input_data["audit_id"].astext == str(audit.audit_id),
+    ).first()
+    if job:
+        out = dict(job.output_data or {})
+        out["scope_verified"] = True
+        out["status"] = "scope_verified"
+        job.output_data = out
+        job.status = "scope_verified"
+
+    db.commit()
+
+    # Queue the scan
+    task = run_security_audit_job.delay(str(audit.audit_id))
+    if job:
+        job.celery_task_id = str(task.id)
+        db.commit()
+
+    return HTMLResponse(content=_verification_page(
+        success=True,
+        domain=audit.target_domain,
+        message="Domain ownership confirmed. Your security audit has started — you'll receive the report by email when it's ready."
+    ))
+
+
+def _verification_page(success: bool, domain: str = "", message: str = "") -> str:
+    icon = "✓" if success else "✗"
+    color = "#22c55e" if success else "#ef4444"
+    return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>EchoForge — Scope Verification</title>
+<style>body{{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f8fafc}}
+.card{{background:#fff;border-radius:16px;padding:48px;max-width:480px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.08)}}
+.icon{{font-size:64px;margin-bottom:16px}}h1{{color:#1a1a2e;margin:0 0 12px}}p{{color:#64748b;line-height:1.6}}
+</style></head><body><div class="card">
+<div class="icon" style="color:{color}">{icon}</div>
+<h1>{'Verified' if success else 'Verification Failed'}</h1>
+{"<p style='font-weight:600;color:#1a1a2e'>"+domain+"</p>" if domain else ""}
+<p>{message}</p>
+<p style="margin-top:24px;font-size:13px;color:#94a3b8">EchoForge Security Audit · echoforge.biz</p>
+</div></body></html>"""
+
+
+# ── Resend verification email ─────────────────────────────────────────────────
+
+@router.post("/orders/{audit_id}/resend-verification-email")
+def resend_verification_email(
+    audit_id: str,
+    _: str = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Resend the scope verification email to role addresses at the target domain."""
+    audit = db.query(SecurityAudit).filter(
+        SecurityAudit.audit_id == audit_id
+    ).first()
+    if not audit:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    if audit.scope_verified:
+        raise HTTPException(status_code=400, detail="Scope already verified")
+
+    try:
+        _send_scope_verification_email(audit.target_domain, audit.scope_token, audit_id)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to send email: {exc}")
+
+    return {"sent": True, "domain": audit.target_domain}
 
 
 # ── Get order detail ──────────────────────────────────────────────────────────

@@ -239,6 +239,14 @@ export async function deliverSecurityAuditOrder(auditId: string, notes?: string)
   return handleResponse(res)
 }
 
+export async function resendVerificationEmail(auditId: string): Promise<any> {
+  const res = await fetch(
+    `${BASE}/api/ventures/security-audit/orders/${auditId}/resend-verification-email`,
+    { method: "POST", headers: getHeaders() },
+  )
+  return handleResponse(res)
+}
+
 export async function createPodcastOrder(data: PodcastOrderRequest): Promise<OrderResponse> {
   const token = localStorage.getItem("api_token") ?? "test"
   const formData = new FormData()

@@ -8,6 +8,7 @@ import {
   approveScopeSecurityAudit,
   reviewSecurityAuditOrder,
   deliverSecurityAuditOrder,
+  resendVerificationEmail,
 } from "../../api"
 
 type Tab = "overview" | "new_order" | "orders" | "detail"
@@ -113,15 +114,16 @@ function Overview() {
         </div>
       </div>
 
-      <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-5">
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
         <div className="flex items-start gap-3">
-          <span className="material-symbols-outlined text-yellow-600 text-xl">warning</span>
+          <span className="material-symbols-outlined text-blue-600 text-xl">mark_email_read</span>
           <div>
-            <h4 className="font-label font-bold text-sm text-yellow-800">Scope Verification Required</h4>
-            <p className="text-xs text-yellow-700 mt-1 font-body">
-              Every order requires DNS TXT record verification before scanning begins.
-              After creating an order you'll receive a TXT record to add to your DNS.
-              Click "Verify Scope" once the record is live.
+            <h4 className="font-label font-bold text-sm text-blue-900">Email Scope Verification</h4>
+            <p className="text-xs text-blue-700 mt-1 font-body">
+              When an order is created, a one-click verification email is automatically sent to
+              admin@, webmaster@, and security@ at the target domain. The domain owner clicks the link
+              to authorise the scan — no DNS changes required. A DNS TXT record option is also available
+              as a fallback.
             </p>
           </div>
         </div>
@@ -335,10 +337,19 @@ function NewOrder({ onSuccess }: { onSuccess: (auditId: string) => void }) {
 
 function ScopeVerificationPanel({ auditId, onVerified }: { auditId: string; onVerified: () => void }) {
   const qc = useQueryClient()
+  const [showDns, setShowDns] = useState(false)
+  const [resendMsg, setResendMsg] = useState("")
+
   const { data: order, isLoading } = useQuery({
     queryKey: ["sec-audit", auditId],
     queryFn: () => fetchSecurityAuditOrder(auditId),
     refetchInterval: 5000,
+  })
+
+  const resendMut = useMutation({
+    mutationFn: () => resendVerificationEmail(auditId),
+    onSuccess: () => setResendMsg("Email resent to admin@, webmaster@, and security@ at the domain."),
+    onError: (err: any) => setResendMsg(`Failed: ${err.message}`),
   })
 
   const verifyMut = useMutation({
@@ -373,41 +384,85 @@ function ScopeVerificationPanel({ auditId, onVerified }: { auditId: string; onVe
     )
   }
 
+  const domain = order.target_domain || ""
+
   return (
     <div className="space-y-4">
+      {/* Primary: email verification */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 space-y-3">
-        <h3 className="font-label font-bold text-blue-900">Add this DNS TXT record</h3>
-        <div className="bg-white rounded-lg p-3 font-mono text-xs text-on-surface border border-blue-100 break-all">
-          {order.scope_dns_record}
+        <div className="flex items-start gap-3">
+          <span className="material-symbols-outlined text-blue-600 text-xl mt-0.5">mark_email_read</span>
+          <div className="flex-1">
+            <h3 className="font-label font-bold text-blue-900">Awaiting email verification</h3>
+            <p className="text-xs text-blue-700 font-body mt-1">
+              A verification email was sent to <strong>admin@{domain}</strong>,{" "}
+              <strong>webmaster@{domain}</strong>, and <strong>security@{domain}</strong>.
+              Ask the domain owner to click the link in that email to authorise the scan.
+              The scan will start automatically once they click.
+            </p>
+          </div>
         </div>
-        <p className="text-xs text-blue-700 font-body">
-          Add this record to your domain's DNS, then click Verify below.
-          DNS changes can take up to 60 seconds to propagate.
-        </p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => { resendMut.mutate(); setResendMsg("") }}
+            disabled={resendMut.isPending}
+            className="px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-label font-semibold hover:bg-blue-700 disabled:opacity-50"
+          >
+            {resendMut.isPending ? "Sending…" : "Resend Email"}
+          </button>
+          {resendMsg && (
+            <span className="text-xs text-blue-800 font-body">{resendMsg}</span>
+          )}
+        </div>
       </div>
 
-      <div className="flex gap-3">
+      {/* Secondary: DNS TXT (collapsible) */}
+      <div className="border border-outline-variant/20 rounded-xl overflow-hidden">
         <button
-          onClick={() => verifyMut.mutate()}
-          disabled={verifyMut.isPending}
-          className="btn-primary py-2 px-5"
+          type="button"
+          onClick={() => setShowDns((v) => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-surface-container-low text-sm font-label font-bold text-on-surface-variant hover:bg-surface-container"
         >
-          {verifyMut.isPending ? "Checking DNS…" : "Verify Scope"}
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[16px]">dns</span>
+            Alternative: DNS TXT record verification
+          </div>
+          <span className="material-symbols-outlined text-[16px]">
+            {showDns ? "expand_less" : "expand_more"}
+          </span>
         </button>
-        <button
-          onClick={() => manualMut.mutate()}
-          disabled={manualMut.isPending}
-          className="btn bg-surface-variant text-on-surface hover:bg-surface-container py-2 px-4 text-sm"
-        >
-          Manual Override (testing)
-        </button>
+        {showDns && (
+          <div className="p-4 space-y-3 bg-surface">
+            <div className="bg-surface-container-lowest rounded-lg p-3 font-mono text-xs text-on-surface border border-outline-variant/20 break-all">
+              {order.scope_dns_record}
+            </div>
+            <p className="text-xs text-on-surface-variant font-body">
+              Add this TXT record to your DNS, then click Verify DNS. Changes can take up to 60 seconds to propagate.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => verifyMut.mutate()}
+                disabled={verifyMut.isPending}
+                className="px-4 py-2 rounded-lg bg-primary text-on-primary text-xs font-label font-semibold hover:opacity-90 disabled:opacity-50"
+              >
+                {verifyMut.isPending ? "Checking DNS…" : "Verify DNS"}
+              </button>
+              <button
+                onClick={() => manualMut.mutate()}
+                disabled={manualMut.isPending}
+                className="px-4 py-2 rounded-lg bg-surface-variant text-on-surface text-xs font-label font-semibold hover:bg-surface-container disabled:opacity-50"
+              >
+                Manual Override (admin)
+              </button>
+            </div>
+            {verifyMut.data && !verifyMut.data.verified && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800">
+                {verifyMut.data.reason}
+              </div>
+            )}
+          </div>
+        )}
       </div>
-
-      {verifyMut.data && !verifyMut.data.verified && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800">
-          {verifyMut.data.reason}
-        </div>
-      )}
     </div>
   )
 }

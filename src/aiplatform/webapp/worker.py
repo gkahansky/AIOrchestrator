@@ -11,4 +11,6 @@ from aiplatform.worker import (  # noqa: F401  re-export
     run_podcast_order,
     run_accessibility_scan_job,
     deliver_accessibility_audit_job,
+    run_security_audit_job,
+    deliver_security_audit_job,
 )

@@ -30,7 +30,8 @@ router = APIRouter()
 class SecurityAuditOrderRequest(BaseModel):
     url: str
     tier: str = "starter"               # starter | professional | agency
-    client_email: str | None = None
+    client_email: str | None = None     # Delivery recipient (report email)
+    verification_email: str | None = None  # Scope auth contact — must be at target domain
     is_testing: bool = False
     # Must be True — Rules of Engagement acknowledgment
     tos_accepted: bool = False
@@ -108,6 +109,7 @@ def create_security_audit_order(
         "domain": domain,
         "tier": req.tier,
         "client_email": req.client_email or "",
+        "verification_email": req.verification_email or "",
         "is_testing": req.is_testing,
         "tos_accepted": req.tos_accepted,
         "tos_accepted_at": datetime.now(timezone.utc).isoformat() if req.tos_accepted else None,
@@ -133,7 +135,11 @@ def create_security_audit_order(
 
     # Send scope verification email — best-effort, never block order creation
     try:
-        _send_scope_verification_email(domain, scope_token, audit_id, client_email=req.client_email)
+        _send_scope_verification_email(
+            domain, scope_token, audit_id,
+            verification_email=req.verification_email,
+            client_email=req.client_email,
+        )
     except Exception:
         pass
 
@@ -147,14 +153,19 @@ def create_security_audit_order(
 
 
 def _send_scope_verification_email(
-    domain: str, scope_token: str, audit_id: str, client_email: str | None = None
+    domain: str,
+    scope_token: str,
+    audit_id: str,
+    verification_email: str | None = None,
+    client_email: str | None = None,
 ) -> None:
     """
     Send a one-click scope verification email.
 
-    Recipient selection:
-      1. If client_email is provided and its domain matches the target domain → send there.
-      2. Otherwise fall back to admin@/webmaster@/security@ role addresses.
+    Recipient selection (first match wins):
+      1. verification_email if provided and its domain matches the target domain
+      2. client_email if its domain matches the target domain
+      3. Fallback: admin@/webmaster@/security@ role addresses
     """
     import os
     from aiplatform.skills.comms.send_email import send_email
@@ -162,8 +173,12 @@ def _send_scope_verification_email(
     base_url = os.environ.get("PUBLIC_API_URL", "https://api.planbadmin.com")
     verify_url = f"{base_url}/api/ventures/security-audit/verify-email?token={scope_token}"
 
-    # Use client_email if it belongs to the target domain; otherwise use role addresses
-    if client_email and client_email.split("@")[-1].lower() == domain.lower():
+    def _domain_matches(email: str | None) -> bool:
+        return bool(email and email.split("@")[-1].lower() == domain.lower())
+
+    if _domain_matches(verification_email):
+        to = verification_email
+    elif _domain_matches(client_email):
         to = client_email
     else:
         to = ", ".join([f"admin@{domain}", f"webmaster@{domain}", f"security@{domain}"])
@@ -324,10 +339,14 @@ def resend_verification_email(
         Job.venture == "security_audit",
         Job.input_data["audit_id"].astext == audit_id,
     ).first()
-    client_email = (job.input_data or {}).get("client_email") if job else None
+    input_data = (job.input_data or {}) if job else {}
 
     try:
-        _send_scope_verification_email(audit.target_domain, audit.scope_token, audit_id, client_email=client_email)
+        _send_scope_verification_email(
+            audit.target_domain, audit.scope_token, audit_id,
+            verification_email=input_data.get("verification_email"),
+            client_email=input_data.get("client_email"),
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to send email: {exc}")
 

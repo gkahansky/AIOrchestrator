@@ -161,6 +161,7 @@ export interface SecurityAuditOrderRequest {
   url: string
   tier: "starter" | "professional" | "agency"
   client_email?: string
+  verification_email?: string
   is_testing?: boolean
   tos_accepted?: boolean
   auth_username?: string

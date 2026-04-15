@@ -172,14 +172,24 @@ Before this order form is exposed to public customers (not internal admin), ensu
    Never log or display credentials in the UI after submission.
 `.trim()
 
+function extractDomain(url: string): string {
+  try { return new URL(url).hostname.replace(/^www\./, "") } catch { return "" }
+}
+
 function NewOrder({ onSuccess }: { onSuccess: (auditId: string) => void }) {
   const [url, setUrl] = useState("")
   const [tier, setTier] = useState<"starter" | "professional" | "agency">("starter")
   const [clientEmail, setClientEmail] = useState("")
+  const [verificationEmail, setVerificationEmail] = useState("")
   const [isDemo, setIsDemo] = useState(false)
   const [tosAccepted, setTosAccepted] = useState(false)
   const [showDevNotes, setShowDevNotes] = useState(false)
   const [errorMsg, setErrorMsg] = useState("")
+
+  const targetDomain = extractDomain(url)
+  const verificationEmailDomain = verificationEmail.split("@")[1]?.toLowerCase() ?? ""
+  const verificationEmailValid =
+    !verificationEmail || verificationEmailDomain === targetDomain.toLowerCase()
 
   const submitMut = useMutation({
     mutationFn: createSecurityAuditOrder,
@@ -194,7 +204,17 @@ function NewOrder({ onSuccess }: { onSuccess: (auditId: string) => void }) {
       setErrorMsg("You must accept the Rules of Engagement before submitting.")
       return
     }
-    submitMut.mutate({ url, tier, client_email: clientEmail || undefined, is_testing: isDemo, tos_accepted: tosAccepted })
+    if (!verificationEmailValid) {
+      setErrorMsg(`Verification email must be at ${targetDomain}`)
+      return
+    }
+    submitMut.mutate({
+      url, tier,
+      client_email: clientEmail || undefined,
+      verification_email: verificationEmail || undefined,
+      is_testing: isDemo,
+      tos_accepted: tosAccepted,
+    })
   }
 
   return (
@@ -244,13 +264,41 @@ function NewOrder({ onSuccess }: { onSuccess: (auditId: string) => void }) {
         </div>
 
         <div>
-          <label className="block text-sm font-label font-bold text-on-surface mb-1">Client Email (optional)</label>
+          <label className="block text-sm font-label font-bold text-on-surface mb-1">
+            Verification Contact Email
+            {targetDomain && <span className="text-outline font-normal"> — must be @{targetDomain}</span>}
+          </label>
+          <input
+            type="email" value={verificationEmail}
+            onChange={(e) => setVerificationEmail(e.target.value)}
+            placeholder={targetDomain ? `someone@${targetDomain}` : "contact@targetdomain.com"}
+            className={`w-full bg-surface border rounded-lg px-3 py-2 ${
+              verificationEmail && !verificationEmailValid
+                ? "border-error"
+                : "border-outline-variant/30"
+            }`}
+          />
+          {verificationEmail && !verificationEmailValid && (
+            <p className="text-xs text-error mt-1 font-body">
+              Must be an email at {targetDomain || "the target domain"}
+            </p>
+          )}
+          <p className="text-[10px] text-on-surface-variant mt-1 font-body">
+            The verification link will be sent here. Leave blank to use standard role addresses (admin@, webmaster@, security@).
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-label font-bold text-on-surface mb-1">Report Delivery Email (optional)</label>
           <input
             type="email" value={clientEmail}
             onChange={(e) => setClientEmail(e.target.value)}
             placeholder="client@company.com"
             className="w-full bg-surface border border-outline-variant/30 rounded-lg px-3 py-2"
           />
+          <p className="text-[10px] text-on-surface-variant mt-1 font-body">
+            Where to send the completed report. Can be any email address.
+          </p>
         </div>
 
         {/* Rules of Engagement acceptance — required */}
@@ -348,7 +396,7 @@ function ScopeVerificationPanel({ auditId, onVerified }: { auditId: string; onVe
 
   const resendMut = useMutation({
     mutationFn: () => resendVerificationEmail(auditId),
-    onSuccess: () => setResendMsg("Email resent to admin@, webmaster@, and security@ at the domain."),
+    onSuccess: () => setResendMsg("Verification email resent."),
     onError: (err: any) => setResendMsg(`Failed: ${err.message}`),
   })
 
@@ -385,6 +433,10 @@ function ScopeVerificationPanel({ auditId, onVerified }: { auditId: string; onVe
   }
 
   const domain = order.target_domain || ""
+  const verificationContact: string =
+    (order.output_data?.verification_email) ||
+    (order.output_data?.client_email) ||
+    `admin@${domain}, webmaster@${domain}, security@${domain}`
 
   return (
     <div className="space-y-4">
@@ -395,9 +447,8 @@ function ScopeVerificationPanel({ auditId, onVerified }: { auditId: string; onVe
           <div className="flex-1">
             <h3 className="font-label font-bold text-blue-900">Awaiting email verification</h3>
             <p className="text-xs text-blue-700 font-body mt-1">
-              A verification email was sent to the domain contact for <strong>{domain}</strong>.
-              Ask them to click the link in that email to authorise the scan.
-              The scan will start automatically once they click.
+              Verification email sent to <strong>{verificationContact}</strong>.
+              Ask them to click the link to authorise the scan — it starts automatically.
             </p>
           </div>
         </div>

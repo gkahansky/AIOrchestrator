@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Security Audit Report - {{ target_domain }}</title>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Manrope:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+        darkMode: "class",
+        theme: {
+            extend: {
+                "colors": {
+                    "secondary": "#ae2f34",
+                    "on-secondary-container": "#6d0010",
+                    "surface-container": "#eceef0",
+                    "on-primary-fixed": "#001c38",
+                    "on-secondary": "#ffffff",
+                    "surface": "#f7f9fb",
+                    "inverse-on-surface": "#eff1f3",
+                    "on-surface": "#191c1e",
+                    "primary": "#000c1e",
+                    "surface-variant": "#e0e3e5",
+                    "on-surface-variant": "#43474e",
+                    "surface-container-lowest": "#ffffff",
+                    "surface-container-low": "#f2f4f6",
+                    "surface-container-high": "#e6e8ea",
+                    "on-primary": "#ffffff",
+                    "primary-container": "#002344",
+                    "outline": "#74777f",
+                    "outline-variant": "#c3c6cf",
+                    "background": "#f7f9fb"
+                },
+                "fontFamily": {
+                    "headline": ["Newsreader", "serif"],
+                    "body": ["Manrope", "sans-serif"],
+                    "label": ["Inter", "sans-serif"]
+                }
+            }
+        }
+    }
+</script>
+<style>
+    .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        display: inline-block;
+        vertical-align: middle;
+    }
+    body {
+        background-color: #f1f3f5;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    @media print {
+        .no-print { display: none; }
+        body { background: white; }
+    }
+</style>
+</head>
+<body class="font-body text-on-surface">
+<div class="bg-surface max-w-5xl mx-auto">
+
+<!-- Header -->
+<header class="bg-primary pt-8 pb-6 px-12">
+    <div class="max-w-5xl mx-auto flex justify-between items-start">
+        <div>
+            <div class="flex items-center gap-2.5 mb-4">
+                <div class="relative flex items-center justify-center w-8 h-8 rounded-lg bg-white/10 overflow-hidden">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                    </svg>
+                </div>
+                <span class="text-2xl font-headline font-semibold text-white tracking-tight">EchoForge</span>
+            </div>
+            <h1 class="text-4xl font-headline font-bold text-white leading-tight">
+                Security <span class="italic font-medium">Audit Report</span>
+            </h1>
+            <p class="text-white/60 text-sm font-label mt-2 uppercase tracking-widest">Confidential — {{ tier }} Tier</p>
+        </div>
+        <div class="text-right mt-4 space-y-2">
+            <div>
+                <span class="text-[9px] font-label uppercase tracking-widest text-white/50">Target</span>
+                <p class="text-sm font-semibold text-white">{{ target_domain }}</p>
+            </div>
+            <div>
+                <span class="text-[9px] font-label uppercase tracking-widest text-white/50">Audit Date</span>
+                <p class="text-sm font-semibold text-white">{{ audit_date }}</p>
+            </div>
+        </div>
+    </div>
+</header>
+
+<main class="px-12 py-8 space-y-14 pb-20 max-w-5xl mx-auto">
+
+    <!-- Risk Score + Severity Summary -->
+    <section class="grid grid-cols-12 gap-8 items-start">
+        <div class="col-span-4 bg-surface-container-lowest p-8 rounded-xl border border-surface-container shadow-sm flex flex-col justify-between h-full">
+            <div>
+                <span class="text-[9px] font-label uppercase tracking-widest text-outline">Overall Risk Score</span>
+                <div class="flex items-end gap-2 mt-3">
+                    <span class="text-8xl font-headline font-bold {{ rating_color }} leading-none">{{ overall_risk_score }}</span>
+                    <span class="text-xl font-headline italic text-primary mb-2">/100</span>
+                </div>
+                <div class="mt-2">
+                    <span class="text-2xl font-headline font-bold {{ rating_color }}">{{ risk_rating }}</span>
+                </div>
+            </div>
+            <div class="mt-8 pt-6 border-t border-surface-container">
+                <span class="text-[9px] font-label uppercase tracking-widest text-outline">Total Findings</span>
+                <p class="text-2xl font-headline font-bold text-primary mt-1">{{ total_findings }}</p>
+            </div>
+        </div>
+
+        <div class="col-span-8 bg-surface-container-low p-8 rounded-xl border border-surface-container/50 h-full">
+            <h3 class="text-xl font-headline font-semibold text-primary mb-6">Findings by Severity</h3>
+            <div class="flex gap-6 items-center justify-around">
+                {{ severity_summary_html }}
+            </div>
+        </div>
+    </section>
+
+    <!-- Executive Summary -->
+    <section class="space-y-4">
+        <h2 class="text-3xl font-headline font-semibold text-primary leading-tight">Executive <span class="italic font-medium">Summary</span></h2>
+        <p class="text-base text-on-surface-variant font-light max-w-3xl leading-relaxed">{{ executive_summary }}</p>
+    </section>
+
+    <!-- Findings -->
+    <section class="space-y-8" id="findings">
+        <div class="flex justify-between items-baseline border-b border-surface-container pb-4">
+            <h2 class="text-4xl font-headline font-semibold text-primary">Security <span class="italic font-medium">Findings</span></h2>
+            <p class="font-label text-[9px] uppercase tracking-widest text-outline">Severity · CVSS</p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {{ findings_html }}
+        </div>
+    </section>
+
+    <!-- Attack Chains -->
+    <section class="space-y-8" id="attack-chains">
+        <div class="flex justify-between items-baseline border-b border-surface-container pb-4">
+            <h2 class="text-4xl font-headline font-semibold text-primary">Attack <span class="italic font-medium">Chain Analysis</span></h2>
+            <p class="font-label text-[9px] uppercase tracking-widest text-outline">Multi-Step Scenarios</p>
+        </div>
+        <div class="space-y-5">
+            {{ attack_chains_html }}
+        </div>
+    </section>
+
+    <!-- Remediation Roadmap -->
+    <section class="space-y-8" id="roadmap">
+        <div class="text-center space-y-3 max-w-2xl mx-auto mb-8">
+            <h2 class="text-4xl font-headline font-semibold text-primary">Remediation <span class="italic font-medium">Roadmap</span></h2>
+            <p class="text-sm text-on-surface-variant font-light">Prioritised sequence to reach Minimal risk posture.</p>
+        </div>
+        <div class="space-y-5">
+            {{ roadmap_html }}
+        </div>
+    </section>
+
+    <!-- CTA Banner -->
+    <section class="bg-primary text-white p-12 rounded-xl relative overflow-hidden break-inside-avoid">
+        <div class="absolute inset-0 bg-gradient-to-r from-primary to-primary-container z-0"></div>
+        <div class="relative z-10 space-y-4">
+            <h2 class="text-3xl font-headline italic font-medium">Every finding here is a door a real attacker can open.</h2>
+            <p class="text-white/80 text-sm font-light">Remediate the Critical and High findings within 30 days. EchoForge offers a free retest to verify fixes.</p>
+        </div>
+    </section>
+
+    <!-- Methodology & Scope -->
+    <section class="space-y-4 text-sm">
+        <h3 class="font-headline font-bold text-primary text-lg">Scope &amp; Methodology</h3>
+        <p class="text-on-surface-variant font-light leading-relaxed">
+            This audit was conducted against <strong>{{ target_url }}</strong> using the EchoForge automated security pipeline.
+            All active scanning was performed only after domain ownership was verified. Findings are based on publicly
+            observable behaviour at the time of the scan. This report does not constitute a guarantee of security.
+        </p>
+        <p class="text-on-surface-variant font-light leading-relaxed">
+            <strong>Phase 1 — Passive OSINT:</strong> certificate transparency, DNS analysis, historical URL corpus, email security (SPF/DMARC).<br/>
+            <strong>Phase 2 — Surface Mapping:</strong> live endpoint discovery, technology fingerprinting, sensitive path probing.<br/>
+            <strong>Phase 3 — Vulnerability Analysis:</strong> HTTP security headers, TLS configuration, CORS, cookie flags, information disclosure.
+        </p>
+    </section>
+
+</main>
+
+<footer class="py-8 px-12 bg-surface border-t border-surface-container">
+    <div class="flex justify-between items-center opacity-60 max-w-5xl mx-auto">
+        <p class="text-[9px] font-label uppercase tracking-widest text-primary font-bold">© 2026 EchoForge. Confidential.</p>
+        <span class="text-[9px] font-label uppercase tracking-widest text-primary font-bold">Security Audit Report — {{ target_domain }}</span>
+    </div>
+</footer>
+
+</div>
+</body>
+</html>

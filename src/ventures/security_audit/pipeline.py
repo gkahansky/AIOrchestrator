@@ -1,0 +1,361 @@
+"""
+Security Audit venture pipeline.
+
+Entry points:
+  run_order(audit_id)          — Phases 1-3: recon → surface → vuln scan → Claude → PDF → upload
+  deliver_order(job_id, notes) — Phase 6: send delivery email → mark delivered
+
+Architecture note:
+  Every outbound HTTP request to the target goes through scope_validator.is_in_scope()
+  before being sent. This is legally required and must never be bypassed.
+"""
+
+import secrets
+import traceback
+from datetime import datetime, timezone
+from pathlib import Path
+from urllib.parse import urlparse
+
+from ventures.security_audit import config
+
+
+# ── Phase orchestration ────────────────────────────────────────────────────────
+
+def run_order(audit_id: str) -> dict:
+    """
+    Run the security audit pipeline for a given order.
+
+    Phases 1–3 (Starter tier):
+      1. Passive OSINT recon (crt.sh, DNS, Wayback, HIBP, Censys)
+      2. Active surface mapping (HTTP probe, exposed paths, subdomain liveness)
+      3. Vulnerability scanning (headers, TLS, CORS, cookies)
+      6. Claude API correlation → PDF generation
+      Upload + review gate
+
+    Returns {"status": "review_pending", "audit_id": audit_id}
+    """
+    from aiplatform.skills.security.scope_validator import extract_domain
+    from aiplatform.skills.security.passive_recon import run_passive_recon
+    from aiplatform.skills.security.surface_mapper import run_surface_mapping
+    from aiplatform.skills.security.vuln_scanner import run_vuln_scan
+    from aiplatform.skills.security.report_generator import generate_security_report
+    from aiplatform.skills.storage.drive_organise import create_folder
+    from aiplatform.skills.storage.drive_write import drive_write
+    from aiplatform.database.session import SessionLocal
+    from aiplatform.database.models import SecurityAudit, Job
+
+    db = SessionLocal()
+    audit = None
+    job = None
+
+    try:
+        audit = db.query(SecurityAudit).filter(
+            SecurityAudit.audit_id == audit_id
+        ).first()
+        job = db.query(Job).filter(
+            Job.venture == "security_audit",
+            Job.input_data["audit_id"].astext == audit_id,
+        ).first()
+
+        if not audit:
+            raise RuntimeError(f"SecurityAudit record not found: {audit_id}")
+
+        target_url = audit.target_url
+        domain = audit.target_domain or extract_domain(target_url)
+        tier = audit.tier or "starter"
+        input_data = dict(job.input_data or {}) if job else {}
+
+        _update_status(db, audit, job, "scanning", phase=2)
+
+        # ── Phase 1: Passive OSINT ────────────────────────────────────────────
+        print(f"[security_audit] Phase 1 — Passive OSINT: {domain}", flush=True)
+        recon_data = run_passive_recon(
+            domain=domain,
+            hibp_api_key=config.HIBP_API_KEY,
+            censys_api_id=config.CENSYS_API_ID,
+            censys_api_secret=config.CENSYS_API_SECRET,
+        )
+        audit.phase1_recon_data = recon_data
+        db.commit()
+
+        # ── Phase 2: Surface Mapping ──────────────────────────────────────────
+        print(f"[security_audit] Phase 2 — Surface mapping: {target_url}", flush=True)
+        subdomains = recon_data.get("subdomains", [])
+        surface_data = run_surface_mapping(
+            target_url=target_url,
+            scope_domain=domain,
+            subdomains=subdomains if tier in ("professional", "agency") else [],
+        )
+        audit.phase2_surface_data = surface_data
+        db.commit()
+
+        # ── Phase 3: Vulnerability Scan ───────────────────────────────────────
+        print(f"[security_audit] Phase 3 — Vulnerability scan: {target_url}", flush=True)
+        vuln_data = run_vuln_scan(
+            target_url=target_url,
+            scope_domain=domain,
+            surface_data=surface_data,
+        )
+        audit.phase3_vuln_data = vuln_data
+        _update_status(db, audit, job, "correlating", phase=3)
+
+        # ── Phase 6: Claude Correlation + PDF ────────────────────────────────
+        print(f"[security_audit] Phase 6 — Claude correlation", flush=True)
+        work_dir = Path(config.WORK_DIR_BASE) / audit_id
+        pdf_path = str(work_dir / f"{audit_id}-security-report.pdf")
+
+        audit_payload = {
+            "target_url": target_url,
+            "target_domain": domain,
+            "tier": tier,
+            "phase1_recon": recon_data,
+            "phase2_surface": surface_data,
+            "phase3_vuln": vuln_data,
+        }
+        report_result = generate_security_report(audit_payload, pdf_path)
+
+        # Store findings in DB
+        report_data = report_result["report_data"]
+        audit.findings_json = report_data.get("findings", [])
+        audit.attack_chains = report_data.get("attack_chains", [])
+        audit.risk_score = report_data.get("overall_risk_score", 0)
+        _update_status(db, audit, job, "uploading", phase=4)
+
+        # ── Upload to Drive ───────────────────────────────────────────────────
+        target_root = config.DRIVE_SECURITY_REPORTS_ID or config.DRIVE_SECURITY_ROOT_ID
+        drive_report_link = ""
+        drive_folder_link = ""
+
+        if target_root:
+            print(f"[security_audit] Uploading PDF to Drive folder {target_root}", flush=True)
+            folder_meta = create_folder(audit_id, target_root)
+            drive_meta = drive_write(
+                pdf_path,
+                folder_meta["folder_id"],
+                mime_type="application/pdf",
+                filename=f"{audit_id}-security-report.pdf",
+                share_anyone_with_link=True,
+            )
+            drive_report_link = drive_meta.get("web_view_link", "")
+            drive_folder_link = folder_meta.get("web_view_link", "")
+        else:
+            print("[security_audit] WARNING: DRIVE_SECURITY_REPORTS_ID not set — skipping Drive upload", flush=True)
+
+        # Persist final output
+        output = dict(job.output_data or {}) if job else {}
+        output.update({
+            "audit_id": str(audit_id),
+            "target_url": target_url,
+            "target_domain": domain,
+            "tier": tier,
+            "risk_score": audit.risk_score,
+            "risk_rating": report_data.get("risk_rating", ""),
+            "findings_count": report_result["findings_count"],
+            "pdf_path": pdf_path,
+            "pdf_size_bytes": report_result["size_bytes"],
+            "drive_report_link": drive_report_link,
+            "drive_folder_link": drive_folder_link,
+            "client_email": input_data.get("client_email", ""),
+            "status": "review_pending",
+        })
+
+        if job:
+            job.output_data = output
+        _update_status(db, audit, job, "review_pending", phase=5)
+
+        return {"status": "review_pending", "audit_id": str(audit_id)}
+
+    except Exception as exc:
+        print(f"[security_audit] ERROR in run_order: {exc}", flush=True)
+        traceback.print_exc()
+        try:
+            audit = db.query(SecurityAudit).filter(
+                SecurityAudit.audit_id == audit_id
+            ).first()
+            job = db.query(Job).filter(
+                Job.venture == "security_audit",
+                Job.input_data["audit_id"].astext == audit_id,
+            ).first()
+            if audit:
+                audit.status = "failed"
+            if job:
+                out = dict(job.output_data or {})
+                out["status"] = "failed"
+                out["error"] = str(exc)
+                job.status = "failed"
+                job.error_message = str(exc)
+                job.output_data = out
+            db.commit()
+        except Exception:
+            pass
+        raise
+    finally:
+        db.close()
+
+
+# ── Scope verification ────────────────────────────────────────────────────────
+
+def verify_scope(audit_id: str) -> dict:
+    """
+    Attempt DNS TXT scope verification for a pending audit.
+
+    Returns the verification result and updates the DB record.
+    """
+    from aiplatform.skills.security.scope_validator import verify_dns_txt
+    from aiplatform.database.session import SessionLocal
+    from aiplatform.database.models import SecurityAudit, Job
+
+    db = SessionLocal()
+    try:
+        audit = db.query(SecurityAudit).filter(
+            SecurityAudit.audit_id == audit_id
+        ).first()
+        if not audit:
+            raise RuntimeError(f"SecurityAudit not found: {audit_id}")
+
+        result = verify_dns_txt(audit.target_domain, audit.scope_token)
+
+        if result["verified"]:
+            audit.scope_verified = True
+            audit.scope_verified_at = datetime.now(timezone.utc)
+            audit.scope_method = "dns_txt"
+            audit.status = "scope_verified"
+
+            # Update the twin job record
+            job = db.query(Job).filter(
+                Job.venture == "security_audit",
+                Job.input_data["audit_id"].astext == audit_id,
+            ).first()
+            if job:
+                out = dict(job.output_data or {})
+                out["scope_verified"] = True
+                out["status"] = "scope_verified"
+                job.output_data = out
+                job.status = "scope_verified"
+
+            db.commit()
+
+        return result
+    finally:
+        db.close()
+
+
+# ── Delivery ──────────────────────────────────────────────────────────────────
+
+def deliver_order(job_id: str, review_notes: str | None = None) -> dict:
+    """
+    Deliver an approved security audit to the client.
+
+    Sends email with Drive report link and marks job delivered.
+    """
+    import uuid
+
+    from aiplatform.database.session import SessionLocal
+    from aiplatform.database.models import SecurityAudit, Job
+    from aiplatform.skills.comms.send_email import send_email
+
+    db = SessionLocal()
+    try:
+        parsed_id = uuid.UUID(job_id)
+        job = db.get(Job, parsed_id)
+        if not job:
+            raise RuntimeError(f"Security audit job not found: {job_id}")
+
+        audit = db.query(SecurityAudit).filter(
+            SecurityAudit.job_id == parsed_id
+        ).first()
+
+        output = dict(job.output_data or {})
+        input_data = dict(job.input_data or {})
+
+        if review_notes:
+            output["review_notes"] = review_notes
+            if audit:
+                audit.reviewer_notes = review_notes
+
+        client_email = (
+            output.get("client_email")
+            or input_data.get("client_email")
+        )
+        report_link = output.get("drive_report_link", "")
+        target_url = input_data.get("url") or output.get("target_url", "your site")
+        risk_rating = output.get("risk_rating", "")
+        findings_count = output.get("findings_count", 0)
+
+        if client_email:
+            if not report_link:
+                raise RuntimeError("Security report Drive link missing — cannot deliver")
+
+            send_result = send_email(
+                to=client_email,
+                subject=f"Your security audit report is ready — {risk_rating} risk",
+                body_html=(
+                    f"<!DOCTYPE html><html><body>"
+                    f"<p>Your security audit for <strong>{target_url}</strong> is complete.</p>"
+                    f"<p><strong>Overall risk: {risk_rating}</strong> | {findings_count} findings identified.</p>"
+                    f"<p><a href=\"{report_link}\">Download your security audit report</a></p>"
+                    f"<p>The report includes all findings with CVSS scores, evidence, "
+                    f"attack chain analysis, and a prioritised remediation roadmap.</p>"
+                    f"<p>Reply to this email if you have questions about any finding "
+                    f"or need help prioritising the remediation work.</p>"
+                    f"</body></html>"
+                ),
+            )
+            if send_result.get("error"):
+                raise RuntimeError(f"send_email failed: {send_result['error']}")
+
+            output["delivery_email_sent_to"] = client_email
+            output["delivery_message_id"] = send_result.get("message_id", "")
+
+        now = datetime.now(timezone.utc)
+        output["status"] = "delivered"
+        output["delivered_at"] = now.isoformat()
+        job.status = "delivered"
+        job.phase_current = 6
+        job.completed_at = now
+        job.error_message = None
+        job.output_data = output
+
+        if audit:
+            audit.status = "delivered"
+
+        db.commit()
+        return {"status": "delivered", "job_id": job_id}
+
+    except Exception as exc:
+        try:
+            parsed_id = uuid.UUID(job_id)
+            job = db.get(Job, parsed_id)
+            audit = db.query(SecurityAudit).filter(
+                SecurityAudit.job_id == parsed_id
+            ).first()
+            if job:
+                out = dict(job.output_data or {})
+                out["status"] = "failed"
+                out["error"] = str(exc)
+                job.status = "failed"
+                job.error_message = str(exc)
+                job.output_data = out
+            if audit:
+                audit.status = "failed"
+            db.commit()
+        except Exception:
+            pass
+        raise
+    finally:
+        db.close()
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _update_status(db, audit, job, status: str, phase: int | None = None) -> None:
+    if audit:
+        audit.status = status
+    if job:
+        job.status = status
+        if phase is not None:
+            job.phase_current = phase
+        out = dict(job.output_data or {})
+        out["status"] = status
+        job.output_data = out
+    db.commit()

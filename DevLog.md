@@ -91,3 +91,5 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-14 18:24 |  | 85bdb09 | Fix audit PDF layout â€” margins, section order, executive summary title |
 | 2026-04-14 19:46 |  | 56c57fb | Add Security Audit venture to root CLAUDE.md + human tasks section |
 | 2026-04-14 20:30 |  |  | Extract accessibility_audit into proper venture — config.py + pipeline.py + CLAUDE.md; worker.py tasks thinned to single-line dispatchers |
+| 2026-04-15 08:01 |  | 93f7e26 | Extract accessibility_audit into proper venture structure |
+| 2026-04-15 08:30 |  |  | Security Audit venture infrastructure — DB model, 4 platform skills, pipeline, router, Celery tasks, PDF template, frontend page with scope verification flow |

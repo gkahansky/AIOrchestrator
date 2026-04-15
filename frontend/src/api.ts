@@ -155,6 +155,89 @@ export async function fetchAccessibilityAudits(): Promise<any> {
   return handleResponse<any>(res)
 }
 
+// ── Security Audit ─────────────────────────────────────────────────────────────
+
+export interface SecurityAuditOrderRequest {
+  url: string
+  tier: "starter" | "professional" | "agency"
+  client_email?: string
+  is_testing?: boolean
+  auth_username?: string
+  auth_password?: string
+  auth_login_url?: string
+}
+
+export async function createSecurityAuditOrder(
+  data: SecurityAuditOrderRequest,
+): Promise<{ audit_id: string; job_id: string; scope_token: string; scope_dns_record: string; status: string }> {
+  const res = await fetch(`${BASE}/api/ventures/security-audit/orders`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(data),
+  })
+  return handleResponse(res)
+}
+
+export async function fetchSecurityAuditOrders(): Promise<any[]> {
+  const res = await fetch(`${BASE}/api/ventures/security-audit/orders`, {
+    headers: getHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function fetchSecurityAuditOrder(auditId: string): Promise<any> {
+  const res = await fetch(`${BASE}/api/ventures/security-audit/orders/${auditId}`, {
+    headers: getHeaders(),
+  })
+  return handleResponse(res)
+}
+
+export async function verifyScopeSecurityAudit(
+  auditId: string,
+): Promise<{ audit_id: string; verified: boolean; method: string | null; reason: string | null }> {
+  const res = await fetch(
+    `${BASE}/api/ventures/security-audit/orders/${auditId}/verify-scope`,
+    { method: "POST", headers: getHeaders() },
+  )
+  return handleResponse(res)
+}
+
+export async function approveScopeSecurityAudit(auditId: string): Promise<any> {
+  const res = await fetch(
+    `${BASE}/api/ventures/security-audit/orders/${auditId}/approve-scope`,
+    { method: "POST", headers: getHeaders() },
+  )
+  return handleResponse(res)
+}
+
+export async function reviewSecurityAuditOrder(
+  auditId: string,
+  action: "approve" | "reject",
+  notes?: string,
+): Promise<any> {
+  const res = await fetch(
+    `${BASE}/api/ventures/security-audit/orders/${auditId}/review`,
+    {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ action, notes }),
+    },
+  )
+  return handleResponse(res)
+}
+
+export async function deliverSecurityAuditOrder(auditId: string, notes?: string): Promise<any> {
+  const res = await fetch(
+    `${BASE}/api/ventures/security-audit/orders/${auditId}/deliver`,
+    {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ notes }),
+    },
+  )
+  return handleResponse(res)
+}
+
 export async function createPodcastOrder(data: PodcastOrderRequest): Promise<OrderResponse> {
   const token = localStorage.getItem("api_token") ?? "test"
   const formData = new FormData()

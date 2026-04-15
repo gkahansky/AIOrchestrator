@@ -966,6 +966,18 @@ def deliver_accessibility_audit_job(job_id: str, review_notes: str | None = None
     return deliver_order(job_id, review_notes)
 
 
+@celery_app.task(name="platform.run_security_audit_job", bind=True, max_retries=1)
+def run_security_audit_job(self, audit_id: str) -> dict:
+    from ventures.security_audit.pipeline import run_order
+    return run_order(audit_id)
+
+
+@celery_app.task(name="platform.deliver_security_audit_job")
+def deliver_security_audit_job(job_id: str, review_notes: str | None = None) -> dict:
+    from ventures.security_audit.pipeline import deliver_order
+    return deliver_order(job_id, review_notes)
+
+
 # ── Outreach tasks ─────────────────────────────────────────────────────────────
 
 @celery_app.task(bind=True, name="outreach.find_leads", max_retries=1)

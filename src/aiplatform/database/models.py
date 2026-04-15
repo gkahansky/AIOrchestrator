@@ -37,7 +37,7 @@ class Base(DeclarativeBase):
 # ── Enums ──────────────────────────────────────────────────────────────────────
 
 VENTURE_ENUM = Enum(
-    "etsy", "marketing_audit", "content_studio", "accessibility_audit",
+    "etsy", "marketing_audit", "content_studio", "accessibility_audit", "security_audit",
     name="venture_enum",
 )
 
@@ -521,3 +521,63 @@ class ContactMessage(Base):
     sent_at     = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     contact     = relationship("Contact", backref="messages")
+
+
+# ── Security Audit ─────────────────────────────────────────────────────────────
+
+class SecurityAudit(Base):
+    """
+    Security Audit venture — tracks scan state, findings, and scope verification.
+
+    State machine:
+      pending → scope_pending → scope_verified → scanning → scan_complete →
+      correlating → report_ready → review_pending → approved → delivering →
+      delivered → failed
+    """
+    __tablename__ = "security_audits"
+
+    audit_id   = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    job_id     = Column(UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="SET NULL"),
+                        nullable=True, index=True)
+    target_url   = Column(String(2048), nullable=False)
+    target_domain = Column(String(255), nullable=False, index=True)
+
+    # Service tier: starter | professional | agency
+    tier       = Column(String(50), nullable=False, default="starter")
+
+    # Scope verification
+    scope_token         = Column(String(100), nullable=True)   # DNS TXT token to place
+    scope_verified      = Column(Boolean, nullable=False, default=False)
+    scope_verified_at   = Column(DateTime(timezone=True), nullable=True)
+    scope_method        = Column(String(50), nullable=True)    # "dns_txt" | "file" | "manual"
+
+    # Authenticated testing (Professional + Agency)
+    auth_username  = Column(String(255), nullable=True)
+    auth_password  = Column(String(255), nullable=True)  # encrypted at rest in pipeline
+    auth_login_url = Column(String(2048), nullable=True)
+
+    # Phase outputs — raw findings per phase stored as JSONB
+    phase1_recon_data    = Column(JSONB, nullable=True)   # passive OSINT results
+    phase2_surface_data  = Column(JSONB, nullable=True)   # surface mapping results
+    phase3_vuln_data     = Column(JSONB, nullable=True)   # vulnerability scan results
+    phase4_exploit_data  = Column(JSONB, nullable=True)   # confirmed PoC results (future)
+    phase5_auth_data     = Column(JSONB, nullable=True)   # authenticated scan results (future)
+
+    # Aggregated findings after Claude correlation
+    findings_json  = Column(JSONB, nullable=True)   # [{severity, category, title, desc, cvss, fix}]
+    attack_chains  = Column(JSONB, nullable=True)   # [{chain_title, steps, risk}]
+    risk_score     = Column(Integer, nullable=True) # 0-100 overall risk
+
+    # Reviewer notes
+    reviewer_notes = Column(Text, nullable=True)
+
+    # Pipeline status
+    status = Column(String(50), nullable=False, default="pending", index=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
+
+    job = relationship("Job")

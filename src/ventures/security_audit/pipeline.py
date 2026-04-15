@@ -74,7 +74,7 @@ def run_order(audit_id: str) -> dict:
             hibp_api_key=config.HIBP_API_KEY,
             censys_api_key=config.CENSYS_API_KEY,
         )
-        audit.phase1_recon_data = recon_data
+        audit.phase1_recon_data = _sanitize(recon_data)
         db.commit()
 
         # ── Phase 2: Surface Mapping ──────────────────────────────────────────
@@ -85,7 +85,7 @@ def run_order(audit_id: str) -> dict:
             scope_domain=domain,
             subdomains=subdomains if tier in ("professional", "agency") else [],
         )
-        audit.phase2_surface_data = surface_data
+        audit.phase2_surface_data = _sanitize(surface_data)
         db.commit()
 
         # ── Phase 3: Vulnerability Scan ───────────────────────────────────────
@@ -95,7 +95,7 @@ def run_order(audit_id: str) -> dict:
             scope_domain=domain,
             surface_data=surface_data,
         )
-        audit.phase3_vuln_data = vuln_data
+        audit.phase3_vuln_data = _sanitize(vuln_data)
         _update_status(db, audit, job, "correlating", phase=3)
 
         # ── Phase 6: Claude Correlation + PDF ────────────────────────────────
@@ -346,6 +346,17 @@ def deliver_order(job_id: str, review_notes: str | None = None) -> dict:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _sanitize(obj):
+    """Recursively strip null bytes from strings — PostgreSQL JSONB rejects \u0000."""
+    if isinstance(obj, str):
+        return obj.replace("\u0000", "").replace("\ufffd", "")
+    if isinstance(obj, dict):
+        return {k: _sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize(i) for i in obj]
+    return obj
+
 
 def _update_status(db, audit, job, status: str, phase: int | None = None) -> None:
     if audit:

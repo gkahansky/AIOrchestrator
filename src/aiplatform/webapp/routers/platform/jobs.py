@@ -136,6 +136,23 @@ def approve_job(
         })
     elif job.venture == "accessibility_audit":
         task = deliver_accessibility_audit_job.delay(str(job_id), req.notes)
+    elif job.venture == "security_audit":
+        # Security audit approval just marks the job ready for delivery.
+        # Delivery is triggered separately via POST /ventures/security-audit/orders/{id}/deliver.
+        from aiplatform.database.models import SecurityAudit
+        audit = db.query(SecurityAudit).filter(SecurityAudit.job_id == job_id).first()
+        if audit:
+            audit.status = "approved"
+            if req.notes:
+                audit.reviewer_notes = req.notes
+        out = dict(job.output_data or {})
+        out["status"] = "approved"
+        if req.notes:
+            out["reviewer_notes"] = req.notes
+        job.output_data = out
+        job.status = "approved"
+        db.commit()
+        return JobActionResponse(job_id=job_id, action="approve", status="approved")
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

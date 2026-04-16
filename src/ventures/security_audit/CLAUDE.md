@@ -421,12 +421,62 @@ The following are shared with the Accessibility Audit Module (AAM) and the broad
 
 ## 10. Legal & Compliance Notes
 
-- **Scope validation is non-negotiable**: the pipeline must verify the customer owns or has authorisation for the target domain before any active phase begins. Options: DNS TXT record verification (like Google Search Console), upload of authorisation letter, or account-level domain registration check.
+- **Scope validation is non-negotiable**: the pipeline must verify the customer owns or has authorisation for the target domain before any active phase begins. No active scanning phase runs until `scope_verified = True` on the `SecurityAudit` record.
 - All active probe traffic must be logged with timestamps for liability protection.
 - Terms of service must explicitly state the customer is responsible for obtaining authorisation to test their target.
-- Consider a "Rules of Engagement" checkbox at job submission, mirroring how professional pentest firms handle this.
+- A **Rules of Engagement checkbox** is required at order submission — `tos_accepted` must be `True` before the order is accepted. The acceptance timestamp is stored in `input_data.tos_accepted_at`.
 - Shodan InternetDB is **not usable commercially** — use Censys free API and `uncover` instead.
 - Data retention policy: raw artifacts (screenshots, traffic logs) should be purged after 30–90 days. Inform customers in ToS.
+
+### 10.1 Scope Verification Flow (Implemented)
+
+Scope verification uses **email confirmation as the primary method**, with DNS TXT as a secondary fallback available to the admin.
+
+**Email verification (primary):**
+1. On order creation, the API sends a one-click authorisation email containing a `scope_token` link.
+2. Recipient selection priority:
+   - `verification_email` if provided in the order form **and** its domain matches the target domain
+   - `client_email` if its domain matches the target domain
+   - Fallback: `admin@{domain}`, `webmaster@{domain}`, `security@{domain}` role addresses
+3. The verification contact (`verification_email`) is a dedicated field in the order form, separate from `client_email` (the report delivery address). It must be an `@{target_domain}` address. Any email address at the domain is accepted — not restricted to role addresses.
+4. Clicking the link calls `GET /api/ventures/security-audit/verify-email?token={scope_token}` (public, no auth). This sets `scope_verified=True`, `scope_method="email"`, and queues the Celery scan task automatically.
+5. The admin can resend the email via `POST /orders/{audit_id}/resend-verification-email`.
+
+**DNS TXT verification (secondary / admin fallback):**
+- Record format: `_echoforge-verify.{domain}  TXT  "{scope_token}"`
+- Checked via `POST /orders/{audit_id}/verify-scope`, which calls `scope_validator.verify_dns_txt()`.
+- Available in the admin order detail panel (collapsed by default).
+
+**Manual override (admin only):**
+- `POST /orders/{audit_id}/approve-scope` — marks scope verified with `scope_method="manual"`. Use for testing or when a customer has provided a signed authorisation letter offline.
+
+**Env vars required:**
+- `PUBLIC_API_URL` — base URL for the verify link in emails (default: `https://api.planbadmin.com`)
+
+### 10.2 Order Delivery Flow (Implemented)
+
+```
+Order created (scope_pending)
+  → Verification email sent automatically
+  → Customer clicks link → scope_verified → Celery scan task queued
+  → Scan runs (phases 1–3 + Claude correlation + PDF)
+  → PDF uploaded to Drive (orders or samples folder)
+  → Status → review_pending
+  → Admin reviews PDF in admin UI → Approve
+  → Approval auto-triggers deliver_security_audit_job Celery task
+  → Report emailed to client_email with Drive link
+  → Status → delivered
+```
+
+**Drive folder routing:**
+- `is_testing=True` (Demo Mode) → `DRIVE_SECURITY_SAMPLES_ID`
+- `is_testing=False` (real order) → `DRIVE_SECURITY_ORDERS_ID`
+- Both fall back to `DRIVE_SECURITY_ROOT_ID` if the specific var is not set.
+
+**Env vars required for Drive upload:**
+- `DRIVE_SECURITY_ORDERS_ID` — Google Drive folder ID for paid report PDFs
+- `DRIVE_SECURITY_SAMPLES_ID` — Google Drive folder ID for demo/testing PDFs
+- `DRIVE_SECURITY_ROOT_ID` — fallback parent folder
 
 ---
 
@@ -438,7 +488,7 @@ The pipeline automates the scanning, correlation, and report generation. The fol
 
 | Task | Why human | When |
 |---|---|---|
-| **Target ownership verification design** | Domain TXT record verification, authorisation letter upload, or account-level check — the legal gate before any active scan. Must be designed and tested before accepting any paid orders. | Before MVP |
+| **Target ownership verification** | ✅ Implemented — email one-click verification (primary) + DNS TXT (secondary) + manual override. See Section 10.1. | Done |
 | **Terms of Service review** | Legal language covering authorisation responsibility, liability limits, data retention, and Rules of Engagement must be written and reviewed by a lawyer or legal-savvy operator. | Before MVP |
 | **Tool Docker images hardening** | Each scanning tool (`nuclei`, `sqlmap`, `nmap`, etc.) runs in an isolated container. A human needs to review the container build, network isolation rules, and egress restrictions to ensure tools cannot reach out-of-scope hosts. | Before MVP |
 | **Rate-limit tuning** | Automated scans can inadvertently cause service disruption. Humans must set per-host request rates and test them against a staging target before production use. | Before MVP |
@@ -485,10 +535,13 @@ These situations require human decision before the pipeline can continue:
 ## 12. Roadmap
 
 ### MVP (Phase 1 launch) — Target: Q2 2026
-- [ ] Phases 1–3 pipeline (OSINT + surface mapping + automated scanning)
-- [ ] Claude API correlation and basic PDF report
-- [ ] Starter tier only ($49, black-box)
-- [ ] Fiverr listing live
+- [x] Phases 1–3 pipeline (OSINT + surface mapping + automated scanning)
+- [x] Claude API correlation and PDF report (Playwright-rendered, EchoForge branded)
+- [x] Scope verification — email one-click (primary) + DNS TXT (secondary) + manual override
+- [x] Human review gate — admin reviews PDF before delivery; approval auto-triggers client email
+- [x] Drive upload — orders → `DRIVE_SECURITY_ORDERS_ID`, demos → `DRIVE_SECURITY_SAMPLES_ID`
+- [x] Admin UI — Security Audit venture card, order form, order detail, scope panel, review gate
+- [ ] Starter tier live on Fiverr ($49, black-box)
 
 ### v1.0
 - [ ] Phase 4 (deep exploitation with PoC capture)

@@ -393,22 +393,14 @@ def _run_phase6_deliver(order: dict) -> None:
     subject = f"Your Marketing Audit — {order.get('brand_name', order['url'])}"
     body = _delivery_email_html(order)
 
-    # If no Drive link is available, attach the PDF directly so the client
-    # always receives their report regardless of Drive configuration.
-    drive_link = (
-        order.get("drive_report_link")
-        or order.get("drive_full_PDF_link")
-        or order.get("drive_sample_pdf_link")
-        or order.get("drive_sample_PDF_link")
-    )
+    # Always attach the PDF directly — no Drive sharing links in customer emails.
     attachments: list[str] = []
-    if not drive_link:
-        for key in ("pdf_path", "sample_pdf_path"):
-            path = order.get(key, "")
-            if path and Path(path).exists():
-                attachments.append(path)
-                print(f"    Attaching {key} to delivery email (no Drive link available)")
-                break  # send the first available PDF only
+    for key in ("pdf_path", "sample_pdf_path"):
+        path = order.get(key, "")
+        if path and Path(path).exists():
+            attachments.append(path)
+            print(f"    Attaching {key} to delivery email")
+            break  # send the first available PDF only
 
     try:
         send_email(to=client_email, subject=subject, body_html=body,
@@ -618,25 +610,12 @@ def _review_email_html(order: dict) -> str:
 
 def _delivery_email_html(order: dict) -> str:
     tier_desc = config.TIERS.get(order.get("tier", ""), {}).get("description", "")
-    # Check both standard and legacy keys
-    drive_link = (
-        order.get("drive_report_link")
-        or order.get("drive_full_PDF_link")
-        or order.get("drive_sample_pdf_link")
-        or order.get("drive_sample_PDF_link")
-        or ""
-    )
-    if drive_link:
-        drive_section = f'<p><a href="{drive_link}" style="font-size:16px;font-weight:bold;color:#1a56db;">View your report in Google Drive &rarr;</a></p>'
-    else:
-        drive_section = "<p>Your report is attached to this email as a PDF.</p>"
-
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head><body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:16px">
 <p>Hi,</p>
 <p>Your marketing audit for <b>{order.get('brand_name', order['url'])}</b> is ready.</p>
 <p><b>Package:</b> {tier_desc}</p>
-{drive_section}
+<p>Your full report is attached to this email as a PDF.</p>
 <p>If you have questions or would like to discuss the findings, just reply to this email.</p>
 <p>Thanks,<br>EchoForge Marketing Audit<br>echoforge.biz</p>
 </body></html>"""

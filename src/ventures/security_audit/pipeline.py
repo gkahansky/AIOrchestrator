@@ -162,14 +162,12 @@ def run_order(audit_id: str) -> dict:
             folder_label = "samples" if is_testing else "orders"
             print(f"[security_audit] Uploading PDF to Drive {folder_label} folder {target_root}", flush=True)
             folder_meta = create_folder(audit_id, target_root)
-            share_emails = [e for e in [input_data.get("client_email")] if e]
             drive_meta = drive_write(
                 pdf_path,
                 folder_meta["folder_id"],
                 mime_type="application/pdf",
                 filename=f"{audit_id}-security-report.pdf",
                 share_anyone_with_link=True,
-                share_with_emails=share_emails,
             )
             drive_report_link = drive_meta.get("web_view_link", "")
             drive_folder_link = folder_meta.get("web_view_link", "")
@@ -498,19 +496,12 @@ def deliver_order(job_id: str, review_notes: str | None = None) -> dict:
         findings_count = output.get("findings_count", 0)
 
         if client_email:
-            if report_link:
-                report_section = (
-                    f"<p><a href=\"{report_link}\" style=\"background:#4361ee;color:#fff;"
-                    f"padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;"
-                    f"display:inline-block\">Download your security audit report</a></p>"
-                )
+            pdf_path = output.get("pdf_path", "")
+            attachments: list[str] = []
+            if pdf_path and Path(pdf_path).exists():
+                attachments.append(pdf_path)
             else:
-                # Drive not configured — note that report will be shared manually
-                print("[security_audit] WARNING: drive_report_link missing — sending email without report link", flush=True)
-                report_section = (
-                    "<p>Your report PDF has been generated and will be shared with you shortly "
-                    "via a separate email or file share.</p>"
-                )
+                print("[security_audit] WARNING: pdf_path missing or gone — sending email without attachment", flush=True)
 
             send_result = send_email(
                 to=client_email,
@@ -520,7 +511,7 @@ def deliver_order(job_id: str, review_notes: str | None = None) -> dict:
                     f"<h2>Security Audit Complete</h2>"
                     f"<p>Your security audit for <strong>{target_url}</strong> is complete.</p>"
                     f"<p><strong>Overall risk: {risk_rating}</strong> &nbsp;|&nbsp; {findings_count} findings identified.</p>"
-                    f"{report_section}"
+                    f"<p>Your full report is attached to this email as a PDF.</p>"
                     f"<p>The report includes all findings with CVSS scores, evidence, "
                     f"attack chain analysis, and a prioritised remediation roadmap.</p>"
                     f"<p>Reply to this email if you have questions about any finding "
@@ -529,6 +520,7 @@ def deliver_order(job_id: str, review_notes: str | None = None) -> dict:
                     f"<p style=\"color:#999;font-size:11px\">EchoForge Security Audit · echoforge.biz</p>"
                     f"</body></html>"
                 ),
+                attachments=attachments or None,
             )
             if send_result.get("error"):
                 raise RuntimeError(f"send_email failed: {send_result['error']}")

@@ -139,6 +139,16 @@ def run_order(audit_id: str) -> dict:
         audit.risk_score = report_data.get("overall_risk_score", 0)
         _update_status(db, audit, job, "uploading", phase=4)
 
+        # ── P2.8: Critical finding alert ─────────────────────────────────────
+        # Fire immediately on critical findings — don't wait for full delivery.
+        client_email = input_data.get("client_email", "")
+        _send_critical_finding_alert(
+            findings=audit.findings_json,
+            target_url=target_url,
+            audit_id=audit_id,
+            client_email=client_email,
+        )
+
         # ── Upload to Drive ───────────────────────────────────────────────────
         is_testing = input_data.get("is_testing", False)
         target_root = (
@@ -198,6 +208,186 @@ def run_order(audit_id: str) -> dict:
             job = db.query(Job).filter(
                 Job.venture == "security_audit",
                 Job.input_data["audit_id"].astext == audit_id,
+            ).first()
+            if audit:
+                audit.status = "failed"
+            if job:
+                out = dict(job.output_data or {})
+                out["status"] = "failed"
+                out["error"] = str(exc)
+                job.status = "failed"
+                job.error_message = str(exc)
+                job.output_data = out
+            db.commit()
+        except Exception:
+            pass
+        raise
+    finally:
+        db.close()
+
+
+# ── Retest ────────────────────────────────────────────────────────────────────
+
+def run_retest(retest_audit_id: str) -> dict:
+    """
+    Run a targeted retest for an existing delivered audit.
+
+    A retest creates a child SecurityAudit record linked to the original via
+    retest_of_audit_id.  It skips Phase 1 (passive OSINT) and Phase 2 (surface
+    mapping) by inheriting their data from the original audit, then re-runs:
+      Phase 3 — vuln scan (checks whether flagged vulnerabilities are still present)
+      Phase 6 — Claude correlation with retest context (fixed / still present / new)
+
+    The caller creates the retest SecurityAudit record with status='scope_verified'
+    and sets retest_of_audit_id + retest_finding_ids before dispatching this task.
+
+    Returns {"status": "review_pending", "audit_id": retest_audit_id}
+    """
+    from aiplatform.skills.security.scope_validator import extract_domain
+    from aiplatform.skills.security.vuln_scanner import run_vuln_scan
+    from aiplatform.skills.security.report_generator import generate_security_report
+    from aiplatform.skills.storage.drive_organise import create_folder
+    from aiplatform.skills.storage.drive_write import drive_write
+    from aiplatform.database.session import SessionLocal
+    from aiplatform.database.models import SecurityAudit, Job
+
+    db = SessionLocal()
+    audit = None
+    job = None
+
+    try:
+        audit = db.query(SecurityAudit).filter(
+            SecurityAudit.audit_id == retest_audit_id
+        ).first()
+        if not audit:
+            raise RuntimeError(f"Retest SecurityAudit record not found: {retest_audit_id}")
+
+        job = db.query(Job).filter(
+            Job.venture == "security_audit",
+            Job.input_data["audit_id"].astext == retest_audit_id,
+        ).first()
+
+        target_url = audit.target_url
+        domain = audit.target_domain or extract_domain(target_url)
+        tier = audit.tier or "starter"
+        input_data = dict(job.input_data or {}) if job else {}
+        finding_ids = audit.retest_finding_ids or []
+
+        # Load original audit data for Phase 1/2 context
+        original_audit = None
+        if audit.retest_of_audit_id:
+            original_audit = db.query(SecurityAudit).filter(
+                SecurityAudit.audit_id == str(audit.retest_of_audit_id)
+            ).first()
+
+        # Inherit Phase 1/2 from original (no need to redo OSINT/surface mapping)
+        recon_data = {}
+        surface_data = {}
+        original_findings = []
+        if original_audit:
+            recon_data = original_audit.phase1_recon_data or {}
+            surface_data = original_audit.phase2_surface_data or {}
+            original_findings = original_audit.findings_json or []
+
+        audit.phase1_recon_data = _sanitize(recon_data) if recon_data else audit.phase1_recon_data
+        audit.phase2_surface_data = _sanitize(surface_data) if surface_data else audit.phase2_surface_data
+        _update_status(db, audit, job, "scanning", phase=3)
+
+        # ── Phase 3: Re-run vulnerability scan ────────────────────────────────
+        print(f"[security_audit] Retest Phase 3 — Vulnerability scan: {target_url}", flush=True)
+        vuln_data = run_vuln_scan(
+            target_url=target_url,
+            scope_domain=domain,
+            surface_data=surface_data,
+            max_rps=config.MAX_REQUESTS_PER_SECOND,
+        )
+        audit.phase3_vuln_data = _sanitize(vuln_data)
+        _update_status(db, audit, job, "correlating", phase=3)
+
+        # ── Phase 6: Claude correlation with retest context ───────────────────
+        print(f"[security_audit] Retest Phase 6 — Claude correlation", flush=True)
+        work_dir = Path(config.WORK_DIR_BASE) / retest_audit_id
+        pdf_path = str(work_dir / f"{retest_audit_id}-retest-report.pdf")
+
+        audit_payload = {
+            "target_url": target_url,
+            "target_domain": domain,
+            "tier": tier,
+            "phase1_recon": recon_data,
+            "phase2_surface": surface_data,
+            "phase3_vuln": vuln_data,
+            # Retest-specific context injected into the prompt
+            "is_retest": True,
+            "retest_finding_ids": finding_ids,
+            "original_findings": [
+                f for f in original_findings
+                if not finding_ids or f.get("id") in finding_ids
+            ],
+        }
+        report_result = generate_security_report(audit_payload, pdf_path)
+
+        report_data = report_result["report_data"]
+        audit.findings_json = report_data.get("findings", [])
+        audit.attack_chains = report_data.get("attack_chains", [])
+        audit.risk_score = report_data.get("overall_risk_score", 0)
+        _update_status(db, audit, job, "uploading", phase=4)
+
+        # ── Upload to Drive ───────────────────────────────────────────────────
+        is_testing = input_data.get("is_testing", False)
+        target_root = (
+            config.DRIVE_SECURITY_SAMPLES_ID if is_testing
+            else config.DRIVE_SECURITY_ORDERS_ID
+        ) or config.DRIVE_SECURITY_ROOT_ID
+        drive_report_link = ""
+        drive_folder_link = ""
+
+        if target_root:
+            folder_meta = create_folder(f"{retest_audit_id}-retest", target_root)
+            drive_meta = drive_write(
+                pdf_path,
+                folder_meta["folder_id"],
+                mime_type="application/pdf",
+                filename=f"{retest_audit_id}-retest-report.pdf",
+                share_anyone_with_link=True,
+            )
+            drive_report_link = drive_meta.get("web_view_link", "")
+            drive_folder_link = folder_meta.get("web_view_link", "")
+
+        output = dict(job.output_data or {}) if job else {}
+        output.update({
+            "audit_id": str(retest_audit_id),
+            "target_url": target_url,
+            "target_domain": domain,
+            "tier": tier,
+            "is_retest": True,
+            "retest_of_audit_id": str(audit.retest_of_audit_id) if audit.retest_of_audit_id else None,
+            "retest_finding_ids": finding_ids,
+            "risk_score": audit.risk_score,
+            "risk_rating": report_data.get("risk_rating", ""),
+            "findings_count": report_result["findings_count"],
+            "pdf_path": pdf_path,
+            "pdf_size_bytes": report_result["size_bytes"],
+            "drive_report_link": drive_report_link,
+            "drive_folder_link": drive_folder_link,
+            "client_email": input_data.get("client_email", ""),
+            "status": "review_pending",
+        })
+        if job:
+            job.output_data = output
+        _update_status(db, audit, job, "review_pending", phase=5)
+
+        return {"status": "review_pending", "audit_id": str(retest_audit_id)}
+
+    except Exception as exc:
+        print(f"[security_audit] ERROR in run_retest: {_mask_credentials(str(exc))}", flush=True)
+        traceback.print_exc()
+        try:
+            audit = db.query(SecurityAudit).filter(
+                SecurityAudit.audit_id == retest_audit_id
+            ).first()
+            job = db.query(Job).filter(
+                Job.venture == "security_audit",
+                Job.input_data["audit_id"].astext == retest_audit_id,
             ).first()
             if audit:
                 audit.status = "failed"
@@ -384,6 +574,98 @@ def deliver_order(job_id: str, review_notes: str | None = None) -> dict:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _send_critical_finding_alert(
+    findings: list,
+    target_url: str,
+    audit_id: str,
+    client_email: str,
+) -> None:
+    """
+    Send an immediate alert email when a Critical severity finding is confirmed.
+
+    Called during Phase 6 (post-Claude correlation) before the report is delivered.
+    Per Section 11.3 of the venture CLAUDE.md: critical findings (RCE, DB dump,
+    credentials exposed) must be flagged to the client before the formal report.
+
+    Never includes full exploit details or payload strings — summary only.
+    Best-effort: failure here must never block the rest of the pipeline.
+    """
+    if not client_email:
+        return
+
+    critical = [
+        f for f in (findings or [])
+        if str(f.get("severity", "")).lower() == "critical"
+    ]
+    if not critical:
+        return
+
+    try:
+        from aiplatform.skills.comms.send_email import send_email
+
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        finding_rows = "".join(
+            f"<tr><td style='padding:8px 12px;border-bottom:1px solid #fee2e2'>"
+            f"<strong>{_html_escape(f.get('title', 'Untitled'))}</strong>"
+            f"<br><span style='color:#666;font-size:12px'>{_html_escape(f.get('category', ''))}</span>"
+            f"</td></tr>"
+            for f in critical[:10]   # cap at 10 rows — no need to dump everything
+        )
+
+        body_html = f"""<!DOCTYPE html>
+<html><body style="font-family:sans-serif;max-width:600px;margin:40px auto;color:#1a1a2e">
+<div style="background:#ef4444;color:#fff;padding:16px 24px;border-radius:8px 8px 0 0">
+  <strong style="font-size:18px">⚠ Critical Security Finding Detected</strong>
+</div>
+<div style="border:2px solid #ef4444;border-top:none;border-radius:0 0 8px 8px;padding:24px">
+  <p>A <strong>Critical</strong> severity vulnerability has been identified during your
+  security audit of <strong>{_html_escape(target_url)}</strong>.</p>
+  <p><strong>Detected at:</strong> {now_str}</p>
+  <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#fff5f5;border-radius:6px">
+    <thead><tr style="background:#fee2e2">
+      <th style="padding:8px 12px;text-align:left;font-size:13px">Critical Finding</th>
+    </tr></thead>
+    <tbody>{finding_rows}</tbody>
+  </table>
+  <p style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:4px">
+    <strong>Action required:</strong> Review and remediate immediately.
+    Your full audit report with complete details, evidence, and remediation steps
+    will follow shortly once our review is complete.
+  </p>
+  <p style="color:#666;font-size:13px">
+    Audit ID: {_html_escape(audit_id)}<br>
+    This is a preliminary alert. Do not share exploit details from the full report
+    publicly until remediation is complete.
+  </p>
+</div>
+<p style="color:#999;font-size:11px;margin-top:16px">
+  EchoForge Security Audit · echoforge.biz
+</p>
+</body></html>"""
+
+        send_email(
+            to=client_email,
+            subject=f"⚠ Critical finding detected — {target_url}",
+            body_html=body_html,
+        )
+        print(
+            f"[security_audit] Critical alert sent to {client_email} "
+            f"— {len(critical)} critical finding(s)",
+            flush=True,
+        )
+    except Exception as exc:
+        # Never block the pipeline on alert failure
+        print(f"[security_audit] WARNING: critical alert email failed: {exc}", flush=True)
+
+
+def _html_escape(text: str) -> str:
+    return (str(text)
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;"))
+
 
 def _sanitize(obj):
     """Recursively strip null bytes from strings — PostgreSQL JSONB rejects \u0000."""

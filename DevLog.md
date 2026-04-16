@@ -117,3 +117,4 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 
 | 2026-04-16 08:31 |  | 0037a18 | Security audit P1 fixes — tier enum validation, backend email domain check, 30-day Celery retention task, credential masking in logs |
 | 2026-04-16 08:35 |  | 61d6492 | Merge claude/recursing-cori into main — all four P1 security audit gap fixes |
+| 2026-04-16 | | | Security audit P2 features — critical finding alert, retest workflow, OWASP/GDPR/SOC 2 compliance mapping per finding |

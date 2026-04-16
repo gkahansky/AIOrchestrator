@@ -571,6 +571,11 @@ class SecurityAudit(Base):
     # Reviewer notes
     reviewer_notes = Column(Text, nullable=True)
 
+    # Retest fields — populated when this record is a retest of a previous audit
+    retest_of_audit_id  = Column(UUID(as_uuid=True), nullable=True)  # original audit UUID
+    retest_finding_ids  = Column(JSONB, nullable=True)               # ["F-001", "F-003"]
+    retest_requested_at = Column(DateTime(timezone=True), nullable=True)
+
     # Pipeline status
     status = Column(String(50), nullable=False, default="pending", index=True)
 

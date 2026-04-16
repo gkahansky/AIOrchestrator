@@ -61,6 +61,12 @@ class ReviewRequest(BaseModel):
 class DeliverRequest(BaseModel):
     notes: str | None = None
 
+class RetestRequest(BaseModel):
+    finding_ids: list[str] = Field(
+        default_factory=list,
+        description="Finding IDs to retest (e.g. ['F-001', 'F-003']). Empty list = retest all findings.",
+    )
+
 
 # ── Create order ──────────────────────────────────────────────────────────────
 
@@ -547,6 +553,106 @@ def review_security_audit(
 
 
 # ── Delivery ──────────────────────────────────────────────────────────────────
+
+@router.post("/orders/{audit_id}/request-retest", status_code=status.HTTP_202_ACCEPTED)
+def request_retest(
+    audit_id: str,
+    req: RetestRequest,
+    _: str = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Request a retest of specific findings from a delivered security audit.
+
+    Creates a child SecurityAudit record linked to the original. Scope verification
+    is inherited — no new verification email is sent. The retest re-runs Phase 3
+    (vuln scan) and Phase 6 (Claude correlation) only; Phase 1/2 data is reused.
+
+    Returns the new retest audit_id and job_id.
+    """
+    from datetime import datetime, timezone
+    from aiplatform.webapp.worker import run_security_audit_retest_job
+
+    original = db.query(SecurityAudit).filter(
+        SecurityAudit.audit_id == audit_id
+    ).first()
+    if not original:
+        raise HTTPException(status_code=404, detail="Audit not found")
+    if original.status != "delivered":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Retest is only available for delivered audits (current status: '{original.status}').",
+        )
+
+    # Find original job for client_email + is_testing flag
+    orig_job = db.query(Job).filter(Job.id == original.job_id).first() if original.job_id else None
+    orig_input = dict(orig_job.input_data or {}) if orig_job else {}
+
+    retest_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+
+    retest_audit = SecurityAudit(
+        audit_id=retest_id,
+        target_url=original.target_url,
+        target_domain=original.target_domain,
+        tier=original.tier,
+        scope_token=original.scope_token,      # inherit token for reference
+        scope_verified=True,                    # already verified on original
+        scope_verified_at=original.scope_verified_at,
+        scope_method=original.scope_method,
+        auth_username=original.auth_username,
+        auth_password=original.auth_password,   # already encrypted
+        auth_login_url=original.auth_login_url,
+        status="scope_verified",
+        retest_of_audit_id=original.audit_id,
+        retest_finding_ids=req.finding_ids or None,
+        retest_requested_at=now,
+    )
+    db.add(retest_audit)
+    db.flush()
+
+    input_payload = {
+        "audit_id": retest_id,
+        "url": original.target_url,
+        "domain": original.target_domain,
+        "tier": original.tier,
+        "client_email": orig_input.get("client_email", ""),
+        "is_testing": orig_input.get("is_testing", False),
+        "tos_accepted": True,
+        "scope_token": original.scope_token,
+        "is_retest": True,
+        "retest_of_audit_id": str(original.audit_id),
+        "retest_finding_ids": req.finding_ids or [],
+        "status": "scope_verified",
+    }
+    retest_job = Job(
+        venture="security_audit",
+        status="scope_verified",
+        phase_current=3,
+        phase_total=6,
+        input_data=input_payload,
+        output_data=dict(input_payload),
+        environment=orig_job.environment if orig_job else "production",
+    )
+    db.add(retest_job)
+    db.flush()
+    retest_audit.job_id = retest_job.id
+    db.commit()
+    db.refresh(retest_job)
+
+    task = run_security_audit_retest_job.delay(retest_id)
+    retest_job.celery_task_id = str(task.id)
+    db.commit()
+
+    return {
+        "status": "scanning",
+        "retest_audit_id": retest_id,
+        "job_id": str(retest_job.id),
+        "original_audit_id": audit_id,
+        "finding_ids": req.finding_ids,
+        "celery_task_id": str(task.id),
+    }
+
 
 @router.post("/orders/{audit_id}/deliver")
 def deliver_security_audit(

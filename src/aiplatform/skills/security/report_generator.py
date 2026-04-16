@@ -21,6 +21,169 @@ from pathlib import Path
 import anthropic
 
 
+# ── Static compliance mapping ─────────────────────────────────────────────────
+# Maps finding categories (as Claude assigns them) to OWASP Top 10 (2021),
+# GDPR articles, and SOC 2 criteria.  Used as a fallback when Claude does not
+# return per-finding compliance keys, and also injected into the prompt so
+# Claude can reference them when writing remediation guidance.
+#
+# GDPR articles that are most commonly implicated in web security findings:
+#   Art.25 — Data protection by design and by default
+#   Art.32 — Security of processing (encryption, pseudonymisation, access control)
+#   Art.33 — Notification of personal data breach
+#
+# SOC 2 criteria most commonly implicated:
+#   CC6.1 — Logical and physical access controls
+#   CC6.6 — External access / authentication controls
+#   CC6.7 — Data transmission integrity and encryption
+#   CC7.2 — System monitoring and anomaly detection
+#   CC9.2 — Vendor and third-party risk management
+
+COMPLIANCE_MAP: dict[str, dict] = {
+    # OWASP A01:2021 — Broken Access Control
+    "Broken Access Control": {
+        "owasp": "A01:2021 — Broken Access Control",
+        "gdpr": ["Art.25 (data protection by design)", "Art.32 (security of processing)"],
+        "soc2": ["CC6.1", "CC6.6"],
+    },
+    "IDOR": {
+        "owasp": "A01:2021 — Broken Access Control",
+        "gdpr": ["Art.32 (security of processing)"],
+        "soc2": ["CC6.1"],
+    },
+    "Privilege Escalation": {
+        "owasp": "A01:2021 — Broken Access Control",
+        "gdpr": ["Art.32 (security of processing)"],
+        "soc2": ["CC6.1", "CC6.6"],
+    },
+    # OWASP A02:2021 — Cryptographic Failures
+    "Cryptographic Failures": {
+        "owasp": "A02:2021 — Cryptographic Failures",
+        "gdpr": ["Art.32 (encryption of personal data)"],
+        "soc2": ["CC6.7"],
+    },
+    "TLS": {
+        "owasp": "A02:2021 — Cryptographic Failures",
+        "gdpr": ["Art.32 (encryption in transit)"],
+        "soc2": ["CC6.7"],
+    },
+    # OWASP A03:2021 — Injection
+    "Injection": {
+        "owasp": "A03:2021 — Injection",
+        "gdpr": ["Art.32 (security of processing)", "Art.33 (breach notification)"],
+        "soc2": ["CC6.1", "CC7.2"],
+    },
+    "SQL Injection": {
+        "owasp": "A03:2021 — Injection",
+        "gdpr": ["Art.32 (security of processing)", "Art.33 (breach notification)"],
+        "soc2": ["CC6.1", "CC7.2"],
+    },
+    "XSS": {
+        "owasp": "A03:2021 — Injection",
+        "gdpr": ["Art.32 (security of processing)"],
+        "soc2": ["CC6.1"],
+    },
+    "Command Injection": {
+        "owasp": "A03:2021 — Injection",
+        "gdpr": ["Art.32 (security of processing)", "Art.33 (breach notification)"],
+        "soc2": ["CC6.1", "CC7.2"],
+    },
+    "SSTI": {
+        "owasp": "A03:2021 — Injection",
+        "gdpr": ["Art.32 (security of processing)"],
+        "soc2": ["CC6.1"],
+    },
+    # OWASP A04:2021 — Insecure Design
+    "Insecure Design": {
+        "owasp": "A04:2021 — Insecure Design",
+        "gdpr": ["Art.25 (data protection by design)"],
+        "soc2": ["CC6.1"],
+    },
+    "Business Logic": {
+        "owasp": "A04:2021 — Insecure Design",
+        "gdpr": ["Art.25 (data protection by design)"],
+        "soc2": ["CC6.1"],
+    },
+    # OWASP A05:2021 — Security Misconfiguration
+    "Security Misconfiguration": {
+        "owasp": "A05:2021 — Security Misconfiguration",
+        "gdpr": ["Art.32 (appropriate technical measures)"],
+        "soc2": ["CC6.1", "CC7.2"],
+    },
+    "HTTP Security Headers": {
+        "owasp": "A05:2021 — Security Misconfiguration",
+        "gdpr": [],
+        "soc2": ["CC6.7"],
+    },
+    "CORS": {
+        "owasp": "A05:2021 — Security Misconfiguration",
+        "gdpr": [],
+        "soc2": ["CC6.6", "CC6.7"],
+    },
+    "Exposed Admin Interface": {
+        "owasp": "A05:2021 — Security Misconfiguration",
+        "gdpr": ["Art.32 (access control)"],
+        "soc2": ["CC6.1", "CC6.6"],
+    },
+    # OWASP A06:2021 — Vulnerable and Outdated Components
+    "Vulnerable Component": {
+        "owasp": "A06:2021 — Vulnerable and Outdated Components",
+        "gdpr": ["Art.32 (technical measures)"],
+        "soc2": ["CC9.2"],
+    },
+    # OWASP A07:2021 — Identification and Authentication Failures
+    "Authentication": {
+        "owasp": "A07:2021 — Identification and Authentication Failures",
+        "gdpr": ["Art.32 (pseudonymisation and access control)"],
+        "soc2": ["CC6.1", "CC6.6"],
+    },
+    "Session Management": {
+        "owasp": "A07:2021 — Identification and Authentication Failures",
+        "gdpr": ["Art.32 (security of processing)"],
+        "soc2": ["CC6.1", "CC6.6"],
+    },
+    "JWT": {
+        "owasp": "A07:2021 — Identification and Authentication Failures",
+        "gdpr": ["Art.32 (security of processing)"],
+        "soc2": ["CC6.6"],
+    },
+    # OWASP A08:2021 — Software and Data Integrity Failures
+    "Subdomain Takeover": {
+        "owasp": "A08:2021 — Software and Data Integrity Failures",
+        "gdpr": ["Art.32 (integrity of systems)"],
+        "soc2": ["CC9.2"],
+    },
+    # OWASP A09:2021 — Security Logging and Monitoring Failures
+    "Information Disclosure": {
+        "owasp": "A09:2021 — Security Logging and Monitoring Failures",
+        "gdpr": ["Art.33 (awareness of breach)"],
+        "soc2": ["CC7.2"],
+    },
+    # OWASP A10:2021 — SSRF
+    "SSRF": {
+        "owasp": "A10:2021 — Server-Side Request Forgery (SSRF)",
+        "gdpr": ["Art.32 (security of processing)"],
+        "soc2": ["CC6.1"],
+    },
+    # Cloud / infrastructure
+    "Cloud Misconfiguration": {
+        "owasp": "A05:2021 — Security Misconfiguration",
+        "gdpr": ["Art.32 (technical measures)", "Art.33 (breach notification)"],
+        "soc2": ["CC6.1", "CC9.2"],
+    },
+}
+
+
+def _lookup_compliance(category: str) -> dict:
+    """Return compliance mapping for a finding category (case-insensitive partial match)."""
+    cat_lower = category.lower()
+    for key, mapping in COMPLIANCE_MAP.items():
+        if key.lower() in cat_lower or cat_lower in key.lower():
+            return mapping
+    # No match — return empty compliance
+    return {"owasp": "", "gdpr": [], "soc2": []}
+
+
 # ── Public entry point ─────────────────────────────────────────────────────────
 
 def generate_security_report(
@@ -92,6 +255,12 @@ def _correlate_with_claude(audit_data: dict, model: str) -> dict:
     report.setdefault("medium_term", [])
     report.setdefault("strategic", [])
     report.setdefault("overall_risk_score", 0)
+    report.setdefault("is_retest", audit_data.get("is_retest", False))
+
+    # Backfill compliance for any finding that Claude did not annotate
+    for finding in report.get("findings", []):
+        if "compliance" not in finding or not finding["compliance"].get("owasp"):
+            finding["compliance"] = _lookup_compliance(finding.get("category", ""))
 
     return report
 
@@ -102,6 +271,9 @@ def _build_correlation_prompt(audit_data: dict) -> str:
     phase1 = audit_data.get("phase1_recon", {})
     phase2 = audit_data.get("phase2_surface", {})
     phase3 = audit_data.get("phase3_vuln", {})
+    is_retest = audit_data.get("is_retest", False)
+    retest_finding_ids = audit_data.get("retest_finding_ids", [])
+    original_findings = audit_data.get("original_findings", [])
 
     # Compact the raw data so it fits in context
     recon_summary = _summarise_recon(phase1)
@@ -114,10 +286,43 @@ def _build_correlation_prompt(audit_data: dict) -> str:
         "agency": "Full scan, multi-subdomain scope, white-label output",
     }.get(tier, "Phases 1–3")
 
+    # Retest context block
+    retest_context = ""
+    if is_retest and original_findings:
+        orig_summary = "\n".join(
+            f"  - [{f.get('id', '?')}] [{f.get('severity', '?')}] {f.get('title', 'Unknown')}"
+            for f in original_findings
+        )
+        ids_note = (
+            f"Only these finding IDs were flagged for retest: {retest_finding_ids}"
+            if retest_finding_ids else "All original findings are being retested."
+        )
+        retest_context = f"""
+THIS IS A RETEST REPORT. {ids_note}
+
+ORIGINAL FINDINGS THAT WERE SUBMITTED FOR REMEDIATION:
+{orig_summary}
+
+For each finding in the retest results:
+- If the vulnerability is no longer present, mark retest_status = "fixed"
+- If the vulnerability is still present or worsened, mark retest_status = "still_present"
+- If a new related issue was discovered, mark retest_status = "new"
+Include a brief retest_note explaining the outcome for each finding.
+"""
+
+    # Compliance reference summary for the prompt
+    compliance_ref = (
+        "For each finding, map to OWASP Top 10 (2021), relevant GDPR article(s) "
+        "(Art.25 — by design, Art.32 — security of processing, Art.33 — breach notification), "
+        "and relevant SOC 2 criteria (CC6.1 access control, CC6.6 external auth, "
+        "CC6.7 data in transit, CC7.2 monitoring, CC9.2 vendor risk). "
+        "Use empty strings/arrays when a framework does not apply."
+    )
+
     return f"""
 You are producing a security audit report for: {target}
 Audit tier: {tier.upper()} — {scope_note}
-
+{retest_context}
 AGGREGATED FINDINGS FROM ALL PHASES:
 
 {recon_summary}
@@ -132,6 +337,7 @@ TASK:
 3. Group findings into attack chains where individual issues combine into a multi-step attack
 4. Write an executive summary in plain language (2-3 paragraphs, no jargon, business risk focus)
 5. Produce a risk-prioritised remediation roadmap
+6. {compliance_ref}
 
 Return a JSON object matching this exact schema:
 
@@ -139,6 +345,7 @@ Return a JSON object matching this exact schema:
   "executive_summary": "string — 2-3 paragraphs, plain language, business risk framing",
   "overall_risk_score": 0-100,
   "risk_rating": "Critical | High | Medium | Low | Minimal",
+  "is_retest": {str(is_retest).lower()},
   "findings": [
     {{
       "id": "F-001",
@@ -150,7 +357,14 @@ Return a JSON object matching this exact schema:
       "evidence": "string — what was observed during the scan",
       "impact": "string — business consequence if exploited",
       "fix": "string — specific, actionable remediation steps",
-      "effort": "Low | Medium | High"
+      "effort": "Low | Medium | High",
+      "compliance": {{
+        "owasp": "string — OWASP Top 10 2021 category (e.g. A03:2021 — Injection)",
+        "gdpr": ["string — GDPR article (e.g. Art.32 — security of processing)"],
+        "soc2": ["string — SOC 2 criteria (e.g. CC6.1)"]
+      }},
+      "retest_status": "fixed | still_present | new | null",
+      "retest_note": "string — brief outcome note (retest only, else null)"
     }}
   ],
   "attack_chains": [
@@ -328,6 +542,62 @@ def _inject_report_data(html: str, data: dict) -> str:
             "Medium": "text-yellow-600", "Low": "text-green-600",
         }.get(sev, "text-on-surface")
         cvss = f.get("cvss_score", "")
+
+        # ── Compliance badges ──────────────────────────────────────────────────
+        compliance = f.get("compliance") or {}
+        owasp = compliance.get("owasp", "")
+        gdpr_items = compliance.get("gdpr", [])
+        soc2_items = compliance.get("soc2", [])
+
+        compliance_html = ""
+        if owasp or gdpr_items or soc2_items:
+            badges = []
+            if owasp:
+                badges.append(
+                    f'<span style="background:#e0e7ff;color:#3730a3;padding:2px 7px;'
+                    f'border-radius:4px;font-size:10px;font-weight:600">'
+                    f'OWASP {_html_escape(owasp)}</span>'
+                )
+            for g in gdpr_items:
+                badges.append(
+                    f'<span style="background:#fef3c7;color:#92400e;padding:2px 7px;'
+                    f'border-radius:4px;font-size:10px;font-weight:600">'
+                    f'GDPR {_html_escape(g)}</span>'
+                )
+            for s in soc2_items:
+                badges.append(
+                    f'<span style="background:#ecfdf5;color:#065f46;padding:2px 7px;'
+                    f'border-radius:4px;font-size:10px;font-weight:600">'
+                    f'SOC 2 {_html_escape(s)}</span>'
+                )
+            compliance_html = (
+                '<div style="margin-top:8px">'
+                + ''.join(
+                    f'<span style="display:inline-block;margin:2px">{b}</span>'
+                    for b in badges
+                )
+                + '</div>'
+            )
+
+        # ── Retest status badge ────────────────────────────────────────────────
+        retest_status = f.get("retest_status")
+        retest_note = f.get("retest_note", "")
+        retest_html = ""
+        if retest_status and retest_status not in ("null", None):
+            badge_style = {
+                "fixed": "background:#dcfce7;color:#166534",
+                "still_present": "background:#fee2e2;color:#991b1b",
+                "new": "background:#fef9c3;color:#854d0e",
+            }.get(retest_status, "background:#f3f4f6;color:#374151")
+            retest_html = (
+                f'<div style="margin-top:6px">'
+                f'<span style="{badge_style};padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700">'
+                f'RETEST: {_html_escape(retest_status.upper().replace("_", " "))}'
+                f'</span>'
+                + (f' <span style="font-size:11px;color:#666">{_html_escape(retest_note)}</span>' if retest_note else "")
+                + '</div>'
+            )
+
         findings_html += f"""
         <div class="bg-surface-container-lowest p-5 rounded-xl border border-surface-container shadow-sm space-y-3 break-inside-avoid">
             <div class="flex items-center justify-between">
@@ -350,6 +620,7 @@ def _inject_report_data(html: str, data: dict) -> str:
                 <span class="text-[9px] font-label font-bold uppercase tracking-widest text-on-surface-variant/60">Remediation</span>
                 <p class="text-xs font-body text-on-surface mt-0.5">{_html_escape(f.get('fix', ''))}</p>
             </div>
+            {compliance_html}{retest_html}
         </div>
         """
 
@@ -417,6 +688,19 @@ def _inject_report_data(html: str, data: dict) -> str:
         for sev, count in severity_counts.items()
     )
 
+    # Retest banner — shown at top of report when is_retest=True
+    is_retest = data.get("is_retest", False)
+    retest_banner_html = ""
+    if is_retest:
+        retest_banner_html = (
+            '<div style="background:#fef9c3;border-left:4px solid #f59e0b;'
+            'padding:12px 20px;border-radius:6px;margin-bottom:24px">'
+            '<strong style="color:#92400e">Retest Report</strong> — '
+            'This report covers a targeted retest of previously identified findings. '
+            'Each finding is marked Fixed, Still Present, or New.'
+            '</div>'
+        )
+
     replacements = {
         "{{ target_url }}": _html_escape(data.get("target_url", "")),
         "{{ target_domain }}": _html_escape(data.get("target_domain", "")),
@@ -431,6 +715,7 @@ def _inject_report_data(html: str, data: dict) -> str:
         "{{ attack_chains_html }}": chains_html,
         "{{ roadmap_html }}": roadmap_html,
         "{{ total_findings }}": str(len(findings)),
+        "{{ retest_banner_html }}": retest_banner_html,
     }
 
     for k, v in replacements.items():

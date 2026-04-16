@@ -984,6 +984,12 @@ def deliver_security_audit_job(job_id: str, review_notes: str | None = None) -> 
     return deliver_order(job_id, review_notes)
 
 
+@celery_app.task(name="platform.run_security_audit_retest_job", bind=True, max_retries=1)
+def run_security_audit_retest_job(self, retest_audit_id: str) -> dict:
+    from ventures.security_audit.pipeline import run_retest
+    return run_retest(retest_audit_id)
+
+
 @celery_app.task(name="platform.purge_old_security_audits")
 def purge_old_security_audits() -> dict:
     """

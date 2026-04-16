@@ -488,10 +488,11 @@ The pipeline automates the scanning, correlation, and report generation. The fol
 
 | Task | Why human | When |
 |---|---|---|
-| **Target ownership verification** | ✅ Implemented — email one-click verification (primary) + DNS TXT (secondary) + manual override. See Section 10.1. | Done |
-| **Terms of Service review** | Legal language covering authorisation responsibility, liability limits, data retention, and Rules of Engagement must be written and reviewed by a lawyer or legal-savvy operator. | Before MVP |
-| **Tool Docker images hardening** | Each scanning tool (`nuclei`, `sqlmap`, `nmap`, etc.) runs in an isolated container. A human needs to review the container build, network isolation rules, and egress restrictions to ensure tools cannot reach out-of-scope hosts. | Before MVP |
-| **Rate-limit tuning** | Automated scans can inadvertently cause service disruption. Humans must set per-host request rates and test them against a staging target before production use. | Before MVP |
+| **Target ownership verification** | ✅ Implemented — email one-click verification (primary) + manual admin override. DNS TXT panel removed from UI. See Section 10.1. | Done |
+| **echoforge.biz order page** | ✅ Spec written — see Section 13. Developer prompt provided for implementation. | Spec done — implementation pending |
+| **Terms of Service review** | Legal language covering authorisation responsibility, liability limits, data retention, and Rules of Engagement must be written and reviewed. | Before MVP |
+| **Tool Docker images hardening** | Each scanning tool (`nuclei`, `sqlmap`, `nmap`, etc.) runs in an isolated container. Container build, network isolation rules, and egress restrictions must be reviewed before production. | Before MVP |
+| **Rate-limit tuning** | Automated scans can inadvertently cause service disruption. Humans must set per-host request rates and test against a staging target before production use. | Before MVP |
 | **Fiverr / Upwork listing creation** | Platform-specific listing text, portfolio samples, pricing packaging, and response templates must be written and published manually. | Before first orders |
 | **Payment and billing setup** | Stripe or platform billing for paid orders is not in scope for the pipeline — must be configured manually. | Before first orders |
 
@@ -537,10 +538,15 @@ These situations require human decision before the pipeline can continue:
 ### MVP (Phase 1 launch) — Target: Q2 2026
 - [x] Phases 1–3 pipeline (OSINT + surface mapping + automated scanning)
 - [x] Claude API correlation and PDF report (Playwright-rendered, EchoForge branded)
-- [x] Scope verification — email one-click (primary) + DNS TXT (secondary) + manual override
+- [x] Scope verification — email one-click (primary) + manual admin override (DNS panel removed)
 - [x] Human review gate — admin reviews PDF before delivery; approval auto-triggers client email
 - [x] Drive upload — orders → `DRIVE_SECURITY_ORDERS_ID`, demos → `DRIVE_SECURITY_SAMPLES_ID`
+- [x] Drive permissions — explicit reader grant per `client_email` + anyone-with-link fallback
+- [x] Claude token limit fix — 16K tokens + extended output beta + JSON repair for truncated responses
 - [x] Admin UI — Security Audit venture card, order form, order detail, scope panel, review gate
+- [x] Backend domain validation on `verification_email` (subdomain support)
+- [ ] echoforge.biz public order page (`order-security/index.html`) — see Section 13
+- [ ] Cloudflare Function proxy (`functions/api/security-audit/create-order.js`)
 - [ ] Starter tier live on Fiverr ($49, black-box)
 
 ### v1.0

@@ -1,23 +1,22 @@
 """
 Phase 3 — Automated Vulnerability Scanning Skill
 
-Analyses the target for common vulnerabilities using pure Python — no native
-tool dependencies. This covers the security-headers, TLS, and misconfiguration
-surface reliably in all environments.
-
-Native tools (nuclei, nikto, sqlmap) are invoked as subprocesses only when
-Docker container images are available. Those integrations are stubbed here with
-clear integration points so they can be wired in without code changes.
+Layered approach:
+  1. Pure-Python checks (headers, TLS, CORS, cookies, clickjacking) — always run,
+     no binary dependencies. Results are fast and reliable.
+  2. Native tool layer — nuclei, nmap, nikto, testssl.sh — run when the binaries
+     are available (production Docker image). Fall back gracefully to [] when not.
 
 Checks:
   - HTTP security headers (CSP, HSTS, X-Frame-Options, X-Content-Type, etc.)
-  - TLS/SSL configuration via ssl module
+  - TLS/SSL configuration via ssl module + testssl.sh
   - Cookie security flags (HttpOnly, Secure, SameSite)
   - CORS misconfiguration (reflected Origin, wildcard with credentials)
-  - Common injection points (forms, query parameters)
-  - Open redirect patterns in responses
   - Information disclosure (verbose headers, error pages)
   - Clickjacking vulnerability
+  - nuclei: 9,000+ templates — CVEs, misconfigs, exposures, panels, takeovers
+  - nmap: open port + service discovery
+  - nikto: web server misconfiguration
 """
 
 import re
@@ -30,6 +29,10 @@ from requests.exceptions import RequestException
 
 from aiplatform.skills.security.scope_validator import is_in_scope
 from aiplatform.skills.security.rate_limiter import RateLimiter
+from aiplatform.skills.security.tools.nuclei_scan import run_nuclei_phase3
+from aiplatform.skills.security.tools.nmap_scan import run_nmap
+from aiplatform.skills.security.tools.nikto_scan import run_nikto
+from aiplatform.skills.security.tools.testssl_scan import run_testssl
 
 _DEFAULT_TIMEOUT = 10
 _UA = "EchoForge-Security-Audit/1.0 (vulnerability scan; contact: security@echoforge.biz)"
@@ -39,7 +42,8 @@ _UA = "EchoForge-Security-Audit/1.0 (vulnerability scan; contact: security@echof
 
 def run_vuln_scan(target_url: str, scope_domain: str,
                   surface_data: dict | None = None,
-                  max_rps: float = 2.0) -> dict:
+                  max_rps: float = 2.0,
+                  work_dir: str | None = None) -> dict:
     """
     Run the automated vulnerability scan phase.
 
@@ -47,10 +51,12 @@ def run_vuln_scan(target_url: str, scope_domain: str,
         target_url:   Primary target URL.
         scope_domain: Validated scope domain.
         surface_data: Output from Phase 2 surface mapping.
+        max_rps:      Max requests per second for Python-layer checks.
+        work_dir:     Working directory for tool output files.
 
     Returns:
         dict with: findings, header_audit, tls_audit, cors_issues,
-                   cookie_issues, info_disclosure, errors
+                   cookie_issues, info_disclosure, tool_findings, errors
     """
     results: dict = {
         "target_url": target_url,
@@ -60,6 +66,8 @@ def run_vuln_scan(target_url: str, scope_domain: str,
         "cors_issues": [],
         "cookie_issues": [],
         "info_disclosure": [],
+        "tool_findings": [],        # findings from native tools (nuclei/nmap/nikto/testssl)
+        "tools_run": [],
         "errors": [],
     }
 
@@ -69,17 +77,64 @@ def run_vuln_scan(target_url: str, scope_domain: str,
 
     limiter = RateLimiter(max_rps=max_rps)
 
+    # ── Layer 1: pure-Python checks ────────────────────────────────────────────
     _audit_security_headers(target_url, results, limiter)
     _audit_tls(target_url, scope_domain, results)
     _audit_cors(target_url, scope_domain, results, limiter)
     _audit_cookies(target_url, scope_domain, results, limiter)
     _detect_info_disclosure(target_url, scope_domain, surface_data or {}, results)
     _check_clickjacking(target_url, scope_domain, results)
-
-    # Aggregate all issues into the findings list with severity
     _consolidate_findings(results)
 
+    # ── Layer 2: native tool scans (no-op if binaries absent) ─────────────────
+    _run_native_tools(target_url, scope_domain, work_dir, results)
+
     return results
+
+
+def _run_native_tools(target_url: str, scope_domain: str,
+                      work_dir: str | None, results: dict) -> None:
+    """
+    Call nuclei, nmap, nikto, and testssl.sh.
+    Each is independent — failure of one does not abort the others.
+    """
+    tool_findings: list[dict] = []
+
+    # nuclei — broad template scan (misconfigs, CVEs, exposures, panels)
+    try:
+        nf = run_nuclei_phase3(target_url, scope_domain, work_dir=work_dir)
+        tool_findings.extend(nf)
+        results["tools_run"].append(f"nuclei ({len(nf)} findings)")
+    except Exception as exc:
+        results["errors"].append(f"nuclei: {exc}")
+
+    # nmap — port and service discovery
+    try:
+        nf = run_nmap(target_url, scope_domain)
+        tool_findings.extend(nf)
+        results["tools_run"].append(f"nmap ({len(nf)} findings)")
+    except Exception as exc:
+        results["errors"].append(f"nmap: {exc}")
+
+    # nikto — web server misconfiguration
+    try:
+        nf = run_nikto(target_url, scope_domain, work_dir=work_dir)
+        tool_findings.extend(nf)
+        results["tools_run"].append(f"nikto ({len(nf)} findings)")
+    except Exception as exc:
+        results["errors"].append(f"nikto: {exc}")
+
+    # testssl.sh — comprehensive TLS audit (replaces/extends Python ssl check)
+    try:
+        nf = run_testssl(target_url, scope_domain, work_dir=work_dir)
+        tool_findings.extend(nf)
+        results["tools_run"].append(f"testssl ({len(nf)} findings)")
+    except Exception as exc:
+        results["errors"].append(f"testssl: {exc}")
+
+    results["tool_findings"] = tool_findings
+    # Merge into findings so Claude sees everything in one list
+    results["findings"].extend(tool_findings)
 
 
 # ── Security headers ──────────────────────────────────────────────────────────

@@ -117,4 +117,8 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 
 | 2026-04-16 08:31 |  | 0037a18 | Security audit P1 fixes — tier enum validation, backend email domain check, 30-day Celery retention task, credential masking in logs |
 | 2026-04-16 08:35 |  | 61d6492 | Merge claude/recursing-cori into main — all four P1 security audit gap fixes |
-| 2026-04-16 | | | Security audit P2 features — critical finding alert, retest workflow, OWASP/GDPR/SOC 2 compliance mapping per finding |
+| 2026-04-16 | | | Security audit P2 features — critical finding alert, retest workflow, OWASP/GDPR/SOC 2 compliance mapping per finding || 2026-04-16 12:29 |  | aaab14b | Fix 4 security audit issues: Claude token limit, domain validation, remove DNS panel, Drive read permissions |
+| 2026-04-16 14:11 |  | 48031de | Fix Drive share â€” retry with sendNotificationEmail=True for non-Google accounts |
+| 2026-04-16 14:17 |  | 8f3e271 | Fix Drive share retry â€” check exc.content bytes not exc.reason for invalidSharingRequest |
+| 2026-04-16 14:37 |  | 46c7e61 | Add Cloudflare redirect: /docs/security-audit-tos â†’ echoforge.biz ToS page |
+| 2026-04-16 14:46 |  | c4ab13b | Delivery emails â€” attach PDF directly, remove Drive share links |

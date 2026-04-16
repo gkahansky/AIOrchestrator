@@ -42,10 +42,15 @@ def run_order(audit_id: str) -> dict:
     """
     Run the security audit pipeline for a given order.
 
-    Phases 1–3 (Starter tier):
+    Phases 1–3 (all tiers):
       1. Passive OSINT recon (crt.sh, DNS, Wayback, HIBP, Censys)
       2. Active surface mapping (HTTP probe, exposed paths, subdomain liveness)
-      3. Vulnerability scanning (headers, TLS, CORS, cookies)
+      3. Vulnerability scanning (headers, TLS, CORS, cookies, nuclei, nmap, nikto, testssl)
+
+    Phase 4 (Professional and Agency tiers only):
+      4. Deep exploitation testing — dalfox XSS + sqlmap SQLi confirmation
+
+    Phase 6 (all tiers):
       6. Claude API correlation → PDF generation
       Upload + review gate
 
@@ -55,6 +60,7 @@ def run_order(audit_id: str) -> dict:
     from aiplatform.skills.security.passive_recon import run_passive_recon
     from aiplatform.skills.security.surface_mapper import run_surface_mapping
     from aiplatform.skills.security.vuln_scanner import run_vuln_scan
+    from aiplatform.skills.security.exploit_tester import run_exploit_tests
     from aiplatform.skills.security.report_generator import generate_security_report
     from aiplatform.skills.storage.drive_organise import create_folder
     from aiplatform.skills.storage.drive_write import drive_write
@@ -115,11 +121,42 @@ def run_order(audit_id: str) -> dict:
             max_rps=config.MAX_REQUESTS_PER_SECOND,
         )
         audit.phase3_vuln_data = _sanitize(vuln_data)
-        _update_status(db, audit, job, "correlating", phase=3)
+        db.commit()
+
+        # ── Phase 4: Exploit Testing (Professional + Agency only) ─────────────
+        work_dir = Path(config.WORK_DIR_BASE) / audit_id
+        work_dir.mkdir(parents=True, exist_ok=True)
+        exploit_data: dict = {}
+
+        if tier in ("professional", "agency"):
+            _update_status(db, audit, job, "exploit_testing", phase=4)
+            print(f"[security_audit] Phase 4 — Exploit testing: {target_url}", flush=True)
+            urls_with_params = surface_data.get("urls_with_params", [])
+            try:
+                exploit_data = run_exploit_tests(
+                    target_url=target_url,
+                    scope_domain=domain,
+                    urls_with_params=urls_with_params or None,
+                    work_dir=str(work_dir),
+                )
+                audit.phase4_exploit_data = _sanitize(exploit_data)
+                db.commit()
+                tools_run = exploit_data.get("tools_run", [])
+                findings_count = len(exploit_data.get("findings", []))
+                print(
+                    f"[security_audit] Phase 4 complete — "
+                    f"tools: {tools_run}, findings: {findings_count}",
+                    flush=True,
+                )
+            except Exception as exc:
+                # Phase 4 failure must not block delivery — log and continue
+                print(f"[security_audit] WARNING: Phase 4 exploit testing failed: {exc}", flush=True)
+                exploit_data = {"findings": [], "tools_run": [], "errors": [str(exc)]}
+
+        _update_status(db, audit, job, "correlating", phase=5)
 
         # ── Phase 6: Claude Correlation + PDF ────────────────────────────────
         print(f"[security_audit] Phase 6 — Claude correlation", flush=True)
-        work_dir = Path(config.WORK_DIR_BASE) / audit_id
         pdf_path = str(work_dir / f"{audit_id}-security-report.pdf")
 
         audit_payload = {
@@ -129,6 +166,7 @@ def run_order(audit_id: str) -> dict:
             "phase1_recon": recon_data,
             "phase2_surface": surface_data,
             "phase3_vuln": vuln_data,
+            "phase4_exploit": exploit_data,
         }
         report_result = generate_security_report(audit_payload, pdf_path)
 
@@ -137,7 +175,7 @@ def run_order(audit_id: str) -> dict:
         audit.findings_json = report_data.get("findings", [])
         audit.attack_chains = report_data.get("attack_chains", [])
         audit.risk_score = report_data.get("overall_risk_score", 0)
-        _update_status(db, audit, job, "uploading", phase=4)
+        _update_status(db, audit, job, "uploading", phase=6)
 
         # ── P2.8: Critical finding alert ─────────────────────────────────────
         # Fire immediately on critical findings — don't wait for full delivery.
@@ -194,7 +232,7 @@ def run_order(audit_id: str) -> dict:
 
         if job:
             job.output_data = output
-        _update_status(db, audit, job, "review_pending", phase=5)
+        _update_status(db, audit, job, "review_pending", phase=7)
 
         return {"status": "review_pending", "audit_id": str(audit_id)}
 

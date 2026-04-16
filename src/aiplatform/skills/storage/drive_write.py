@@ -22,6 +22,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
 from aiplatform.skills.storage._drive_auth import get_drive_service
@@ -70,12 +71,24 @@ def drive_write(
 
     for email in (share_with_emails or []):
         if email:
-            service.permissions().create(
-                fileId=file["id"],
-                body={"type": "user", "role": "reader", "emailAddress": email},
-                fields="id",
-                sendNotificationEmail=False,
-            ).execute()
+            try:
+                service.permissions().create(
+                    fileId=file["id"],
+                    body={"type": "user", "role": "reader", "emailAddress": email},
+                    fields="id",
+                    sendNotificationEmail=False,
+                ).execute()
+            except HttpError as exc:
+                # Non-Google accounts require sendNotificationEmail=True
+                if exc.reason == "invalidSharingRequest":
+                    service.permissions().create(
+                        fileId=file["id"],
+                        body={"type": "user", "role": "reader", "emailAddress": email},
+                        fields="id",
+                        sendNotificationEmail=True,
+                    ).execute()
+                else:
+                    raise
 
     return {
         "file_id": file["id"],

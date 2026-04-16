@@ -45,7 +45,7 @@ RUN wget -q "https://github.com/ffuf/ffuf/releases/download/v${FFUF_VERSION}/ffu
 
 # dalfox — XSS scanner + PoC generator
 ARG DALFOX_VERSION=2.9.2
-RUN wget -q "https://github.com/hahwul/dalfox/releases/download/v${DALFOX_VERSION}/dalfox_linux_amd64.tar.gz" \
+RUN wget -q "https://github.com/hahwul/dalfox/releases/download/v${DALFOX_VERSION}/dalfox_${DALFOX_VERSION}_linux_amd64.tar.gz" \
       -O /tmp/dalfox.tar.gz \
     && tar -xzf /tmp/dalfox.tar.gz -C /tmp/ \
     && mv /tmp/dalfox /usr/local/bin/dalfox \

@@ -3,6 +3,62 @@ Security Audit venture configuration.
 """
 
 import os
+from typing import Optional
+
+# ── Fernet encryption helpers ──────────────────────────────────────────────────
+# auth_password is encrypted at rest using Fernet symmetric encryption.
+# Set FERNET_KEY in the environment (generate once with: Fernet.generate_key()).
+# If the key is absent, passwords are stored as plaintext with a warning (graceful
+# degradation so existing rows and test environments continue to work).
+
+_FERNET_KEY: str = os.environ.get("FERNET_KEY", "")
+_fernet = None
+
+def _get_fernet():
+    global _fernet
+    if _fernet is None and _FERNET_KEY:
+        from cryptography.fernet import Fernet
+        _fernet = Fernet(_FERNET_KEY.encode() if isinstance(_FERNET_KEY, str) else _FERNET_KEY)
+    return _fernet
+
+
+def encrypt_password(plaintext: Optional[str]) -> Optional[str]:
+    """
+    Encrypt a password for storage. Returns None if input is None.
+    If FERNET_KEY is not configured, returns the plaintext unchanged
+    (graceful degradation — log a warning in prod).
+    """
+    if plaintext is None:
+        return None
+    f = _get_fernet()
+    if f is None:
+        import warnings
+        warnings.warn(
+            "FERNET_KEY not set — auth_password stored as plaintext. "
+            "Set FERNET_KEY in production.",
+            stacklevel=2,
+        )
+        return plaintext
+    return f.encrypt(plaintext.encode()).decode()
+
+
+def decrypt_password(ciphertext: Optional[str]) -> Optional[str]:
+    """
+    Decrypt a stored password. Returns None if input is None.
+    Handles both encrypted ciphertext and legacy plaintext rows gracefully:
+    if decryption fails (e.g. pre-migration plaintext), returns the value as-is.
+    """
+    if ciphertext is None:
+        return None
+    f = _get_fernet()
+    if f is None:
+        return ciphertext  # no key — return as stored
+    try:
+        return f.decrypt(ciphertext.encode()).decode()
+    except Exception:
+        # Legacy plaintext row — return as-is (migration grace period)
+        return ciphertext
+
 
 # Google Drive folder IDs
 # DRIVE_SECURITY_ROOT_ID    — parent folder (fallback if specific folders not set)

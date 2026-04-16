@@ -29,6 +29,7 @@ import requests
 from requests.exceptions import RequestException
 
 from aiplatform.skills.security.scope_validator import is_in_scope
+from aiplatform.skills.security.rate_limiter import RateLimiter
 
 _DEFAULT_TIMEOUT = 10
 _UA = "EchoForge-Security-Audit/1.0 (vulnerability scan; contact: security@echoforge.biz)"
@@ -37,7 +38,8 @@ _UA = "EchoForge-Security-Audit/1.0 (vulnerability scan; contact: security@echof
 # ── Public entry point ─────────────────────────────────────────────────────────
 
 def run_vuln_scan(target_url: str, scope_domain: str,
-                  surface_data: dict | None = None) -> dict:
+                  surface_data: dict | None = None,
+                  max_rps: float = 2.0) -> dict:
     """
     Run the automated vulnerability scan phase.
 
@@ -65,10 +67,12 @@ def run_vuln_scan(target_url: str, scope_domain: str,
         results["errors"].append(f"Scope violation: {target_url}")
         return results
 
-    _audit_security_headers(target_url, results)
+    limiter = RateLimiter(max_rps=max_rps)
+
+    _audit_security_headers(target_url, results, limiter)
     _audit_tls(target_url, scope_domain, results)
-    _audit_cors(target_url, scope_domain, results)
-    _audit_cookies(target_url, scope_domain, results)
+    _audit_cors(target_url, scope_domain, results, limiter)
+    _audit_cookies(target_url, scope_domain, results, limiter)
     _detect_info_disclosure(target_url, scope_domain, surface_data or {}, results)
     _check_clickjacking(target_url, scope_domain, results)
 
@@ -113,8 +117,9 @@ _REQUIRED_HEADERS = {
     },
 }
 
-def _audit_security_headers(url: str, results: dict) -> None:
+def _audit_security_headers(url: str, results: dict, limiter: RateLimiter) -> None:
     try:
+        limiter.acquire()
         resp = requests.get(url, timeout=_DEFAULT_TIMEOUT,
                             headers={"User-Agent": _UA},
                             allow_redirects=True, verify=True)
@@ -214,7 +219,8 @@ def _audit_tls(url: str, scope_domain: str, results: dict) -> None:
 
 # ── CORS misconfiguration ─────────────────────────────────────────────────────
 
-def _audit_cors(url: str, scope_domain: str, results: dict) -> None:
+def _audit_cors(url: str, scope_domain: str, results: dict,
+                limiter: RateLimiter) -> None:
     test_origins = [
         f"https://evil.com",
         f"https://evil.{scope_domain}",
@@ -222,6 +228,7 @@ def _audit_cors(url: str, scope_domain: str, results: dict) -> None:
     ]
     for origin in test_origins:
         try:
+            limiter.acquire()
             resp = requests.options(
                 url, timeout=_DEFAULT_TIMEOUT,
                 headers={"User-Agent": _UA, "Origin": origin,
@@ -259,8 +266,10 @@ def _audit_cors(url: str, scope_domain: str, results: dict) -> None:
 
 # ── Cookie security flags ─────────────────────────────────────────────────────
 
-def _audit_cookies(url: str, scope_domain: str, results: dict) -> None:
+def _audit_cookies(url: str, scope_domain: str, results: dict,
+                   limiter: RateLimiter) -> None:
     try:
+        limiter.acquire()
         resp = requests.get(url, timeout=_DEFAULT_TIMEOUT,
                             headers={"User-Agent": _UA},
                             allow_redirects=True, verify=True)

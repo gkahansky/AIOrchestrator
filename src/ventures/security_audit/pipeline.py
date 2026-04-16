@@ -84,6 +84,7 @@ def run_order(audit_id: str) -> dict:
             target_url=target_url,
             scope_domain=domain,
             subdomains=subdomains if tier in ("professional", "agency") else [],
+            max_rps=config.MAX_REQUESTS_PER_SECOND,
         )
         audit.phase2_surface_data = _sanitize(surface_data)
         db.commit()
@@ -94,6 +95,7 @@ def run_order(audit_id: str) -> dict:
             target_url=target_url,
             scope_domain=domain,
             surface_data=surface_data,
+            max_rps=config.MAX_REQUESTS_PER_SECOND,
         )
         audit.phase3_vuln_data = _sanitize(vuln_data)
         _update_status(db, audit, job, "correlating", phase=3)

@@ -14,7 +14,7 @@ import secrets
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 from sqlalchemy.orm import Session
 
 from aiplatform.database.models import Job, SecurityAudit
@@ -28,7 +28,7 @@ router = APIRouter()
 # ── Request / Response schemas ─────────────────────────────────────────────────
 
 class SecurityAuditOrderRequest(BaseModel):
-    url: str
+    url: HttpUrl
     tier: str = "starter"               # starter | professional | agency
     client_email: str | None = None     # Delivery recipient (report email)
     verification_email: str | None = None  # Scope auth contact — must be at target domain
@@ -82,21 +82,23 @@ def create_security_audit_order(
             detail="Rules of Engagement must be accepted before submitting an order.",
         )
 
-    domain = extract_domain(req.url)
+    target_url = str(req.url)
+    domain = extract_domain(target_url)
     scope_token = generate_scope_token()
     audit_id = str(uuid.uuid4())
 
+    from ventures.security_audit.config import encrypt_password
     # Create SecurityAudit record
     audit = SecurityAudit(
         audit_id=audit_id,
-        target_url=req.url,
+        target_url=target_url,
         target_domain=domain,
         tier=req.tier,
         scope_token=scope_token,
         scope_verified=False,
         status="scope_pending",
         auth_username=req.auth_username,
-        auth_password=req.auth_password,  # TODO: encrypt before storing
+        auth_password=encrypt_password(req.auth_password),
         auth_login_url=req.auth_login_url,
     )
     db.add(audit)
@@ -105,7 +107,7 @@ def create_security_audit_order(
     from datetime import datetime, timezone
     input_payload = {
         "audit_id": audit_id,
-        "url": req.url,
+        "url": target_url,
         "domain": domain,
         "tier": req.tier,
         "client_email": req.client_email or "",

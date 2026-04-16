@@ -21,6 +21,7 @@ import requests
 from requests.exceptions import RequestException
 
 from aiplatform.skills.security.scope_validator import is_in_scope
+from aiplatform.skills.security.rate_limiter import RateLimiter
 
 _DEFAULT_TIMEOUT = 10
 _UA = "EchoForge-Security-Audit/1.0 (surface mapping; contact: security@echoforge.biz)"
@@ -88,7 +89,8 @@ _TECH_SIGNATURES = {
 # ── Public entry point ─────────────────────────────────────────────────────────
 
 def run_surface_mapping(target_url: str, scope_domain: str,
-                        subdomains: list[str] | None = None) -> dict:
+                        subdomains: list[str] | None = None,
+                        max_rps: float = 2.0) -> dict:
     """
     Map the attack surface of a target.
 
@@ -96,11 +98,13 @@ def run_surface_mapping(target_url: str, scope_domain: str,
         target_url:   The primary target URL (https://example.com).
         scope_domain: The validated scope domain (example.com).
         subdomains:   Subdomains discovered in Phase 1 to probe.
+        max_rps:      Max outbound requests per second (default 2).
 
     Returns:
         dict with keys: target_baseline, tech_stack, exposed_paths,
                         live_subdomains, robots_txt, sitemap_urls, errors
     """
+    limiter = RateLimiter(max_rps=max_rps)
     results: dict = {
         "target_url": target_url,
         "scope_domain": scope_domain,
@@ -113,23 +117,25 @@ def run_surface_mapping(target_url: str, scope_domain: str,
         "errors": [],
     }
 
-    _probe_target_baseline(target_url, scope_domain, results)
-    _probe_sensitive_paths(target_url, scope_domain, results)
-    _fetch_robots_and_sitemap(target_url, scope_domain, results)
+    _probe_target_baseline(target_url, scope_domain, results, limiter)
+    _probe_sensitive_paths(target_url, scope_domain, results, limiter)
+    _fetch_robots_and_sitemap(target_url, scope_domain, results, limiter)
 
     if subdomains:
-        _probe_subdomains(subdomains, scope_domain, results)
+        _probe_subdomains(subdomains, scope_domain, results, limiter)
 
     return results
 
 
 # ── Target baseline ───────────────────────────────────────────────────────────
 
-def _probe_target_baseline(url: str, scope_domain: str, results: dict) -> None:
+def _probe_target_baseline(url: str, scope_domain: str, results: dict,
+                           limiter: RateLimiter) -> None:
     if not is_in_scope(url, scope_domain):
         results["errors"].append(f"Scope violation prevented: {url}")
         return
     try:
+        limiter.acquire()
         resp = requests.get(
             url, timeout=_DEFAULT_TIMEOUT,
             headers={"User-Agent": _UA},
@@ -154,13 +160,15 @@ def _probe_target_baseline(url: str, scope_domain: str, results: dict) -> None:
 
 # ── Sensitive path probing ────────────────────────────────────────────────────
 
-def _probe_sensitive_paths(base_url: str, scope_domain: str, results: dict) -> None:
+def _probe_sensitive_paths(base_url: str, scope_domain: str, results: dict,
+                           limiter: RateLimiter) -> None:
     base = base_url.rstrip("/")
     for path in _SENSITIVE_PATHS:
         url = base + path
         if not is_in_scope(url, scope_domain):
             continue
         try:
+            limiter.acquire()
             resp = requests.get(
                 url, timeout=_DEFAULT_TIMEOUT,
                 headers={"User-Agent": _UA},
@@ -207,13 +215,15 @@ def _classify_path_severity(path: str, body: str) -> str:
 
 # ── Robots.txt + sitemap ──────────────────────────────────────────────────────
 
-def _fetch_robots_and_sitemap(base_url: str, scope_domain: str, results: dict) -> None:
+def _fetch_robots_and_sitemap(base_url: str, scope_domain: str, results: dict,
+                              limiter: RateLimiter) -> None:
     base = base_url.rstrip("/")
     for url, key in [(base + "/robots.txt", "robots_txt"),
                      (base + "/sitemap.xml", "sitemap_raw")]:
         if not is_in_scope(url, scope_domain):
             continue
         try:
+            limiter.acquire()
             r = requests.get(url, timeout=_DEFAULT_TIMEOUT,
                              headers={"User-Agent": _UA}, verify=True)
             if r.status_code == 200:
@@ -228,13 +238,15 @@ def _fetch_robots_and_sitemap(base_url: str, scope_domain: str, results: dict) -
 
 # ── Subdomain liveness ────────────────────────────────────────────────────────
 
-def _probe_subdomains(subdomains: list[str], scope_domain: str, results: dict) -> None:
+def _probe_subdomains(subdomains: list[str], scope_domain: str, results: dict,
+                      limiter: RateLimiter) -> None:
     for subdomain in subdomains[:50]:  # cap at 50 to keep phase fast
         for scheme in ("https", "http"):
             url = f"{scheme}://{subdomain}"
             if not is_in_scope(url, scope_domain):
                 continue
             try:
+                limiter.acquire()
                 resp = requests.get(
                     url, timeout=6,
                     headers={"User-Agent": _UA},

@@ -86,6 +86,12 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,  # one task at a time per worker thread
     result_expires=86400,          # 24 hours
     beat_schedule={
+        # Daily — purge SecurityAudit records and associated data older than 30 days
+        "security-audit-data-retention": {
+            "task": "platform.purge_old_security_audits",
+            "schedule": 86400,           # 24 hours
+            "options": {"expires": 3600},
+        },
         # Every Monday at 08:00 UTC
         "weekly-finance-digest": {
             "task": "platform.weekly_digest",
@@ -976,6 +982,45 @@ def run_security_audit_job(self, audit_id: str) -> dict:
 def deliver_security_audit_job(job_id: str, review_notes: str | None = None) -> dict:
     from ventures.security_audit.pipeline import deliver_order
     return deliver_order(job_id, review_notes)
+
+
+@celery_app.task(name="platform.purge_old_security_audits")
+def purge_old_security_audits() -> dict:
+    """
+    Purge SecurityAudit records (and twin Job records) older than 30 days.
+
+    Runs daily via Celery beat. Implements the data retention policy promised in the
+    Security Audit CLAUDE.md (Section 10) — raw artifacts and DB records are removed
+    after 30 days.
+
+    MinIO/S3 artifact cleanup is not yet wired here (artifacts are stored under
+    audit_id keys); add an minio.remove_objects() call when MinIO is provisioned.
+    """
+    from datetime import datetime, timezone, timedelta
+    from aiplatform.database.session import SessionLocal
+    from aiplatform.database.models import SecurityAudit, Job
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    db = SessionLocal()
+    try:
+        old_audits = (
+            db.query(SecurityAudit)
+            .filter(SecurityAudit.created_at < cutoff)
+            .all()
+        )
+        purged = 0
+        for audit in old_audits:
+            if audit.job_id:
+                job = db.get(Job, audit.job_id)
+                if job:
+                    db.delete(job)
+            db.delete(audit)
+            purged += 1
+        db.commit()
+        print(f"[data-retention] Purged {purged} SecurityAudit record(s) older than {cutoff.date()}", flush=True)
+        return {"purged": purged, "cutoff": cutoff.isoformat()}
+    finally:
+        db.close()
 
 
 # ── Outreach tasks ─────────────────────────────────────────────────────────────

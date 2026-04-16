@@ -96,3 +96,24 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-15 10:12 |  | 46f3a7c | Security Audit venture — full infrastructure (MVP Phases 1-3) |
 | 2026-04-15 11:30 |  |  | Security Audit phase C — ToS checkbox + dev notes, Censys bearer token fix, Drive env var alignment, 30-day retention cleanup skill + admin endpoint + Settings Maintenance tab |
 | 2026-04-15 14:33 |  | 4ceb0c0 | Security Audit phase C â€” ToS enforcement, Censys fix, Drive cleanup |
+| 2026-04-15 14:49 |  | a070b87 | Fix alembic env.py to use DATABASE_PUBLIC_URL for local runs |
+| 2026-04-15 14:58 |  | 5bb1059 | Fix startup crash â€” make dns import lazy in scope_validator |
+| 2026-04-15 15:15 |  | b19580e | Fix TS6133 â€” remove unused pendingAuditId state in SecurityAudit |
+| 2026-04-15 15:27 |  | 6919b69 | Trigger Cloudflare Pages rebuild |
+| 2026-04-15 15:51 |  | 4d05386 | Add wrangler.toml and GitHub Actions deploy workflow for frontend |
+| 2026-04-15 15:55 |  | aac9b17 | Test GitHub Actions deploy â€” update Settings subtitle |
+| 2026-04-15 15:57 |  | 26faa1f | Add workflow_dispatch to deploy-frontend for manual triggering |
+| 2026-04-15 19:26 |  | e6553ab | Security Audit UX â€” move to Ventures page, fix button color |
+| 2026-04-15 19:38 |  | fdf7981 | Fix security audit tasks missing from webapp worker re-export shim |
+| 2026-04-15 19:48 |  | bca0765 | Fix null byte crash in security audit pipeline |
+| 2026-04-15 19:55 |  | 45938f3 | Add email scope verification â€” send one-click auth link to admin/webmaster/security role addresses on order create |
+| 2026-04-15 19:57 |  | 5a9a183 | Fix review panel â€” move Drive links into review gate, add folder button, show error when Drive not configured |
+| 2026-04-15 19:59 |  | cf03647 | Fix generic jobs approve endpoint â€” handle security_audit (approve-only, no Celery task; delivery is a separate step) |
+| 2026-04-15 20:09 |  | b17303e | Security audit â€” auto-deliver on approval, degrade gracefully without Drive link, add delivered status UI |
+| 2026-04-15 20:11 |  | ad1b408 | Security audit â€” route Drive upload to samples folder for demo orders, orders folder for paid scans |
+| 2026-04-15 20:15 |  | 53fb9b3 | Scope verification email â€” send to client_email if domain matches, else fall back to role addresses |
+| 2026-04-15 20:17 |  | 7937f92 | Add verification_email field to order form â€” any @targetdomain address, with inline domain validation |
+| 2026-04-16 07:52 |  | 9f7bfc7 | Update Security Audit CLAUDE.md â€” document implemented scope verification and delivery flow |
+
+| 2026-04-16 08:31 |  | 0037a18 | Security audit P1 fixes — tier enum validation, backend email domain check, 30-day Celery retention task, credential masking in logs |
+| 2026-04-16 08:35 |  | 61d6492 | Merge claude/recursing-cori into main — all four P1 security audit gap fixes |

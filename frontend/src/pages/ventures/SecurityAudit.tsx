@@ -4,7 +4,6 @@ import {
   createSecurityAuditOrder,
   fetchSecurityAuditOrders,
   fetchSecurityAuditOrder,
-  verifyScopeSecurityAudit,
   approveScopeSecurityAudit,
   reviewSecurityAuditOrder,
   deliverSecurityAuditOrder,
@@ -189,7 +188,10 @@ function NewOrder({ onSuccess }: { onSuccess: (auditId: string) => void }) {
   const targetDomain = extractDomain(url)
   const verificationEmailDomain = verificationEmail.split("@")[1]?.toLowerCase() ?? ""
   const verificationEmailValid =
-    !verificationEmail || verificationEmailDomain === targetDomain.toLowerCase()
+    !verificationEmail ||
+    !targetDomain ||
+    verificationEmailDomain === targetDomain.toLowerCase() ||
+    verificationEmailDomain.endsWith("." + targetDomain.toLowerCase())
 
   const submitMut = useMutation({
     mutationFn: createSecurityAuditOrder,
@@ -350,7 +352,11 @@ function NewOrder({ onSuccess }: { onSuccess: (auditId: string) => void }) {
         </label>
 
         <div className="flex justify-end">
-          <button type="submit" disabled={submitMut.isPending || !tosAccepted} className="px-6 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-label font-semibold hover:opacity-90 transition-opacity disabled:opacity-40">
+          <button
+            type="submit"
+            disabled={submitMut.isPending || !tosAccepted || !verificationEmailValid}
+            className="px-6 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-label font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
+          >
             {submitMut.isPending ? "Creating order…" : "Create Order"}
           </button>
         </div>
@@ -385,7 +391,6 @@ function NewOrder({ onSuccess }: { onSuccess: (auditId: string) => void }) {
 
 function ScopeVerificationPanel({ auditId, onVerified }: { auditId: string; onVerified: () => void }) {
   const qc = useQueryClient()
-  const [showDns, setShowDns] = useState(false)
   const [resendMsg, setResendMsg] = useState("")
 
   const { data: order, isLoading } = useQuery({
@@ -398,15 +403,6 @@ function ScopeVerificationPanel({ auditId, onVerified }: { auditId: string; onVe
     mutationFn: () => resendVerificationEmail(auditId),
     onSuccess: () => setResendMsg("Verification email resent."),
     onError: (err: any) => setResendMsg(`Failed: ${err.message}`),
-  })
-
-  const verifyMut = useMutation({
-    mutationFn: () => verifyScopeSecurityAudit(auditId),
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ["sec-audit", auditId] })
-      qc.invalidateQueries({ queryKey: ["sec-audits"] })
-      if (data.verified) onVerified()
-    },
   })
 
   const manualMut = useMutation({
@@ -466,52 +462,15 @@ function ScopeVerificationPanel({ auditId, onVerified }: { auditId: string; onVe
         </div>
       </div>
 
-      {/* Secondary: DNS TXT (collapsible) */}
-      <div className="border border-outline-variant/20 rounded-xl overflow-hidden">
+      {/* Manual override — admin only */}
+      <div className="flex justify-end">
         <button
-          type="button"
-          onClick={() => setShowDns((v) => !v)}
-          className="w-full flex items-center justify-between px-4 py-3 bg-surface-container-low text-sm font-label font-bold text-on-surface-variant hover:bg-surface-container"
+          onClick={() => manualMut.mutate()}
+          disabled={manualMut.isPending}
+          className="px-3 py-1.5 rounded-lg bg-surface-variant text-on-surface-variant text-xs font-label hover:bg-surface-container disabled:opacity-50"
         >
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-[16px]">dns</span>
-            Alternative: DNS TXT record verification
-          </div>
-          <span className="material-symbols-outlined text-[16px]">
-            {showDns ? "expand_less" : "expand_more"}
-          </span>
+          {manualMut.isPending ? "Overriding…" : "Manual Override (admin)"}
         </button>
-        {showDns && (
-          <div className="p-4 space-y-3 bg-surface">
-            <div className="bg-surface-container-lowest rounded-lg p-3 font-mono text-xs text-on-surface border border-outline-variant/20 break-all">
-              {order.scope_dns_record}
-            </div>
-            <p className="text-xs text-on-surface-variant font-body">
-              Add this TXT record to your DNS, then click Verify DNS. Changes can take up to 60 seconds to propagate.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => verifyMut.mutate()}
-                disabled={verifyMut.isPending}
-                className="px-4 py-2 rounded-lg bg-primary text-on-primary text-xs font-label font-semibold hover:opacity-90 disabled:opacity-50"
-              >
-                {verifyMut.isPending ? "Checking DNS…" : "Verify DNS"}
-              </button>
-              <button
-                onClick={() => manualMut.mutate()}
-                disabled={manualMut.isPending}
-                className="px-4 py-2 rounded-lg bg-surface-variant text-on-surface text-xs font-label font-semibold hover:bg-surface-container disabled:opacity-50"
-              >
-                Manual Override (admin)
-              </button>
-            </div>
-            {verifyMut.data && !verifyMut.data.verified && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800">
-                {verifyMut.data.reason}
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   )

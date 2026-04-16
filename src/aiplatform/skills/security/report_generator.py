@@ -218,13 +218,41 @@ def generate_security_report(
 
 # ── Claude API correlation ────────────────────────────────────────────────────
 
+def _repair_truncated_json(raw: str) -> dict | None:
+    """
+    Attempt to parse a JSON object that was truncated mid-stream.
+
+    Strategy: walk backwards from the end of the string looking for the last
+    complete closing brace/bracket, then close any open structures and try
+    parsing again. Returns None if the result still can't be parsed.
+    """
+    # Try progressively shorter suffixes until we find a parseable object
+    for end in range(len(raw), 0, -1):
+        candidate = raw[:end]
+        # Count open structures and close them
+        opens = candidate.count("{") - candidate.count("}")
+        close_brackets = candidate.count("[") - candidate.count("]")
+        if opens < 0 or close_brackets < 0:
+            continue
+        patched = candidate + "]" * close_brackets + "}" * opens
+        try:
+            return json.loads(patched)
+        except json.JSONDecodeError:
+            continue
+        # Only scan the last 2000 chars — beyond that it's too corrupted
+        if len(raw) - end > 2000:
+            break
+    return None
+
+
 def _correlate_with_claude(audit_data: dict, model: str) -> dict:
     client = anthropic.Anthropic()
     prompt = _build_correlation_prompt(audit_data)
 
     message = client.messages.create(
         model=model,
-        max_tokens=8192,
+        max_tokens=16000,
+        extra_headers={"anthropic-beta": "output-128k-2025-02-19"},
         system=(
             "You are a senior penetration tester and security analyst writing a "
             "professional security audit report. You have deep expertise in OWASP, "
@@ -241,8 +269,14 @@ def _correlate_with_claude(audit_data: dict, model: str) -> dict:
 
     try:
         report = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Claude returned invalid JSON: {exc}\n\nRaw:\n{raw[:500]}")
+    except json.JSONDecodeError:
+        # Response may have been truncated — attempt to salvage a valid JSON object
+        repaired = _repair_truncated_json(raw)
+        if repaired is None:
+            raise ValueError(
+                f"Claude returned invalid JSON and repair failed.\n\nRaw (first 500):\n{raw[:500]}"
+            )
+        report = repaired
 
     # Inject metadata
     report.setdefault("target_url", audit_data.get("target_url", ""))

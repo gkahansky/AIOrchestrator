@@ -162,12 +162,14 @@ def run_order(audit_id: str) -> dict:
             folder_label = "samples" if is_testing else "orders"
             print(f"[security_audit] Uploading PDF to Drive {folder_label} folder {target_root}", flush=True)
             folder_meta = create_folder(audit_id, target_root)
+            share_emails = [e for e in [input_data.get("client_email")] if e]
             drive_meta = drive_write(
                 pdf_path,
                 folder_meta["folder_id"],
                 mime_type="application/pdf",
                 filename=f"{audit_id}-security-report.pdf",
                 share_anyone_with_link=True,
+                share_with_emails=share_emails,
             )
             drive_report_link = drive_meta.get("web_view_link", "")
             drive_folder_link = folder_meta.get("web_view_link", "")

@@ -33,6 +33,7 @@ def drive_write(
     mime_type: Optional[str] = None,
     filename: Optional[str] = None,
     share_anyone_with_link: bool = False,
+    share_with_emails: Optional[list] = None,
 ) -> dict:
     local_path = Path(local_path)
 
@@ -66,6 +67,15 @@ def drive_write(
             body={"type": "anyone", "role": "reader"},
             fields="id",
         ).execute()
+
+    for email in (share_with_emails or []):
+        if email:
+            service.permissions().create(
+                fileId=file["id"],
+                body={"type": "user", "role": "reader", "emailAddress": email},
+                fields="id",
+                sendNotificationEmail=False,
+            ).execute()
 
     return {
         "file_id": file["id"],

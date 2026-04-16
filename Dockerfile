@@ -9,9 +9,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libjpeg-dev \
     zlib1g-dev \
     fonts-noto \
-    # Security scanning deps
+    # Security scanning deps (nikto not in bookworm repos — installed via git below)
     nmap \
-    nikto \
     perl \
     openssl \
     wget \
@@ -57,6 +56,11 @@ RUN wget -q "https://github.com/hahwul/dalfox/releases/download/v${DALFOX_VERSIO
 RUN git clone --depth 1 https://github.com/sqlmapproject/sqlmap.git /opt/sqlmap \
     && ln -sf /opt/sqlmap/sqlmap.py /usr/local/bin/sqlmap \
     && chmod +x /opt/sqlmap/sqlmap.py
+
+# nikto — web server misconfiguration scanner (not in bookworm apt)
+RUN git clone --depth 1 https://github.com/sullo/nikto.git /opt/nikto \
+    && ln -sf /opt/nikto/program/nikto.pl /usr/local/bin/nikto \
+    && chmod +x /opt/nikto/program/nikto.pl
 
 # testssl.sh — comprehensive TLS/SSL audit
 RUN wget -q "https://raw.githubusercontent.com/drwetter/testssl.sh/3.2/testssl.sh" \

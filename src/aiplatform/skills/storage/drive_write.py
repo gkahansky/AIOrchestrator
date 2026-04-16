@@ -79,8 +79,10 @@ def drive_write(
                     sendNotificationEmail=False,
                 ).execute()
             except HttpError as exc:
-                # Non-Google accounts require sendNotificationEmail=True
-                if exc.reason == "invalidSharingRequest":
+                # Non-Google accounts require sendNotificationEmail=True.
+                # exc.reason returns the human-readable message, not the JSON
+                # reason field, so check the raw content bytes instead.
+                if exc.status_code == 400 and b"invalidSharingRequest" in (exc.content or b""):
                     service.permissions().create(
                         fileId=file["id"],
                         body={"type": "user", "role": "reader", "emailAddress": email},

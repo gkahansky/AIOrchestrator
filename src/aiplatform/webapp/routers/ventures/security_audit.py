@@ -12,6 +12,7 @@ Endpoints:
 
 import secrets
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -29,7 +30,7 @@ router = APIRouter()
 
 class SecurityAuditOrderRequest(BaseModel):
     url: str
-    tier: str = "starter"               # starter | professional | agency
+    tier: Literal["starter", "professional", "agency"] = "starter"
     client_email: str | None = None     # Delivery recipient (report email)
     verification_email: str | None = None  # Scope auth contact — must be at target domain
     is_testing: bool = False
@@ -83,6 +84,20 @@ def create_security_audit_order(
         )
 
     domain = extract_domain(req.url)
+
+    # Backend re-validation of verification_email domain — must match or be a subdomain
+    if req.verification_email:
+        email_domain = req.verification_email.split("@")[-1].lower()
+        target = domain.lower()
+        if email_domain != target and not email_domain.endswith("." + target):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"verification_email domain '{email_domain}' does not match "
+                    f"the target domain '{target}'."
+                ),
+            )
+
     scope_token = generate_scope_token()
     audit_id = str(uuid.uuid4())
 

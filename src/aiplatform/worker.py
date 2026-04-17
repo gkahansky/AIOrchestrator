@@ -975,7 +975,34 @@ def deliver_accessibility_audit_job(job_id: str, review_notes: str | None = None
 @celery_app.task(name="platform.run_security_audit_job", bind=True, max_retries=1)
 def run_security_audit_job(self, audit_id: str) -> dict:
     from ventures.security_audit.pipeline import run_order
-    return run_order(audit_id)
+    try:
+        result = run_order(audit_id)
+        # Enrich return so callers can distinguish whether Phase 5 ran
+        phase5_ran = False
+        try:
+            from aiplatform.database.session import SessionLocal
+            from aiplatform.database.models import SecurityAudit
+            db = SessionLocal()
+            try:
+                audit = db.query(SecurityAudit).filter(
+                    SecurityAudit.audit_id == audit_id
+                ).first()
+                if audit and audit.phase5_auth_data:
+                    auth_data = audit.phase5_auth_data
+                    phase5_ran = bool(
+                        auth_data.get("tools_run") or auth_data.get("findings")
+                    )
+            finally:
+                db.close()
+        except Exception:
+            pass
+        result["phase5_ran"] = phase5_ran
+        return result
+    except Exception as exc:
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=120)
+        _slack_alert_failure("security_audit", audit_id, exc)
+        raise
 
 
 @celery_app.task(name="platform.deliver_security_audit_job")

@@ -96,7 +96,7 @@ TIERS = {
     "professional": {
         "label": "Professional",
         "price": 149,
-        "phases": [1, 2, 3, 5],       # + authenticated Playwright testing (Phase 5)
+        "phases": [1, 2, 3, 4],       # Phase 4 exploit testing; Phase 5 runs conditionally when credentials supplied
         "authenticated": True,
         "delivery_hours": 6,
         "report_pages": "10-15",
@@ -104,7 +104,7 @@ TIERS = {
     "agency": {
         "label": "Agency",
         "price": 349,
-        "phases": [1, 2, 3, 5],       # + multi-subdomain scope
+        "phases": [1, 2, 3, 4],       # Phase 4 exploit testing; Phase 5 runs conditionally when credentials supplied
         "authenticated": True,
         "delivery_hours": 3,
         "report_pages": "15-25",

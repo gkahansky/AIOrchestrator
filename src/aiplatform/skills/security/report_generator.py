@@ -306,6 +306,7 @@ def _build_correlation_prompt(audit_data: dict) -> str:
     phase2 = audit_data.get("phase2_surface", {})
     phase3 = audit_data.get("phase3_vuln", {})
     phase4 = audit_data.get("phase4_exploit", {})
+    phase5 = audit_data.get("phase5_auth", {})
     is_retest = audit_data.get("is_retest", False)
     retest_finding_ids = audit_data.get("retest_finding_ids", [])
     original_findings = audit_data.get("original_findings", [])
@@ -315,11 +316,12 @@ def _build_correlation_prompt(audit_data: dict) -> str:
     surface_summary = _summarise_surface(phase2)
     vuln_summary = _summarise_vulns(phase3)
     exploit_summary = _summarise_exploits(phase4)
+    auth_summary = _summarise_auth_tests(phase5)
 
     scope_note = {
         "starter": "Phases 1–3 only (passive OSINT + surface mapping + header/TLS/CORS analysis)",
-        "professional": "Phases 1–4 (passive OSINT + surface mapping + vuln scan + active XSS/SQLi exploit testing)",
-        "agency": "Full scan including active exploit testing, multi-subdomain scope, white-label output",
+        "professional": "Phases 1–4 (passive OSINT + surface mapping + vuln scan + active XSS/SQLi exploit testing) + Phase 5 if credentials supplied",
+        "agency": "Full scan including active exploit testing, multi-subdomain scope + Phase 5 authenticated testing if credentials supplied, white-label output",
     }.get(tier, "Phases 1–3")
 
     # Retest context block
@@ -368,6 +370,8 @@ AGGREGATED FINDINGS FROM ALL PHASES:
 {vuln_summary}
 
 {exploit_summary}
+
+{auth_summary}
 
 TASK:
 1. Deduplicate overlapping findings (same vulnerability from different phases = one finding)
@@ -549,6 +553,74 @@ def _summarise_exploits(phase4: dict) -> str:
             lines.append(f"    Payload: {payload}")
         if evidence:
             lines.append(f"    Evidence: {evidence[:300]}")
+    return "\n".join(lines)
+
+
+def _summarise_auth_tests(phase5: dict) -> str:
+    if not phase5:
+        return "PHASE 5 (Authenticated Testing): Not run — no credentials supplied or phase skipped."
+    errors = phase5.get("errors", [])
+    tools_run = phase5.get("tools_run", [])
+    findings = phase5.get("findings", [])
+    routes = phase5.get("authenticated_routes", [])
+    idor_attempts = phase5.get("idor_attempts", 0)
+    entropy = phase5.get("session_entropy", {})
+    cookie_audit = phase5.get("cookie_audit", [])
+    privilege_escalation = phase5.get("privilege_escalation", [])
+    rate_limit = phase5.get("rate_limit", {})
+
+    # If only errors and no data, phase effectively skipped
+    if not tools_run and not findings:
+        err_str = "; ".join(errors) if errors else "unknown reason"
+        return f"PHASE 5 (Authenticated Testing): Not run — {err_str}"
+
+    lines = ["--- PHASE 5: AUTHENTICATED & SESSION TESTING ---"]
+    lines.append(f"Tools executed: {tools_run or 'none'}")
+    lines.append(f"Authenticated routes discovered: {len(routes)}")
+    if routes:
+        lines.append(f"  Sample routes: {routes[:10]}")
+
+    lines.append(f"IDOR probe attempts: {idor_attempts}")
+
+    if entropy:
+        lines.append(
+            f"Session token entropy: avg={entropy.get('avg_shannon_entropy', 'n/a')} bits/char, "
+            f"tokens sampled={entropy.get('tokens_captured', 0)}, "
+            f"all unique={entropy.get('all_tokens_unique', 'n/a')}"
+        )
+
+    insecure_cookies = [c for c in cookie_audit if c.get("issues")]
+    if insecure_cookies:
+        lines.append(f"Cookies with flag issues ({len(insecure_cookies)}):")
+        for c in insecure_cookies[:5]:
+            lines.append(f"  Cookie '{c.get('name')}': {'; '.join(c.get('issues', []))}")
+
+    admin_accessible = [p for p in privilege_escalation if p.get("status") == 200]
+    if admin_accessible:
+        lines.append(f"Admin paths accessible with regular session: {[p['url'] for p in admin_accessible]}")
+
+    if rate_limit:
+        lines.append(
+            f"Rate limiting: {rate_limit.get('attempts', 0)} rapid auth requests sent, "
+            f"throttled={rate_limit.get('rate_limited', False)}"
+        )
+
+    if errors:
+        lines.append(f"Phase 5 errors: {errors}")
+
+    lines.append(f"Total Phase 5 findings: {len(findings)}")
+    for f in findings:
+        sev = f.get("severity", "Unknown")
+        title = f.get("title", "Unknown")
+        tool = f.get("tool", "unknown")
+        url = f.get("url", "")
+        evidence = f.get("evidence", "")
+        lines.append(f"  [{sev}] {title} (via {tool})")
+        if url:
+            lines.append(f"    URL: {url}")
+        if evidence:
+            lines.append(f"    Evidence: {evidence[:300]}")
+
     return "\n".join(lines)
 
 

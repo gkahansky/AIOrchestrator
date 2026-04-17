@@ -66,6 +66,7 @@ def run_order(audit_id: str) -> dict:
     from aiplatform.skills.storage.drive_write import drive_write
     from aiplatform.database.session import SessionLocal
     from aiplatform.database.models import SecurityAudit, Job
+    from ventures.security_audit.skills.phase5_auth_testing import run_phase5
 
     db = SessionLocal()
     audit = None
@@ -153,7 +154,50 @@ def run_order(audit_id: str) -> dict:
                 print(f"[security_audit] WARNING: Phase 4 exploit testing failed: {exc}", flush=True)
                 exploit_data = {"findings": [], "tools_run": [], "errors": [str(exc)]}
 
-        _update_status(db, audit, job, "correlating", phase=5)
+        # ── Phase 5: Authenticated & Session Testing ──────────────────────────
+        # Runs whenever auth_username and auth_login_url are both set on the
+        # audit record — regardless of tier.  Credentials must have been
+        # supplied by the customer at order time.
+        auth_data: dict = {}
+
+        if audit.auth_username and audit.auth_login_url:
+            _update_status(db, audit, job, "auth_testing", phase=5)
+            print(f"[security_audit] Phase 5 — Authenticated testing: {audit.auth_login_url}", flush=True)
+            plaintext_pw = config.decrypt_password(audit.auth_password)
+            try:
+                auth_data = run_phase5(
+                    audit=audit,
+                    db_session=db,
+                    plaintext_password=plaintext_pw,
+                )
+                audit.phase5_auth_data = _sanitize(auth_data)
+                db.commit()
+                auth_findings = len(auth_data.get("findings", []))
+                auth_routes = len(auth_data.get("authenticated_routes", []))
+                print(
+                    f"[security_audit] Phase 5 complete — "
+                    f"routes discovered: {auth_routes}, findings: {auth_findings}",
+                    flush=True,
+                )
+            except Exception as exc:
+                # Phase 5 failure must not block delivery — log and continue
+                print(
+                    f"[security_audit] WARNING: Phase 5 auth testing failed: "
+                    f"{_mask_credentials(str(exc))}",
+                    flush=True,
+                )
+                auth_data = {
+                    "findings": [],
+                    "authenticated_routes": [],
+                    "errors": [_mask_credentials(str(exc))],
+                }
+        else:
+            print(
+                "[security_audit] Phase 5 — skipped (auth_username or auth_login_url not set)",
+                flush=True,
+            )
+
+        _update_status(db, audit, job, "correlating", phase=6)
 
         # ── Phase 6: Claude Correlation + PDF ────────────────────────────────
         print(f"[security_audit] Phase 6 — Claude correlation", flush=True)
@@ -167,6 +211,7 @@ def run_order(audit_id: str) -> dict:
             "phase2_surface": surface_data,
             "phase3_vuln": vuln_data,
             "phase4_exploit": exploit_data,
+            "phase5_auth": auth_data,
         }
         report_result = generate_security_report(audit_payload, pdf_path)
 

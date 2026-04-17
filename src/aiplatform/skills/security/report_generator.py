@@ -305,6 +305,7 @@ def _build_correlation_prompt(audit_data: dict) -> str:
     phase1 = audit_data.get("phase1_recon", {})
     phase2 = audit_data.get("phase2_surface", {})
     phase3 = audit_data.get("phase3_vuln", {})
+    phase4 = audit_data.get("phase4_exploit", {})
     is_retest = audit_data.get("is_retest", False)
     retest_finding_ids = audit_data.get("retest_finding_ids", [])
     original_findings = audit_data.get("original_findings", [])
@@ -313,11 +314,12 @@ def _build_correlation_prompt(audit_data: dict) -> str:
     recon_summary = _summarise_recon(phase1)
     surface_summary = _summarise_surface(phase2)
     vuln_summary = _summarise_vulns(phase3)
+    exploit_summary = _summarise_exploits(phase4)
 
     scope_note = {
         "starter": "Phases 1–3 only (passive OSINT + surface mapping + header/TLS/CORS analysis)",
-        "professional": "All 5 phases including authenticated Playwright testing",
-        "agency": "Full scan, multi-subdomain scope, white-label output",
+        "professional": "Phases 1–4 (passive OSINT + surface mapping + vuln scan + active XSS/SQLi exploit testing)",
+        "agency": "Full scan including active exploit testing, multi-subdomain scope, white-label output",
     }.get(tier, "Phases 1–3")
 
     # Retest context block
@@ -364,6 +366,8 @@ AGGREGATED FINDINGS FROM ALL PHASES:
 {surface_summary}
 
 {vuln_summary}
+
+{exploit_summary}
 
 TASK:
 1. Deduplicate overlapping findings (same vulnerability from different phases = one finding)
@@ -510,6 +514,41 @@ def _summarise_vulns(phase3: dict) -> str:
     for f in phase3.get("findings", []):
         lines.append(f"  [{f.get('severity')}] {f.get('title')}")
 
+    return "\n".join(lines)
+
+
+def _summarise_exploits(phase4: dict) -> str:
+    if not phase4:
+        return "PHASE 4 (Exploit Testing): Not run (starter tier) or no data."
+    tools_run = phase4.get("tools_run", [])
+    tools_skipped = phase4.get("tools_skipped", [])
+    errors = phase4.get("errors", [])
+    findings = phase4.get("findings", [])
+
+    if not tools_run and not findings:
+        return "PHASE 4 (Exploit Testing): Not run (starter tier) or no data."
+
+    lines = ["--- PHASE 4: ACTIVE EXPLOIT TESTING ---"]
+    lines.append(f"Tools executed: {tools_run or 'none'}")
+    if tools_skipped:
+        lines.append(f"Tools skipped (not installed): {tools_skipped}")
+    if errors:
+        lines.append(f"Tool errors: {errors}")
+    lines.append(f"Confirmed exploit findings ({len(findings)}):")
+    for f in findings:
+        sev = f.get("severity", "Unknown")
+        title = f.get("title", f.get("type", "Unknown"))
+        tool = f.get("tool", "unknown tool")
+        url = f.get("url", f.get("target_url", ""))
+        payload = f.get("poc", f.get("payload", ""))
+        evidence = f.get("evidence", f.get("description", ""))
+        lines.append(f"  [{sev}] {title} (via {tool})")
+        if url:
+            lines.append(f"    URL: {url}")
+        if payload:
+            lines.append(f"    Payload: {payload}")
+        if evidence:
+            lines.append(f"    Evidence: {evidence[:300]}")
     return "\n".join(lines)
 
 

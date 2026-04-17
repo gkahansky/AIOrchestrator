@@ -21,7 +21,7 @@ def tool_available() -> bool:
 def run_nmap(
     target_url: str,
     scope_domain: str,
-    timeout: int = 120,
+    timeout: int = 300,
 ) -> list[dict]:
     """
     Scan the target host for open ports and service versions.
@@ -45,6 +45,8 @@ def run_nmap(
         host,
     ]
 
+    timed_out = False
+    stdout = ""
     try:
         result = subprocess.run(
             cmd,
@@ -53,12 +55,29 @@ def run_nmap(
             text=True,
             check=False,
         )
-    except subprocess.TimeoutExpired:
-        return []
+        stdout = result.stdout
+    except subprocess.TimeoutExpired as exc:
+        if exc.process:
+            exc.process.kill()
+        timed_out = True
     except Exception:
         return []
 
-    return _parse_xml(result.stdout, target_url)
+    findings = _parse_xml(stdout, target_url)
+    if timed_out:
+        findings.append({
+            "tool": "nmap",
+            "title": f"nmap scan timed out after {timeout // 60} min — partial results only",
+            "severity": "Info",
+            "category": "Scan Metadata",
+            "description": f"The nmap scan exceeded its {timeout // 60}-minute timeout. Port findings shown are partial.",
+            "url": target_url,
+            "evidence": f"Timeout after {timeout}s",
+            "cvss_estimate": 0.0,
+            "fix": "",
+            "tags": ["timeout", "scan-metadata"],
+        })
+    return findings
 
 
 def _parse_xml(xml_output: str, target_url: str) -> list[dict]:

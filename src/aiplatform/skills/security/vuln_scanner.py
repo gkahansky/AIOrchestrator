@@ -22,6 +22,7 @@ Checks:
 import re
 import socket
 import ssl
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse, urljoin
 
 import requests
@@ -95,42 +96,37 @@ def run_vuln_scan(target_url: str, scope_domain: str,
 def _run_native_tools(target_url: str, scope_domain: str,
                       work_dir: str | None, results: dict) -> None:
     """
-    Call nuclei, nmap, nikto, and testssl.sh.
+    Call nuclei, nmap, nikto, and testssl.sh concurrently (max_workers=4).
     Each is independent — failure of one does not abort the others.
+    All four tools run in parallel since they are I/O-bound and target the
+    same host independently.
     """
     tool_findings: list[dict] = []
 
-    # nuclei — broad template scan (misconfigs, CVEs, exposures, panels)
-    try:
-        nf = run_nuclei_phase3(target_url, scope_domain, work_dir=work_dir)
-        tool_findings.extend(nf)
-        results["tools_run"].append(f"nuclei ({len(nf)} findings)")
-    except Exception as exc:
-        results["errors"].append(f"nuclei: {exc}")
+    def _run_nuclei():
+        return "nuclei", run_nuclei_phase3(target_url, scope_domain, work_dir=work_dir)
 
-    # nmap — port and service discovery
-    try:
-        nf = run_nmap(target_url, scope_domain)
-        tool_findings.extend(nf)
-        results["tools_run"].append(f"nmap ({len(nf)} findings)")
-    except Exception as exc:
-        results["errors"].append(f"nmap: {exc}")
+    def _run_nmap():
+        return "nmap", run_nmap(target_url, scope_domain)
 
-    # nikto — web server misconfiguration
-    try:
-        nf = run_nikto(target_url, scope_domain, work_dir=work_dir)
-        tool_findings.extend(nf)
-        results["tools_run"].append(f"nikto ({len(nf)} findings)")
-    except Exception as exc:
-        results["errors"].append(f"nikto: {exc}")
+    def _run_nikto():
+        return "nikto", run_nikto(target_url, scope_domain, work_dir=work_dir)
 
-    # testssl.sh — comprehensive TLS audit (replaces/extends Python ssl check)
-    try:
-        nf = run_testssl(target_url, scope_domain, work_dir=work_dir)
-        tool_findings.extend(nf)
-        results["tools_run"].append(f"testssl ({len(nf)} findings)")
-    except Exception as exc:
-        results["errors"].append(f"testssl: {exc}")
+    def _run_testssl():
+        return "testssl", run_testssl(target_url, scope_domain, work_dir=work_dir)
+
+    tasks = [_run_nuclei, _run_nmap, _run_nikto, _run_testssl]
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = {executor.submit(fn): fn.__name__ for fn in tasks}
+        for future in as_completed(futures):
+            try:
+                tool_name, nf = future.result()
+                tool_findings.extend(nf)
+                results["tools_run"].append(f"{tool_name} ({len(nf)} findings)")
+            except Exception as exc:
+                fn_name = futures[future]
+                results["errors"].append(f"{fn_name}: {exc}")
 
     results["tool_findings"] = tool_findings
     # Merge into findings so Claude sees everything in one list

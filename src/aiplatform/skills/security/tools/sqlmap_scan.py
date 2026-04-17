@@ -24,7 +24,7 @@ def run_sqlmap(
     scope_domain: str,
     urls_with_params: list[str] | None = None,
     work_dir: str | None = None,
-    timeout: int = 300,
+    timeout: int = 900,
 ) -> list[dict]:
     """
     Run sqlmap to detect (not exploit) SQL injection vulnerabilities.
@@ -84,6 +84,7 @@ def _scan_url(url: str, output_dir: Path, timeout: int) -> list[dict]:
         "--no-logging",
     ]
 
+    timed_out = False
     try:
         result = subprocess.run(
             cmd,
@@ -93,12 +94,29 @@ def _scan_url(url: str, output_dir: Path, timeout: int) -> list[dict]:
             check=False,
         )
         stdout = result.stdout + result.stderr
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
+        if exc.process:
+            exc.process.kill()
+        timed_out = True
         stdout = ""
     except Exception:
         return []
 
-    return _parse_output(stdout, url)
+    findings = _parse_output(stdout, url)
+    if timed_out:
+        findings.append({
+            "tool": "sqlmap",
+            "title": f"sqlmap scan timed out after {timeout // 60} min — partial results only",
+            "severity": "Info",
+            "category": "Scan Metadata",
+            "description": f"The sqlmap scan against {url} exceeded its {timeout // 60}-minute timeout. Results shown are partial.",
+            "url": url,
+            "evidence": f"Timeout after {timeout}s",
+            "cvss_estimate": 0.0,
+            "fix": "",
+            "tags": ["timeout", "scan-metadata"],
+        })
+    return findings
 
 
 def _parse_output(output: str, url: str) -> list[dict]:

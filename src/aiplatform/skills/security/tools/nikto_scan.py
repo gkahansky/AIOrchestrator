@@ -22,7 +22,7 @@ def run_nikto(
     target_url: str,
     scope_domain: str,
     work_dir: str | None = None,
-    timeout: int = 180,
+    timeout: int = 600,
 ) -> list[dict]:
     """
     Run nikto against the target URL.
@@ -48,6 +48,7 @@ def run_nikto(
         "-Tuning", "1234589",
     ]
 
+    timed_out = False
     try:
         subprocess.run(
             cmd,
@@ -56,12 +57,28 @@ def run_nikto(
             text=True,
             check=False,
         )
-    except subprocess.TimeoutExpired:
-        pass  # Partial results are still useful
+    except subprocess.TimeoutExpired as exc:
+        if exc.process:
+            exc.process.kill()
+        timed_out = True  # Partial results are still useful
     except Exception:
         return []
 
-    return _parse_output(out_file, target_url)
+    findings = _parse_output(out_file, target_url)
+    if timed_out:
+        findings.append({
+            "tool": "nikto",
+            "title": f"nikto scan timed out after {timeout // 60} min — partial results only",
+            "severity": "Info",
+            "category": "Scan Metadata",
+            "description": f"The nikto scan exceeded its {timeout // 60}-minute timeout. Findings shown are partial.",
+            "url": target_url,
+            "evidence": f"Timeout after {timeout}s",
+            "cvss_estimate": 0.0,
+            "fix": "",
+            "tags": ["timeout", "scan-metadata"],
+        })
+    return findings
 
 
 def _parse_output(out_file: Path, target_url: str) -> list[dict]:

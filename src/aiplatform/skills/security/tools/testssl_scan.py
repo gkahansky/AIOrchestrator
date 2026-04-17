@@ -42,7 +42,7 @@ def run_testssl(
     target_url: str,
     scope_domain: str,
     work_dir: str | None = None,
-    timeout: int = 180,
+    timeout: int = 480,
 ) -> list[dict]:
     """
     Run testssl.sh against the target host:port and return TLS findings.
@@ -71,6 +71,7 @@ def run_testssl(
         target,
     ]
 
+    timed_out = False
     try:
         subprocess.run(
             cmd,
@@ -79,12 +80,28 @@ def run_testssl(
             text=True,
             check=False,
         )
-    except subprocess.TimeoutExpired:
-        pass
+    except subprocess.TimeoutExpired as exc:
+        if exc.process:
+            exc.process.kill()
+        timed_out = True
     except Exception:
         return []
 
-    return _parse_output(out_file, target_url)
+    findings = _parse_output(out_file, target_url)
+    if timed_out:
+        findings.append({
+            "tool": "testssl",
+            "title": f"testssl.sh scan timed out after {timeout // 60} min — partial results only",
+            "severity": "Info",
+            "category": "Scan Metadata",
+            "description": f"The testssl.sh scan exceeded its {timeout // 60}-minute timeout. TLS findings shown are partial.",
+            "url": target_url,
+            "evidence": f"Timeout after {timeout}s",
+            "cvss_estimate": 0.0,
+            "fix": "",
+            "tags": ["timeout", "scan-metadata"],
+        })
+    return findings
 
 
 def _parse_output(out_file: Path, target_url: str) -> list[dict]:

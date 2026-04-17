@@ -22,7 +22,7 @@ def run_dalfox(
     urls_with_params: list[str] | None = None,
     work_dir: str | None = None,
     rate_limit_ms: int = 300,
-    timeout: int = 180,
+    timeout: int = 480,
 ) -> list[dict]:
     """
     Scan for XSS vulnerabilities using dalfox.
@@ -68,6 +68,7 @@ def run_dalfox(
         "--worker", "2",             # 2 workers (low-noise)
     ]
 
+    timed_out = False
     try:
         subprocess.run(
             cmd,
@@ -76,12 +77,30 @@ def run_dalfox(
             text=True,
             check=False,
         )
-    except subprocess.TimeoutExpired:
-        pass
+    except subprocess.TimeoutExpired as exc:
+        if exc.process:
+            exc.process.kill()
+        timed_out = True
     except Exception:
         return []
 
-    return _parse_output(out_file, target_url)
+    findings = _parse_output(out_file, target_url)
+    if timed_out:
+        findings.append({
+            "tool": "dalfox",
+            "title": f"dalfox scan timed out after {timeout // 60} min — partial results only",
+            "severity": "Info",
+            "category": "Scan Metadata",
+            "description": f"The dalfox XSS scan exceeded its {timeout // 60}-minute timeout. Results shown are partial.",
+            "url": target_url,
+            "evidence": f"Timeout after {timeout}s",
+            "cvss_estimate": 0.0,
+            "fix": "",
+            "tags": ["timeout", "scan-metadata"],
+            "poc": "",
+            "param": "",
+        })
+    return findings
 
 
 def _parse_output(out_file: Path, target_url: str) -> list[dict]:

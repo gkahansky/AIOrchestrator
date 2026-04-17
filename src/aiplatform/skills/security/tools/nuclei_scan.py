@@ -44,7 +44,7 @@ def run_nuclei_phase3(
     scope_domain: str,
     work_dir: str | None = None,
     rate_limit: int = 10,
-    timeout: int = 300,
+    timeout: int = 900,
 ) -> list[dict]:
     """
     Phase 3 — safe misconfiguration + exposure scanning.
@@ -96,6 +96,7 @@ def _run(
         "-no-color",
     ]
 
+    timed_out = False
     try:
         subprocess.run(
             cmd,
@@ -104,12 +105,28 @@ def _run(
             text=True,
             check=False,
         )
-    except subprocess.TimeoutExpired:
-        pass  # Partial results are still useful
+    except subprocess.TimeoutExpired as exc:
+        if exc.process:
+            exc.process.kill()
+        timed_out = True  # Partial results are still useful
     except Exception:
         return []
 
-    return _parse_output(out_file)
+    findings = _parse_output(out_file)
+    if timed_out:
+        findings.append({
+            "tool": "nuclei",
+            "title": f"nuclei scan timed out after {timeout // 60} min — partial results only",
+            "severity": "Info",
+            "category": "Scan Metadata",
+            "description": f"The nuclei scan exceeded its {timeout // 60}-minute timeout. Findings shown are partial.",
+            "url": target_url,
+            "evidence": f"Timeout after {timeout}s",
+            "cvss_estimate": 0.0,
+            "fix": "",
+            "tags": ["timeout", "scan-metadata"],
+        })
+    return findings
 
 
 def _parse_output(out_file: Path) -> list[dict]:

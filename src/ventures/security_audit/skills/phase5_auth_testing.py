@@ -193,10 +193,11 @@ def run_phase5(
             tools_run.append("playwright:cookie_audit")
 
             # ── 3. Authenticated crawl ─────────────────────────────────────────
-            print(f"[phase5] Authenticated crawl (max {_MAX_CRAWL_PAGES} pages)", flush=True)
-            authenticated_routes, crawl_links, api_endpoints = _authenticated_crawl(
+            print(f"[phase5] Authenticated crawl (up to {_MAX_CRAWL_PAGES} pages, may be capped by load time)", flush=True)
+            authenticated_routes, crawl_links, api_endpoints, crawl_findings = _authenticated_crawl(
                 page, target_url, scope_domain,
             )
+            findings.extend(crawl_findings)
             tools_run.append("playwright:auth_crawl")
 
             # ── 4. IDOR testing ────────────────────────────────────────────────
@@ -566,16 +567,27 @@ def _authenticated_crawl(
     page,
     start_url: str,
     scope_domain: str,
-) -> tuple[list[str], list[str], list[str]]:
+) -> tuple[list[str], list[str], list[str], list[dict]]:
     """
     BFS crawl from start_url using the already-authenticated page.
-    Returns (all_visited_urls, all_links, api_endpoints).
+    Returns (all_visited_urls, all_links, api_endpoints, info_findings).
+
+    Dynamically caps the crawl based on observed average page load time
+    (measured over the first 3 pages):
+      - avg > 5 s → cap at 15 pages
+      - avg > 3 s → cap at 30 pages
+      - otherwise  → default _MAX_CRAWL_PAGES (60)
     """
     visited: set[str] = set()
     queue: deque[str] = deque([start_url])
     api_endpoints: list[str] = []
+    info_findings: list[dict] = []
 
-    while queue and len(visited) < _MAX_CRAWL_PAGES:
+    # Timing samples for the first 3 pages
+    load_times: list[float] = []
+    effective_cap = _MAX_CRAWL_PAGES
+
+    while queue and len(visited) < effective_cap:
         url = queue.popleft()
         if url in visited:
             continue
@@ -583,9 +595,43 @@ def _authenticated_crawl(
             continue
 
         try:
+            t0 = time.time()
             page.goto(url, timeout=_CRAWL_TIMEOUT_MS, wait_until="domcontentloaded")
             page.wait_for_timeout(int(_REQUEST_DELAY_S * 1000))
+            elapsed = time.time() - t0
             visited.add(url)
+
+            # Collect load time samples from the first 3 pages and set the cap
+            if len(load_times) < 3:
+                load_times.append(elapsed)
+                if len(load_times) == 3:
+                    avg_load = sum(load_times) / 3
+                    if avg_load > 5.0:
+                        effective_cap = 15
+                    elif avg_load > 3.0:
+                        effective_cap = 30
+                    else:
+                        effective_cap = _MAX_CRAWL_PAGES
+                    if effective_cap < _MAX_CRAWL_PAGES:
+                        info_findings.append({
+                            "tool": "playwright:auth_crawl",
+                            "title": f"Crawl page cap reduced to {effective_cap} — slow target response",
+                            "severity": "Info",
+                            "category": "Scan Metadata",
+                            "description": (
+                                f"Average page load time over first 3 pages: {avg_load:.2f}s. "
+                                f"Crawl depth capped at {effective_cap} pages "
+                                f"(threshold: >5s→15, >3s→30, else {_MAX_CRAWL_PAGES})."
+                            ),
+                            "url": start_url,
+                            "evidence": (
+                                f"Page load samples: {[round(t, 2) for t in load_times]}s, "
+                                f"avg={avg_load:.2f}s → cap={effective_cap}"
+                            ),
+                            "cvss_estimate": 0.0,
+                            "fix": "",
+                            "tags": ["crawl-cap", "scan-metadata"],
+                        })
 
             # Collect all links on this page
             hrefs = page.eval_on_selector_all(
@@ -604,7 +650,7 @@ def _authenticated_crawl(
         except Exception:
             visited.add(url)  # mark as visited to avoid retrying
 
-    return list(visited), list(visited), api_endpoints
+    return list(visited), list(visited), api_endpoints, info_findings
 
 
 # ── 4. IDOR testing ───────────────────────────────────────────────────────────

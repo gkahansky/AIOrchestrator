@@ -207,18 +207,15 @@ The product delivers confirmed, evidence-backed vulnerability reports — with r
 **Status: Implemented (core tools live). Extended tools planned for v1.1.**
 
 **Implemented (live):**
-- XSS confirmation (reflected, stored, DOM-based) via `dalfox` — PoC payload + affected parameter
-- SQL Injection detection via `sqlmap` (`--level=2 --risk=1`, non-destructive, `--technique=BEUS`)
-- Both tools are scoped to `scope_domain` — cannot probe out-of-scope hosts
-- Phase 4 findings are summarised into the Claude correlation prompt alongside Phases 1–3
+- Vulnerability template scan via `nuclei` (Phase 4 tags: sqli, xss, ssrf, ssti, traversal, injection, lfi, rfi, redirect)
+- XSS confirmation via `dalfox` — PoC payload + affected parameter
+- SQL injection detection via `sqlmap` (`--level=2 --risk=1`, `--technique=BEUS`)
+- JWT security analysis (pure Python) — alg:none, weak signature, missing exp, sensitive claims in payload
+- Open redirect detection — tests 17 common redirect param names; confirmed by 3xx + Location header
+- Path traversal / LFI — tests path segments and file params with `../../etc/passwd` payloads; confirmed by content match
+- SSTI detection — injects `{{7*7}}` / `${7*7}` / ERB / Mako payloads; confirmed by computed result in response
+- All tools scoped to `scope_domain`; failures are non-fatal and never block delivery
 - Gated to Professional and Agency tiers only; gracefully skipped on Starter
-
-**Planned (v1.1):**
-- SSRF, open redirect, path traversal fuzzing via `ffuf` + `qsreplace`
-- XXE and SSTI detection via custom `mitmproxy` intercept scripts
-- JWT attack suite via `jwt_tool` (alg:none, weak HMAC, missing expiry)
-- RCE and credential exposure confirmation via `nuclei` (exploit templates)
-- Subdomain takeover validation via `nuclei` (takeover templates)
 
 **Outputs:** confirmed exploits with PoC payload strings, affected parameters, tool attribution
 
@@ -562,12 +559,11 @@ These situations require human decision before the pipeline can continue:
 
 ### v1.0
 - [x] Phase 5 (Playwright authenticated testing — 8 tests: crawl, IDOR, session entropy, cookie flags, privilege escalation, business logic, mass assignment, rate limiting)
-- [x] Agency tier live (Phases 1–5, white-label placeholder, multi-subdomain config)
 - [x] Runtime optimisations — concurrent Phase 3 tools, per-tool timeouts, dynamic Phase 5 crawl depth cap
 - [x] Tests Performed section in PDF report — per-phase table covering all 5 phases
-- [ ] Phase 4 extended tools (ffuf SSRF/redirect, mitmproxy XXE/SSTI, jwt_tool, nuclei exploit templates)
-- [ ] White-label report branding (agency logo injection)
-- [ ] Multi-subdomain scope enforcement for Agency tier
+- [x] Phase 4 extended tools — nuclei exploit templates (sqli/xss/ssrf/ssti/lfi/rfi/redirect), JWT analysis, open redirect, path traversal/LFI, SSTI detection
+- [x] Agency white-label branding — logo image + name injection in PDF header and footer via `white_label_name` / `white_label_logo_url` order fields
+- [x] Multi-subdomain scope for Agency tier — Phase 3 and Phase 4 run against root + up to 4 live subdomains (5 total); findings merged and subdomain-labelled
 
 ### v1.5
 - [ ] Continuous tier with monthly delta reports

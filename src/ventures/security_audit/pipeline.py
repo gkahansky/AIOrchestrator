@@ -114,13 +114,54 @@ def run_order(audit_id: str) -> dict:
         db.commit()
 
         # ── Phase 3: Vulnerability Scan ───────────────────────────────────────
-        print(f"[security_audit] Phase 3 — Vulnerability scan: {target_url}", flush=True)
+        # Agency tier: scan root target + up to 4 live subdomains (5 total).
+        # Professional/Starter: root target only.
+        scan_targets = [target_url]
+        if tier == "agency":
+            live_subs = surface_data.get("live_subdomains", [])
+            for sub in live_subs[:4]:
+                sub_url = sub.get("url") or sub.get("subdomain")
+                if sub_url and sub_url not in scan_targets:
+                    scan_targets.append(sub_url)
+            if len(scan_targets) > 1:
+                print(
+                    f"[security_audit] Agency tier — scanning {len(scan_targets)} targets: "
+                    f"{scan_targets}",
+                    flush=True,
+                )
+
+        print(f"[security_audit] Phase 3 — Vulnerability scan: {scan_targets[0]}", flush=True)
         vuln_data = run_vuln_scan(
             target_url=target_url,
             scope_domain=domain,
             surface_data=surface_data,
             max_rps=config.MAX_REQUESTS_PER_SECOND,
         )
+        # Agency: merge findings from additional subdomain scans
+        if tier == "agency" and len(scan_targets) > 1:
+            all_findings = list(vuln_data.get("findings", []))
+            for extra_url in scan_targets[1:]:
+                print(f"[security_audit] Phase 3 — Scanning subdomain: {extra_url}", flush=True)
+                try:
+                    extra_vuln = run_vuln_scan(
+                        target_url=extra_url,
+                        scope_domain=domain,
+                        surface_data={},   # no prior surface data for subdomains
+                        max_rps=config.MAX_REQUESTS_PER_SECOND,
+                    )
+                    for f in extra_vuln.get("findings", []):
+                        f.setdefault("subdomain", extra_url)
+                        all_findings.append(f)
+                except Exception as exc:
+                    print(
+                        f"[security_audit] WARNING: Phase 3 subdomain scan failed "
+                        f"for {extra_url}: {exc}",
+                        flush=True,
+                    )
+            vuln_data = dict(vuln_data)
+            vuln_data["findings"] = all_findings
+            vuln_data["scan_targets"] = scan_targets
+
         audit.phase3_vuln_data = _sanitize(vuln_data)
         db.commit()
 
@@ -131,30 +172,58 @@ def run_order(audit_id: str) -> dict:
 
         if tier in ("professional", "agency"):
             _update_status(db, audit, job, "exploit_testing", phase=4)
-            print(f"[security_audit] Phase 4 — Exploit testing: {target_url}", flush=True)
             urls_with_params = surface_data.get("urls_with_params", [])
             exposed_paths = surface_data.get("exposed_paths", [])
-            try:
-                exploit_data = run_exploit_tests(
-                    target_url=target_url,
-                    scope_domain=domain,
-                    urls_with_params=urls_with_params or None,
-                    exposed_paths=exposed_paths or None,
-                    work_dir=str(work_dir),
-                )
-                audit.phase4_exploit_data = _sanitize(exploit_data)
-                db.commit()
-                tools_run = exploit_data.get("tools_run", [])
-                findings_count = len(exploit_data.get("findings", []))
+            all_exploit_findings: list[dict] = []
+            all_tools_run: list[str] = []
+            all_tools_skipped: list[str] = []
+            all_errors: list[str] = []
+
+            for idx, scan_url in enumerate(scan_targets):
                 print(
-                    f"[security_audit] Phase 4 complete — "
-                    f"tools: {tools_run}, findings: {findings_count}",
+                    f"[security_audit] Phase 4 — Exploit testing "
+                    f"({idx + 1}/{len(scan_targets)}): {scan_url}",
                     flush=True,
                 )
-            except Exception as exc:
-                # Phase 4 failure must not block delivery — log and continue
-                print(f"[security_audit] WARNING: Phase 4 exploit testing failed: {exc}", flush=True)
-                exploit_data = {"findings": [], "tools_run": [], "errors": [str(exc)]}
+                try:
+                    result = run_exploit_tests(
+                        target_url=scan_url,
+                        scope_domain=domain,
+                        urls_with_params=urls_with_params or None,
+                        exposed_paths=exposed_paths or None,
+                        work_dir=str(work_dir / f"p4-target-{idx}"),
+                    )
+                    for f in result.get("findings", []):
+                        f.setdefault("subdomain", scan_url if scan_url != target_url else None)
+                        all_exploit_findings.append(f)
+                    for t in result.get("tools_run", []):
+                        if t not in all_tools_run:
+                            all_tools_run.append(t)
+                    for t in result.get("tools_skipped", []):
+                        if t not in all_tools_skipped:
+                            all_tools_skipped.append(t)
+                    all_errors.extend(result.get("errors", []))
+                except Exception as exc:
+                    all_errors.append(f"{scan_url}: {exc}")
+                    print(
+                        f"[security_audit] WARNING: Phase 4 failed for {scan_url}: {exc}",
+                        flush=True,
+                    )
+
+            exploit_data = {
+                "findings": all_exploit_findings,
+                "tools_run": all_tools_run,
+                "tools_skipped": all_tools_skipped,
+                "errors": all_errors,
+                "scan_targets": scan_targets,
+            }
+            audit.phase4_exploit_data = _sanitize(exploit_data)
+            db.commit()
+            print(
+                f"[security_audit] Phase 4 complete — "
+                f"tools: {all_tools_run}, findings: {len(all_exploit_findings)}",
+                flush=True,
+            )
 
         # ── Phase 5: Authenticated & Session Testing ──────────────────────────
         # Runs whenever auth_username and auth_login_url are both set on the

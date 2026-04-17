@@ -761,9 +761,14 @@ def _summarise_vulns(phase3: dict) -> str:
                          f"{'; '.join(ck.get('issues', []))}")
 
     # Findings count
+    scan_targets = phase3.get("scan_targets", [])
+    if len(scan_targets) > 1:
+        lines.append(f"Multi-subdomain scope (Agency): {scan_targets}")
     lines.append(f"Total raw findings from Phase 3: {len(phase3.get('findings', []))}")
     for f in phase3.get("findings", []):
-        lines.append(f"  [{f.get('severity')}] {f.get('title')}")
+        sub = f.get("subdomain")
+        sub_note = f" [{sub}]" if sub else ""
+        lines.append(f"  [{f.get('severity')}] {f.get('title')}{sub_note}")
 
     return "\n".join(lines)
 

@@ -291,6 +291,8 @@ def _correlate_with_claude(audit_data: dict, model: str) -> dict:
     report.setdefault("strategic", [])
     report.setdefault("overall_risk_score", 0)
     report.setdefault("is_retest", audit_data.get("is_retest", False))
+    report["white_label_name"] = audit_data.get("white_label_name", "") or ""
+    report["white_label_logo_url"] = audit_data.get("white_label_logo_url", "") or ""
 
     # Backfill compliance for any finding that Claude did not annotate
     for finding in report.get("findings", []):
@@ -1091,6 +1093,39 @@ def _inject_report_data(html: str, data: dict) -> str:
             '</div>'
         )
 
+    # White-label branding
+    wl_name = data.get("white_label_name", "").strip()
+    wl_logo = data.get("white_label_logo_url", "").strip()
+    if wl_name:
+        brand_name = _html_escape(wl_name)
+        if wl_logo:
+            brand_logo_html = (
+                f'<img src="{_html_escape(wl_logo)}" '
+                f'alt="{brand_name}" '
+                f'style="max-height:32px;max-width:140px;object-fit:contain;vertical-align:middle">'
+            )
+        else:
+            brand_logo_html = (
+                f'<div class="relative flex items-center justify-center w-8 h-8 '
+                f'rounded-lg bg-white/10 overflow-hidden">'
+                f'<span class="text-white font-bold text-lg">'
+                f'{_html_escape(wl_name[0].upper())}'
+                f'</span></div>'
+            )
+    else:
+        brand_name = "EchoForge"
+        brand_logo_html = (
+            '<div class="relative flex items-center justify-center w-8 h-8 '
+            'rounded-lg bg-white/10 overflow-hidden">'
+            '<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" '
+            'viewBox="0 0 24 24" stroke-width="2.5">'
+            '<path stroke-linecap="round" stroke-linejoin="round" '
+            'd="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 '
+            '11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 '
+            '9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>'
+            '</svg></div>'
+        )
+
     # Tests performed section
     tests_rows = data.get("tests_summary", [])
     phase_labels = {
@@ -1157,6 +1192,8 @@ def _inject_report_data(html: str, data: dict) -> str:
         "{{ total_findings }}": str(len(findings)),
         "{{ retest_banner_html }}": retest_banner_html,
         "{{ tests_performed_html }}": tests_performed_html,
+        "{{ brand_name }}": brand_name,
+        "{{ brand_logo_html }}": brand_logo_html,
     }
 
     for k, v in replacements.items():

@@ -214,6 +214,9 @@ def run_order(audit_id: str) -> dict:
             "phase3_vuln": vuln_data,
             "phase4_exploit": exploit_data,
             "phase5_auth": auth_data,
+            # White-label branding — sourced from input_data (set at order creation)
+            "white_label_name": input_data.get("white_label_name", ""),
+            "white_label_logo_url": input_data.get("white_label_logo_url", ""),
         }
         report_result = generate_security_report(audit_payload, pdf_path)
 

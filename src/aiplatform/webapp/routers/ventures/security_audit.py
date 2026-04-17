@@ -40,6 +40,9 @@ class SecurityAuditOrderRequest(BaseModel):
     auth_username: str | None = None
     auth_password: str | None = None
     auth_login_url: str | None = None
+    # White-label branding (agency tier) — replaces EchoForge name/logo in PDF
+    white_label_name: str | None = None        # e.g. "Acme Security"
+    white_label_logo_url: str | None = None    # publicly accessible image URL
 
 class SecurityAuditOrderResponse(BaseModel):
     audit_id: str
@@ -139,6 +142,8 @@ def create_security_audit_order(
         "tos_accepted_at": datetime.now(timezone.utc).isoformat() if req.tos_accepted else None,
         "scope_token": scope_token,
         "status": "scope_pending",
+        "white_label_name": req.white_label_name or "",
+        "white_label_logo_url": req.white_label_logo_url or "",
     }
 
     job = Job(

@@ -133,11 +133,13 @@ def run_order(audit_id: str) -> dict:
             _update_status(db, audit, job, "exploit_testing", phase=4)
             print(f"[security_audit] Phase 4 — Exploit testing: {target_url}", flush=True)
             urls_with_params = surface_data.get("urls_with_params", [])
+            exposed_paths = surface_data.get("exposed_paths", [])
             try:
                 exploit_data = run_exploit_tests(
                     target_url=target_url,
                     scope_domain=domain,
                     urls_with_params=urls_with_params or None,
+                    exposed_paths=exposed_paths or None,
                     work_dir=str(work_dir),
                 )
                 audit.phase4_exploit_data = _sanitize(exploit_data)

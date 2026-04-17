@@ -416,9 +416,20 @@ def _build_tests_summary(audit_data: dict) -> list[dict]:
 
     # ── Phase 4 (professional / agency only) ─────────────────────────────────
     if tier in ("professional", "agency"):
-        xss_findings = [f for f in phase4.get("findings", []) if f.get("tool") == "dalfox"]
         tools_run = phase4.get("tools_run", [])
+
+        nuclei_run = "nuclei-exploit" in tools_run
+        nuclei_findings = [f for f in phase4.get("findings", []) if f.get("tool") == "nuclei"]
+        rows.append({
+            "phase": "4", "name": "Vulnerability Templates — exploit (nuclei)",
+            "detail": (f"{len(nuclei_findings)} confirmed finding(s)" if nuclei_run
+                       else "Tool not available"),
+            "issues": len(nuclei_findings),
+            "skipped": not nuclei_run,
+        })
+
         dalfox_run = "dalfox" in tools_run
+        xss_findings = [f for f in phase4.get("findings", []) if f.get("tool") == "dalfox"]
         rows.append({
             "phase": "4", "name": "XSS Confirmation (dalfox)",
             "detail": (f"{len(xss_findings)} confirmed XSS finding(s)" if dalfox_run
@@ -427,14 +438,35 @@ def _build_tests_summary(audit_data: dict) -> list[dict]:
             "skipped": not dalfox_run,
         })
 
-        sqli_findings = [f for f in phase4.get("findings", []) if f.get("tool") == "sqlmap"]
         sqlmap_run = "sqlmap" in tools_run
+        sqli_findings = [f for f in phase4.get("findings", []) if f.get("tool") == "sqlmap"]
         rows.append({
             "phase": "4", "name": "SQL Injection Detection (sqlmap)",
             "detail": (f"{len(sqli_findings)} confirmed SQLi finding(s)" if sqlmap_run
                        else "Tool not available"),
             "issues": len(sqli_findings),
             "skipped": not sqlmap_run,
+        })
+
+        jwt_run = "jwt_scan" in tools_run
+        jwt_findings = [f for f in phase4.get("findings", []) if f.get("tool") == "jwt_scan"]
+        rows.append({
+            "phase": "4", "name": "JWT Security Analysis",
+            "detail": (f"{len(jwt_findings)} JWT issue(s) found" if jwt_run
+                       else "Not run"),
+            "issues": len(jwt_findings),
+        })
+
+        redirect_run = "ssrf_redirect_scan" in tools_run
+        redirect_findings = [
+            f for f in phase4.get("findings", [])
+            if f.get("tool") in ("redirect_scan", "ssti_scan")
+        ]
+        rows.append({
+            "phase": "4", "name": "Open Redirect / Path Traversal / SSTI",
+            "detail": (f"{len(redirect_findings)} finding(s)" if redirect_run
+                       else "Not run"),
+            "issues": len(redirect_findings),
         })
 
     # ── Phase 5 (professional / agency, only when credentials supplied) ───────
@@ -745,7 +777,7 @@ def _summarise_exploits(phase4: dict) -> str:
     if not tools_run and not findings:
         return "PHASE 4 (Exploit Testing): Not run (starter tier) or no data."
 
-    lines = ["--- PHASE 4: ACTIVE EXPLOIT TESTING ---"]
+    lines = ["--- PHASE 4: ACTIVE EXPLOIT TESTING (nuclei, dalfox, sqlmap, jwt_scan, redirect/SSTI) ---"]
     lines.append(f"Tools executed: {tools_run or 'none'}")
     if tools_skipped:
         lines.append(f"Tools skipped (not installed): {tools_skipped}")

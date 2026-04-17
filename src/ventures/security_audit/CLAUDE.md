@@ -1,6 +1,6 @@
 # Echoforge — Security Audit Venture
 **Venture ID:** `security-audit`
-**Status:** Planning
+**Status:** Active — MVP deployed, Phase 4 (dalfox + sqlmap) live
 **Last Updated:** April 2026
 
 ---
@@ -201,19 +201,26 @@ The product delivers confirmed, evidence-backed vulnerability reports — with r
 
 ---
 
-### Phase 4 — Deep Exploitation Testing
-*The phase that separates this product from cheap scan PDFs. Every finding is actively confirmed with a real PoC.*
+### Phase 4 — Active Exploit Testing
+*The phase that separates this product from cheap scan PDFs. Findings are actively confirmed with real PoC payloads.*
 
-**Tasks:**
-- SQL Injection confirmation and schema extraction via `sqlmap` (custom tamper scripts)
-- XSS confirmation (reflected, stored, DOM-based) via `dalfox`
+**Status: Implemented (core tools live). Extended tools planned for v1.1.**
+
+**Implemented (live):**
+- XSS confirmation (reflected, stored, DOM-based) via `dalfox` — PoC payload + affected parameter
+- SQL Injection detection via `sqlmap` (`--level=2 --risk=1`, non-destructive, `--technique=BEUS`)
+- Both tools are scoped to `scope_domain` — cannot probe out-of-scope hosts
+- Phase 4 findings are summarised into the Claude correlation prompt alongside Phases 1–3
+- Gated to Professional and Agency tiers only; gracefully skipped on Starter
+
+**Planned (v1.1):**
 - SSRF, open redirect, path traversal fuzzing via `ffuf` + `qsreplace`
 - XXE and SSTI detection via custom `mitmproxy` intercept scripts
 - JWT attack suite via `jwt_tool` (alg:none, weak HMAC, missing expiry)
-- RCE, auth bypass, and credential exposure confirmation via `nuclei` (exploit templates)
+- RCE and credential exposure confirmation via `nuclei` (exploit templates)
 - Subdomain takeover validation via `nuclei` (takeover templates)
 
-**Outputs:** confirmed exploits with request/response PoC pairs, payload strings, Playwright screenshots of impact
+**Outputs:** confirmed exploits with PoC payload strings, affected parameters, tool attribution
 
 ---
 
@@ -236,6 +243,8 @@ The product delivers confirmed, evidence-backed vulnerability reports — with r
 
 ### Phase 6 — AI Correlation & Report Generation
 *Claude API receives the full aggregated findings JSON and produces the analyst-grade report.*
+
+**Input data passed to Claude (all phases):** `phase1_recon`, `phase2_surface`, `phase3_vuln`, `phase4_exploit` — each summarised by a dedicated helper in `report_generator.py` (`_summarise_recon`, `_summarise_surface`, `_summarise_vulns`, `_summarise_exploits`).
 
 **Tasks:**
 - Deduplicate overlapping findings from different phases
@@ -325,9 +334,9 @@ The product delivers confirmed, evidence-backed vulnerability reports — with r
 
 #### Professional — $149
 *For startups and SMBs needing compliance-ready evidence*
-- Grey-box (credentials supplied for authenticated testing)
+- Black-box + active exploit testing (no authenticated testing until Phase 5 ships)
 - 1 domain, unlimited endpoints
-- All 5 active phases including Playwright authenticated testing
+- Phases 1–4: OSINT + surface mapping + vuln scan + confirmed XSS/SQLi PoC
 - Full PDF report: attack chains, PoC evidence, remediation roadmap
 - Turnaround: under 6 hours
 - 2 free retests within 60 days
@@ -545,15 +554,16 @@ These situations require human decision before the pipeline can continue:
 - [x] Claude token limit fix — 16K tokens + extended output beta + JSON repair for truncated responses
 - [x] Admin UI — Security Audit venture card, order form, order detail, scope panel, review gate
 - [x] Backend domain validation on `verification_email` (subdomain support)
+- [x] Phase 4 core exploit testing — dalfox (XSS PoC) + sqlmap (SQLi detection); gated to pro/agency; Phase 4 findings wired into Claude correlation prompt (`_summarise_exploits`)
+- [x] Professional tier live — Phases 1–4, confirmed XSS/SQLi PoC, full PDF report
 - [ ] echoforge.biz public order page (`order-security/index.html`) — see Section 13
 - [ ] Cloudflare Function proxy (`functions/api/security-audit/create-order.js`)
 - [ ] Starter tier live on Fiverr ($49, black-box)
 
 ### v1.0
-- [ ] Phase 4 (deep exploitation with PoC capture)
-- [ ] Phase 5 (Playwright authenticated testing)
-- [ ] Professional tier ($149, grey-box)
-- [ ] Agency tier + white-label reports
+- [ ] Phase 4 extended tools (ffuf SSRF/redirect, mitmproxy XXE/SSTI, jwt_tool, nuclei exploit templates)
+- [ ] Phase 5 (Playwright authenticated testing — grey-box, requires customer credentials)
+- [ ] Agency tier + white-label reports + multi-subdomain scope
 
 ### v1.5
 - [ ] Continuous tier with monthly delta reports

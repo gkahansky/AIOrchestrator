@@ -129,6 +129,17 @@
         <p class="text-base text-on-surface-variant font-light max-w-3xl leading-relaxed">{{ executive_summary }}</p>
     </section>
 
+    <!-- Tests Performed -->
+    <section class="space-y-5">
+        <div class="flex justify-between items-baseline border-b border-surface-container pb-4">
+            <h2 class="text-3xl font-headline font-semibold text-primary">Tests <span class="italic font-medium">Performed</span></h2>
+            <p class="font-label text-[9px] uppercase tracking-widest text-outline">Phase · Type · Issues Found</p>
+        </div>
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container p-6 shadow-sm">
+            {{ tests_performed_html }}
+        </div>
+    </section>
+
     <!-- Findings -->
     <section class="space-y-8" id="findings">
         <div class="flex justify-between items-baseline border-b border-surface-container pb-4">
@@ -182,7 +193,8 @@
         <p class="text-on-surface-variant font-light leading-relaxed">
             <strong>Phase 1 — Passive OSINT:</strong> certificate transparency, DNS analysis, historical URL corpus, email security (SPF/DMARC).<br/>
             <strong>Phase 2 — Surface Mapping:</strong> live endpoint discovery, technology fingerprinting, sensitive path probing.<br/>
-            <strong>Phase 3 — Vulnerability Analysis:</strong> HTTP security headers, TLS configuration, CORS, cookie flags, information disclosure.
+            <strong>Phase 3 — Vulnerability Analysis:</strong> HTTP security headers, TLS configuration, CORS, cookie flags, nuclei template scan, nikto misconfiguration checks.<br/>
+            <strong>Phase 4 — Active Exploit Testing (Professional/Agency):</strong> confirmed XSS via dalfox, SQL injection detection via sqlmap — scoped to target domain only.
         </p>
     </section>
 

@@ -204,6 +204,7 @@ def generate_security_report(
          "findings_count": int, "risk_score": int}
     """
     report_data = _correlate_with_claude(audit_data, model)
+    report_data["tests_summary"] = _build_tests_summary(audit_data)
     pdf_path = _render_pdf(report_data, output_path)
     size = Path(pdf_path).stat().st_size
 
@@ -297,6 +298,147 @@ def _correlate_with_claude(audit_data: dict, model: str) -> dict:
             finding["compliance"] = _lookup_compliance(finding.get("category", ""))
 
     return report
+
+
+def _build_tests_summary(audit_data: dict) -> list[dict]:
+    """
+    Derive a per-test-type summary (name, phase, issue count, detail) from raw phase data.
+    Injected into report_data before PDF rendering so _inject_report_data can render it.
+    """
+    tier = audit_data.get("tier", "starter")
+    phase1 = audit_data.get("phase1_recon", {})
+    phase2 = audit_data.get("phase2_surface", {})
+    phase3 = audit_data.get("phase3_vuln", {})
+    phase4 = audit_data.get("phase4_exploit", {})
+
+    rows: list[dict] = []
+
+    # ── Phase 1 ───────────────────────────────────────────────────────────────
+    subdomain_count = len(phase1.get("subdomains", []))
+    rows.append({
+        "phase": "1", "name": "Subdomain & DNS Enumeration",
+        "detail": f"{subdomain_count} subdomain(s) discovered",
+        "issues": 1 if subdomain_count > 0 else 0,
+    })
+
+    spf_issues = phase1.get("spf_dmarc", {}).get("issues", [])
+    rows.append({
+        "phase": "1", "name": "Email Security (SPF / DMARC)",
+        "detail": f"{len(spf_issues)} misconfiguration(s)" if spf_issues else "Pass",
+        "issues": len(spf_issues),
+    })
+
+    breaches = phase1.get("breach_info", {}).get("breaches_found", 0)
+    rows.append({
+        "phase": "1", "name": "Credential Breach Check (HIBP)",
+        "detail": f"{breaches} breach(es) found" if breaches else "No breaches found",
+        "issues": min(breaches, 1),  # cap at 1 — it's one finding type
+    })
+
+    wayback = len(phase1.get("wayback_urls", []))
+    rows.append({
+        "phase": "1", "name": "Historical URL Corpus (Wayback)",
+        "detail": f"{wayback} historical endpoint(s) indexed",
+        "issues": 0,
+    })
+
+    # ── Phase 2 ───────────────────────────────────────────────────────────────
+    exposed = [p for p in phase2.get("exposed_paths", [])
+               if p.get("severity", "").lower() not in ("info", "informational", "")]
+    rows.append({
+        "phase": "2", "name": "Path & File Exposure (ffuf)",
+        "detail": f"{len(exposed)} sensitive path(s) found",
+        "issues": len(exposed),
+    })
+
+    tech = phase2.get("tech_stack", [])
+    rows.append({
+        "phase": "2", "name": "Technology Fingerprinting",
+        "detail": ", ".join(tech[:5]) if tech else "Unknown",
+        "issues": 0,
+    })
+
+    live_subs = phase2.get("live_subdomains", [])
+    rows.append({
+        "phase": "2", "name": "Live Subdomain Confirmation",
+        "detail": f"{len(live_subs)} live subdomain(s)",
+        "issues": 0,
+    })
+
+    # ── Phase 3 ───────────────────────────────────────────────────────────────
+    header_audit = phase3.get("header_audit", {})
+    failed_headers = [
+        h for h, d in header_audit.items()
+        if not h.startswith("_") and d.get("severity", "").lower() not in ("pass", "")
+    ]
+    rows.append({
+        "phase": "3", "name": "HTTP Security Headers",
+        "detail": f"{len(failed_headers)} header(s) missing or misconfigured"
+                  if failed_headers else "All headers present",
+        "issues": len(failed_headers),
+    })
+
+    leak_hdrs = header_audit.get("_info_leak_headers", {})
+    rows.append({
+        "phase": "3", "name": "Server Version Disclosure",
+        "detail": f"{len(leak_hdrs)} version-leaking header(s)" if leak_hdrs else "Pass",
+        "issues": len(leak_hdrs),
+    })
+
+    tls_issues = phase3.get("tls_audit", {}).get("issues", [])
+    rows.append({
+        "phase": "3", "name": "TLS / SSL Configuration (testssl.sh)",
+        "detail": f"{len(tls_issues)} TLS issue(s)" if tls_issues else "Pass",
+        "issues": len(tls_issues),
+    })
+
+    cors_issues = phase3.get("cors_issues", [])
+    rows.append({
+        "phase": "3", "name": "CORS Policy",
+        "detail": f"{len(cors_issues)} misconfiguration(s)" if cors_issues else "Pass",
+        "issues": len(cors_issues),
+    })
+
+    cookie_issues = phase3.get("cookie_issues", [])
+    rows.append({
+        "phase": "3", "name": "Cookie Security Flags",
+        "detail": f"{len(cookie_issues)} cookie(s) with missing flags"
+                  if cookie_issues else "Pass",
+        "issues": len(cookie_issues),
+    })
+
+    nuclei_findings = phase3.get("findings", [])
+    rows.append({
+        "phase": "3", "name": "Vulnerability Templates (nuclei / nikto)",
+        "detail": f"{len(nuclei_findings)} finding(s) flagged",
+        "issues": len(nuclei_findings),
+    })
+
+    # ── Phase 4 (professional / agency only) ─────────────────────────────────
+    if tier in ("professional", "agency"):
+        xss_findings = [f for f in phase4.get("findings", []) if f.get("tool") == "dalfox"]
+        tools_run = phase4.get("tools_run", [])
+        skipped = phase4.get("tools_skipped", [])
+        dalfox_run = "dalfox" in tools_run
+        rows.append({
+            "phase": "4", "name": "XSS Confirmation (dalfox)",
+            "detail": (f"{len(xss_findings)} confirmed XSS finding(s)" if dalfox_run
+                       else "Tool not available"),
+            "issues": len(xss_findings),
+            "skipped": not dalfox_run,
+        })
+
+        sqli_findings = [f for f in phase4.get("findings", []) if f.get("tool") == "sqlmap"]
+        sqlmap_run = "sqlmap" in tools_run
+        rows.append({
+            "phase": "4", "name": "SQL Injection Detection (sqlmap)",
+            "detail": (f"{len(sqli_findings)} confirmed SQLi finding(s)" if sqlmap_run
+                       else "Tool not available"),
+            "issues": len(sqli_findings),
+            "skipped": not sqlmap_run,
+        })
+
+    return rows
 
 
 def _build_correlation_prompt(audit_data: dict) -> str:
@@ -846,6 +988,55 @@ def _inject_report_data(html: str, data: dict) -> str:
             '</div>'
         )
 
+    # Tests performed section
+    tests_rows = data.get("tests_summary", [])
+    phase_labels = {
+        "1": ("Passive Recon", "bg-blue-50 text-blue-700"),
+        "2": ("Surface Mapping", "bg-indigo-50 text-indigo-700"),
+        "3": ("Vuln Scan", "bg-purple-50 text-purple-700"),
+        "4": ("Exploit Testing", "bg-red-50 text-red-700"),
+    }
+    test_rows_html = ""
+    for row in tests_rows:
+        phase = str(row.get("phase", ""))
+        p_label, p_cls = phase_labels.get(phase, ("", "bg-surface-container text-on-surface-variant"))
+        issues = row.get("issues", 0)
+        skipped = row.get("skipped", False)
+        issue_cls = (
+            "text-red-600 font-bold" if issues > 0
+            else "text-green-600 font-semibold"
+        )
+        issue_text = (
+            "—" if skipped
+            else (str(issues) + " issue" + ("s" if issues != 1 else "") if issues > 0 else "Pass")
+        )
+        test_rows_html += f"""
+        <tr class="border-b border-surface-container last:border-0">
+            <td class="py-2 pr-4">
+                <span class="text-[10px] font-label font-bold px-2 py-0.5 rounded {p_cls}">{_html_escape(p_label)}</span>
+            </td>
+            <td class="py-2 pr-4 text-xs font-body text-on-surface font-medium">{_html_escape(row.get('name', ''))}</td>
+            <td class="py-2 pr-4 text-xs text-on-surface-variant">{_html_escape(row.get('detail', ''))}</td>
+            <td class="py-2 text-xs {issue_cls}">{issue_text}</td>
+        </tr>"""
+
+    tests_performed_html = ""
+    if test_rows_html:
+        tests_performed_html = f"""
+        <div class="overflow-x-auto">
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="border-b-2 border-surface-container">
+                        <th class="pb-2 text-[9px] font-label uppercase tracking-widest text-outline pr-4">Phase</th>
+                        <th class="pb-2 text-[9px] font-label uppercase tracking-widest text-outline pr-4">Test Type</th>
+                        <th class="pb-2 text-[9px] font-label uppercase tracking-widest text-outline pr-4">Result</th>
+                        <th class="pb-2 text-[9px] font-label uppercase tracking-widest text-outline">Issues</th>
+                    </tr>
+                </thead>
+                <tbody>{test_rows_html}</tbody>
+            </table>
+        </div>"""
+
     replacements = {
         "{{ target_url }}": _html_escape(data.get("target_url", "")),
         "{{ target_domain }}": _html_escape(data.get("target_domain", "")),
@@ -861,6 +1052,7 @@ def _inject_report_data(html: str, data: dict) -> str:
         "{{ roadmap_html }}": roadmap_html,
         "{{ total_findings }}": str(len(findings)),
         "{{ retest_banner_html }}": retest_banner_html,
+        "{{ tests_performed_html }}": tests_performed_html,
     }
 
     for k, v in replacements.items():

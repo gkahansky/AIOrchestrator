@@ -1,6 +1,6 @@
 # Echoforge — Security Audit Venture
 **Venture ID:** `security-audit`
-**Status:** Active — MVP deployed, Phase 4 (dalfox + sqlmap) live
+**Status:** Active — Phases 1–5 live, full report pipeline complete
 **Last Updated:** April 2026
 
 ---
@@ -334,9 +334,9 @@ The product delivers confirmed, evidence-backed vulnerability reports — with r
 
 #### Professional — $149
 *For startups and SMBs needing compliance-ready evidence*
-- Black-box + active exploit testing (no authenticated testing until Phase 5 ships)
+- Grey-box (optional credentials for authenticated testing via Phase 5)
 - 1 domain, unlimited endpoints
-- Phases 1–4: OSINT + surface mapping + vuln scan + confirmed XSS/SQLi PoC
+- Phases 1–4 always; Phase 5 runs when credentials supplied: authenticated crawl, IDOR, session entropy, cookie flags, privilege escalation, business logic, mass assignment, rate limiting
 - Full PDF report: attack chains, PoC evidence, remediation roadmap
 - Turnaround: under 6 hours
 - 2 free retests within 60 days
@@ -561,9 +561,13 @@ These situations require human decision before the pipeline can continue:
 - [ ] Starter tier live on Fiverr ($49, black-box)
 
 ### v1.0
+- [x] Phase 5 (Playwright authenticated testing — 8 tests: crawl, IDOR, session entropy, cookie flags, privilege escalation, business logic, mass assignment, rate limiting)
+- [x] Agency tier live (Phases 1–5, white-label placeholder, multi-subdomain config)
+- [x] Runtime optimisations — concurrent Phase 3 tools, per-tool timeouts, dynamic Phase 5 crawl depth cap
+- [x] Tests Performed section in PDF report — per-phase table covering all 5 phases
 - [ ] Phase 4 extended tools (ffuf SSRF/redirect, mitmproxy XXE/SSTI, jwt_tool, nuclei exploit templates)
-- [ ] Phase 5 (Playwright authenticated testing — grey-box, requires customer credentials)
-- [ ] Agency tier + white-label reports + multi-subdomain scope
+- [ ] White-label report branding (agency logo injection)
+- [ ] Multi-subdomain scope enforcement for Agency tier
 
 ### v1.5
 - [ ] Continuous tier with monthly delta reports

@@ -418,7 +418,6 @@ def _build_tests_summary(audit_data: dict) -> list[dict]:
     if tier in ("professional", "agency"):
         xss_findings = [f for f in phase4.get("findings", []) if f.get("tool") == "dalfox"]
         tools_run = phase4.get("tools_run", [])
-        skipped = phase4.get("tools_skipped", [])
         dalfox_run = "dalfox" in tools_run
         rows.append({
             "phase": "4", "name": "XSS Confirmation (dalfox)",
@@ -436,6 +435,78 @@ def _build_tests_summary(audit_data: dict) -> list[dict]:
                        else "Tool not available"),
             "issues": len(sqli_findings),
             "skipped": not sqlmap_run,
+        })
+
+    # ── Phase 5 (professional / agency, only when credentials supplied) ───────
+    phase5 = audit_data.get("phase5_auth", {})
+    if phase5 and tier in ("professional", "agency"):
+        auth_routes = phase5.get("authenticated_routes", [])
+        rows.append({
+            "phase": "5", "name": "Authenticated Crawl (Playwright)",
+            "detail": f"{len(auth_routes)} authenticated route(s) discovered",
+            "issues": 0,
+        })
+
+        idor_attempts = phase5.get("idor_attempts", 0)
+        idor_findings = [f for f in phase5.get("findings", []) if "idor" in f.get("tags", [])]
+        rows.append({
+            "phase": "5", "name": "IDOR / Access Control (object ID probing)",
+            "detail": (f"{idor_attempts} probes — {len(idor_findings)} IDOR finding(s)"
+                       if idor_attempts else "No parametric routes found"),
+            "issues": len(idor_findings),
+        })
+
+        entropy = phase5.get("session_entropy", {})
+        entropy_findings = [f for f in phase5.get("findings", []) if "session" in f.get("tags", [])]
+        rows.append({
+            "phase": "5", "name": "Session Token Entropy",
+            "detail": (f"avg entropy {entropy.get('avg_entropy_bits', 0):.1f} bits "
+                       f"({entropy.get('tokens_captured', 0)} token(s) sampled)"
+                       if entropy.get("tokens_captured") else "No session tokens captured"),
+            "issues": len(entropy_findings),
+        })
+
+        cookie_issues_p5 = [c for c in phase5.get("cookie_audit", []) if c.get("issues")]
+        rows.append({
+            "phase": "5", "name": "Cookie Flags (authenticated session)",
+            "detail": (f"{len(cookie_issues_p5)} cookie(s) with missing flags"
+                       if cookie_issues_p5 else "Pass"),
+            "issues": len(cookie_issues_p5),
+        })
+
+        priv_esc = [p for p in phase5.get("privilege_escalation", []) if p.get("status") == 200]
+        rows.append({
+            "phase": "5", "name": "Privilege Escalation (admin path probing)",
+            "detail": (f"{len(priv_esc)} admin path(s) accessible without elevation"
+                       if priv_esc else "Pass"),
+            "issues": len(priv_esc),
+        })
+
+        bl_findings = [f for f in phase5.get("findings", []) if "business-logic" in f.get("tags", [])]
+        rows.append({
+            "phase": "5", "name": "Business Logic (price tampering)",
+            "detail": (f"{len(bl_findings)} manipulation(s) accepted"
+                       if bl_findings else "Pass"),
+            "issues": len(bl_findings),
+        })
+
+        ma_findings = [f for f in phase5.get("findings", []) if "mass-assignment" in f.get("tags", [])]
+        rows.append({
+            "phase": "5", "name": "Mass Assignment (extra field injection)",
+            "detail": (f"{len(ma_findings)} endpoint(s) vulnerable"
+                       if ma_findings else "Pass"),
+            "issues": len(ma_findings),
+        })
+
+        rl = phase5.get("rate_limit", {})
+        rl_findings = [f for f in phase5.get("findings", []) if "rate-limiting" in f.get("tags", [])]
+        rows.append({
+            "phase": "5", "name": "Rate Limiting (brute-force resistance)",
+            "detail": (f"No throttling detected after {rl.get('attempts', 0)} rapid attempts"
+                       if rl_findings else
+                       f"Rate limiting present ({rl.get('throttle_responses', 0)} throttled responses)"
+                       if rl.get("attempts") else "Not tested"),
+            "issues": len(rl_findings),
         })
 
     return rows
@@ -995,6 +1066,7 @@ def _inject_report_data(html: str, data: dict) -> str:
         "2": ("Surface Mapping", "bg-indigo-50 text-indigo-700"),
         "3": ("Vuln Scan", "bg-purple-50 text-purple-700"),
         "4": ("Exploit Testing", "bg-red-50 text-red-700"),
+        "5": ("Auth Testing", "bg-orange-50 text-orange-700"),
     }
     test_rows_html = ""
     for row in tests_rows:

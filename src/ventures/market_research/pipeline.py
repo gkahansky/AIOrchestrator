@@ -18,17 +18,17 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from src.aiplatform.database.models import MarketResearch
-from src.aiplatform.skills.research.multi_llm_research import (
+from aiplatform.database.models import MarketResearch
+from aiplatform.skills.research.multi_llm_research import (
     run_parallel_research_sync,
     available_llms,
     _call_claude,
 )
-from src.aiplatform.skills.research.rag_store import retrieve_context
-from src.aiplatform.skills.packaging.generate_pdf import generate_pdf_from_html
-from src.aiplatform.skills.storage.drive_write import upload_file
-from src.aiplatform.skills.comms.send_email import send_email
-from src.ventures.market_research.config import (
+from aiplatform.skills.research.rag_store import retrieve_context
+from aiplatform.skills.packaging.generate_pdf import generate_pdf_from_html
+from aiplatform.skills.storage.drive_write import upload_file
+from aiplatform.skills.comms.send_email import send_email
+from ventures.market_research.config import (
     RESEARCH_ANGLES,
     PROMPT_OPTIMIZER_SYSTEM,
     MERGE_SYSTEM,
@@ -127,7 +127,7 @@ def _critic_review(topic: str, merged: str, critic_llm: str, optimized_prompts: 
         f"Merged report to review:\n{merged}"
     )
 
-    from src.aiplatform.skills.research.multi_llm_research import (
+    from aiplatform.skills.research.multi_llm_research import (
         _call_claude, _call_openai, _call_gemini, _call_grok,
     )
     callers = {

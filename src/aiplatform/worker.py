@@ -111,6 +111,18 @@ celery_app.conf.update(
         #     "schedule": 900,
         #     "options": {"expires": 300},
         # },
+        # Hourly — fetch spend from vendor APIs; auto-pause campaigns that hit 100% budget
+        "campaign-budget-monitor": {
+            "task": "platform.monitor_campaign_budgets",
+            "schedule": 3600,            # 1 hour
+            "options": {"expires": 600},
+        },
+        # Weekly — AI insight engine for all active campaigns
+        "campaign-weekly-insights": {
+            "task": "platform.generate_campaign_insights",
+            "schedule": 604800,          # 7 days
+            "options": {"expires": 3600},
+        },
     },
     beat_schedule_filename="/tmp/celerybeat-schedule",
 )
@@ -1265,6 +1277,121 @@ def run_send_outreach(self, campaign_id: str, lead_ids: list | None = None, temp
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc, countdown=60)
         raise
+    finally:
+        db.close()
+
+
+# ── Campaign Manager ──────────────────────────────────────────────────────────
+
+@celery_app.task(name="platform.monitor_campaign_budgets")
+def monitor_campaign_budgets() -> dict:
+    """
+    Hourly beat task: fetch spend from vendor APIs for all active campaigns.
+    Records a MetricsHistory snapshot and auto-pauses any campaign at/over 100% budget.
+    """
+    from decimal import Decimal
+    from aiplatform.database.session import SessionLocal
+    from aiplatform.database.models import Campaign, MetricsHistory
+    from aiplatform.skills.ads.meta_ads_adapter import get_adapter
+
+    db = SessionLocal()
+    try:
+        active = db.query(Campaign).filter(
+            Campaign.status == "active",
+            Campaign.external_id.isnot(None),
+        ).all()
+
+        paused_count = 0
+        snapshot_count = 0
+        for campaign in active:
+            try:
+                adapter = get_adapter(campaign.vendor)
+                if not adapter.is_configured():
+                    continue
+                stats = adapter.get_stats(campaign.external_id)
+
+                snap = MetricsHistory(
+                    campaign_id=campaign.id,
+                    spend=stats.spend,
+                    clicks=stats.clicks,
+                    impressions=stats.impressions,
+                    cpa=stats.cpa,
+                )
+                db.add(snap)
+                snapshot_count += 1
+
+                # Auto-pause at 100% of daily budget
+                if campaign.daily_budget_limit and stats.spend >= Decimal(str(campaign.daily_budget_limit)):
+                    adapter.toggle_status(campaign.external_id, active=False)
+                    campaign.status = "paused"
+                    paused_count += 1
+                    print(
+                        f"[budget-monitor] Auto-paused {campaign.name} "
+                        f"(spend ${stats.spend} >= budget ${campaign.daily_budget_limit})",
+                        flush=True,
+                    )
+            except Exception as e:
+                print(f"[budget-monitor] Error for campaign {campaign.id}: {e}", flush=True)
+
+        db.commit()
+        return {"snapshots": snapshot_count, "auto_paused": paused_count}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="platform.generate_campaign_insights")
+def generate_campaign_insights() -> dict:
+    """
+    Weekly beat task: run the AI insight engine for all active campaigns
+    that haven't had insights generated in the last 6 days.
+    """
+    from datetime import timedelta
+    from aiplatform.database.session import SessionLocal
+    from aiplatform.database.models import Campaign
+    from datetime import datetime, timezone
+    import anthropic, json, os
+
+    db = SessionLocal()
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=6)
+        campaigns = db.query(Campaign).filter(
+            Campaign.status.in_(["active", "paused"]),
+        ).all()
+
+        refreshed = 0
+        for campaign in campaigns:
+            if campaign.insights_at and campaign.insights_at > cutoff:
+                continue
+            try:
+                metrics_summary = ""
+                if campaign.metrics:
+                    m = campaign.metrics[0]
+                    metrics_summary = (
+                        f"Spend: ${m.spend}, Clicks: {m.clicks}, Impressions: {m.impressions}"
+                    )
+                prompt = (
+                    f"Campaign: {campaign.name}\nVendor: {campaign.vendor}\n"
+                    f"Status: {campaign.status}\nBudget: ${campaign.daily_budget_limit}/day\n"
+                    f"Metrics: {metrics_summary or 'none yet'}\n\n"
+                    "Return a JSON object with summary, suggestions (list of action+reason+priority), "
+                    "and budget_recommendation. Return ONLY the JSON."
+                )
+                client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+                msg = client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=512,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                raw = msg.content[0].text.strip()
+                s, e = raw.find("{"), raw.rfind("}") + 1
+                campaign.ai_insights = json.loads(raw[s:e]) if s != -1 else {"raw": raw}
+                campaign.insights_at = datetime.now(timezone.utc)
+                refreshed += 1
+            except Exception as ex:
+                print(f"[weekly-insights] Failed for {campaign.id}: {ex}", flush=True)
+
+        db.commit()
+        return {"campaigns_refreshed": refreshed}
     finally:
         db.close()
 

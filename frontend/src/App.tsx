@@ -15,6 +15,7 @@ import Finance from "./pages/Finance"
 import Settings from "./pages/Settings"
 import StrategyRoom from "./pages/StrategyRoom"
 import Marketing from "./pages/Marketing"
+import CampaignManager from "./pages/CampaignManager"
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -56,6 +57,7 @@ export default function App() {
             <Route path="finance" element={<Finance />} />
             <Route path="strategy-room" element={<StrategyRoom />} />
             <Route path="marketing" element={<Marketing />} />
+            <Route path="campaigns" element={<CampaignManager />} />
             <Route path="settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

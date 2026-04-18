@@ -626,3 +626,59 @@ class MarketResearch(Base):
     updated_at = Column(DateTime(timezone=True), nullable=False,
                         default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
+
+
+# ── Campaign Manager ───────────────────────────────────────────────────────────
+
+class Campaign(Base):
+    """
+    Paid ad campaign managed across Google Ads and Meta Ads.
+
+    Status machine:
+      draft → active | paused | stopped
+    """
+    __tablename__ = "campaigns"
+
+    id              = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name            = Column(String(255), nullable=False)
+    vendor          = Column(String(50),  nullable=False)          # google | meta
+    external_id     = Column(String(255), nullable=True)           # vendor campaign ID
+    status          = Column(String(50),  nullable=False, default="draft", index=True)
+    daily_budget_limit  = Column(Numeric(10, 2), nullable=True)
+    total_budget_limit  = Column(Numeric(10, 2), nullable=True)
+    drive_folder_id = Column(String(255), nullable=True)
+
+    # Creative Lab
+    creative_prompt    = Column(Text,  nullable=True)
+    creative_assets    = Column(JSONB, nullable=True)              # [{url, file_id, format}]
+    creative_approved  = Column(Boolean, nullable=False, default=False)
+
+    # AI Insight Engine
+    ai_insights        = Column(JSONB, nullable=True)              # latest insight payload
+    insights_at        = Column(DateTime(timezone=True), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
+
+    metrics = relationship("MetricsHistory", back_populates="campaign",
+                           order_by="MetricsHistory.timestamp.desc()")
+
+
+class MetricsHistory(Base):
+    """Hourly metrics snapshot per campaign (populated by the budget-monitor beat task)."""
+    __tablename__ = "metrics_history"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    campaign_id = Column(UUID(as_uuid=True), ForeignKey("campaigns.id", ondelete="CASCADE"),
+                         nullable=False, index=True)
+    spend       = Column(Numeric(10, 2), nullable=False, default=0)
+    clicks      = Column(Integer, nullable=False, default=0)
+    impressions = Column(Integer, nullable=False, default=0)
+    cpa         = Column(Numeric(10, 2), nullable=True)
+    timestamp   = Column(DateTime(timezone=True), nullable=False,
+                         default=lambda: datetime.now(timezone.utc), index=True)
+
+    campaign = relationship("Campaign", back_populates="metrics")

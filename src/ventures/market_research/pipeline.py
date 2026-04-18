@@ -274,6 +274,7 @@ def run_market_research(research_id: str, db: Session) -> None:
         # Stage 6 — Drive upload (optional — skipped if no folder ID configured)
         record.pdf_path = pdf_path
         folder_id = os.environ.get("MARKET_RESEARCH_DRIVE_FOLDER_ID") or os.environ.get("GOOGLE_DRIVE_AUDIT_ROOT_ID", "")
+        drive_link = ""
         if folder_id:
             try:
                 result = drive_write(
@@ -283,7 +284,8 @@ def run_market_research(research_id: str, db: Session) -> None:
                     filename=filename,
                     share_anyone_with_link=True,
                 )
-                record.drive_link = result.get("view_link") or result.get("web_view_link", "")
+                drive_link = result.get("view_link") or result.get("web_view_link", "")
+                record.drive_link = drive_link
             except Exception as drive_exc:
                 logger.warning("Drive upload failed (non-fatal): %s", drive_exc)
         else:
@@ -293,12 +295,13 @@ def run_market_research(research_id: str, db: Session) -> None:
         # Optional email delivery
         if record.client_email:
             _set_status(db, record, "delivering")
+            download_line = f"Download: {drive_link}\n\n" if drive_link else ""
             send_email(
                 to=record.client_email,
                 subject=f"Your Market Research Report: {topic}",
                 body=(
                     f"Your market research report on '{topic}' is ready.\n\n"
-                    f"Download: {drive_link}\n\n"
+                    f"{download_line}"
                     "— Plan B AI Platform"
                 ),
             )

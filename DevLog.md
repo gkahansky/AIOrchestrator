@@ -126,3 +126,18 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 - Added subprocess timeouts: nuclei 15min, nmap 5min, nikto 10min, testssl 8min, sqlmap 15min, dalfox 8min. Timeout produces Info finding rather than crash.
 - Parallelized Phase 3 tools with ThreadPoolExecutor(max_workers=4) — cuts worst-case Phase 3 from ~40min to ~15min
 - Phase 5 crawl now adapts page cap based on measured load time: >5s→15 pages, >3s→30 pages, else 60 pages
+| 2026-04-17 14:50 |  | c93d717 | Add Tests Performed section to security report â€” per-phase table with test type, result, and issue count |
+| 2026-04-17 14:54 |  | a0464fb | Add Phase 5 rows to Tests Performed table; update CLAUDE.md to reflect Phases 1â€“5 complete |
+| 2026-04-17 15:01 |  | 4b73107 | Phase 4 extended tools â€” nuclei exploit templates, JWT analysis, open redirect, path traversal, SSTI |
+| 2026-04-17 15:03 |  | 34420d8 | Agency white-label branding â€” logo + name injection in PDF header and footer |
+| 2026-04-17 15:04 |  | 0b02492 | Multi-subdomain scope for Agency tier â€” Phase 3 and Phase 4 run against root + up to 4 live subdomains |
+| 2026-04-17 15:04 |  | 704bd2d | Update security audit CLAUDE.md â€” v1.0 complete, all Phase 4 extended tools and Agency features live |
+| 2026-04-18 09:57 |  | 57bc03b | Market Research venture â€” full implementation (D-26) |
+| 2026-04-18 10:14 |  | ab4293d | Fix Alembic duplicate revision ID â€” rename market_research migration to d1e2f3a4b5c6 |
+| 2026-04-18 10:20 |  | 976e26a | Fix Alembic multiple heads â€” chain market_research after security_audit retest |
+| 2026-04-18 10:27 |  | 1eba2b2 | Support multiple env var names for xAI/Grok API key |
+| 2026-04-18 10:32 |  | c51dbb1 | Fix market_research pipeline imports â€” drop src. prefix |
+| 2026-04-18 10:38 |  | 9cc56e6 | Fix market_research pipeline â€” use Playwright PDF + correct drive_write signature |
+| 2026-04-18 10:43 |  | e2129e4 | Fix Gemini model + graceful Qdrant degradation |
+| 2026-04-18 10:50 |  | b679be6 | Market Research UI fixes + Adjust & Rerun feature |
+| 2026-04-18 10:55 |  | 0ec2a3e | Market research: skip Drive upload gracefully when no folder ID configured |

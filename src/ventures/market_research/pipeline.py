@@ -228,11 +228,15 @@ def run_market_research(research_id: str, db: Session) -> None:
     critic_llm  = record.critic_llm or "grok"
 
     try:
-        # Stage 1 — Optimize prompts
-        _set_status(db, record, "optimizing")
-        prompts = _optimize_prompts(topic, selected, session_id)
-        record.optimized_prompts = prompts
-        db.commit()
+        # Stage 1 — Optimize prompts (skip if already provided, e.g. rerun with adjusted prompts)
+        if record.optimized_prompts:
+            prompts = record.optimized_prompts
+            logger.info("run_market_research: using pre-set optimized prompts (rerun mode)")
+        else:
+            _set_status(db, record, "optimizing")
+            prompts = _optimize_prompts(topic, selected, session_id)
+            record.optimized_prompts = prompts
+            db.commit()
 
         # Stage 2 — Parallel research
         _set_status(db, record, "researching")

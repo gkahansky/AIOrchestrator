@@ -9,7 +9,7 @@ import {
   deleteRoadmapItem, reorderRoadmapItems,
   triggerAdvisor, chatWithAdvisors,
   fetchAvailableLlms, createMarketResearchSession, uploadResearchDocs,
-  fetchMarketResearchSessions, fetchMarketResearchSession,
+  fetchMarketResearchSessions, fetchMarketResearchSession, rerunResearchSession,
 } from "../api"
 import type { MarketResearchDetail } from "../api"
 import type {
@@ -1616,56 +1616,145 @@ function MrStatusBadge({ status }: { status: string }) {
   )
 }
 
-function SessionDetailDrawer({ session, onClose }: { session: MarketResearchDetail; onClose: () => void }) {
+function SessionDetailDrawer({
+  session,
+  onClose,
+  onRerun,
+}: {
+  session: MarketResearchDetail
+  onClose: () => void
+  onRerun: (topic: string, prompts: Record<string, string>, selectedLlms: string[], criticLlm: string) => void
+}) {
   const [tab, setTab] = useState<"report" | "critic" | "prompts">("report")
+  const [rerunMode, setRerunMode] = useState(false)
+  const [editedPrompts, setEditedPrompts] = useState<Record<string, string>>({})
+
+  // Initialise editable prompts whenever the drawer opens or prompts arrive
+  useEffect(() => {
+    if (session.optimized_prompts) setEditedPrompts({ ...session.optimized_prompts })
+  }, [session.optimized_prompts])
+
+  const isDone = ["pdf_ready", "delivered", "failed"].includes(session.status)
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40">
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <div>
-            <h3 className="font-semibold text-gray-900 truncate">{session.topic}</h3>
-            <MrStatusBadge status={session.status} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+
+        {/* Header — fixed, never clips */}
+        <div className="flex items-start gap-3 px-6 pt-5 pb-4 border-b shrink-0">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Research Session</p>
+            <h3 className="font-semibold text-gray-900 text-base leading-snug break-words">{session.topic}</h3>
+            <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+              <MrStatusBadge status={session.status} />
+              {session.drive_link && (
+                <a href={session.drive_link} target="_blank" rel="noopener noreferrer"
+                   className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline">
+                  <span className="material-symbols-outlined text-sm">download</span>
+                  Download PDF
+                </a>
+              )}
+            </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500">
-            <span className="material-symbols-outlined">close</span>
+          {/* Close button — always visible, separate from content */}
+          <button
+            onClick={onClose}
+            className="shrink-0 mt-0.5 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+            aria-label="Close"
+          >
+            <span className="material-symbols-outlined text-xl">close</span>
           </button>
         </div>
-        <div className="flex border-b px-6 gap-4">
-          {(["report","critic","prompts"] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`py-2 text-sm font-medium border-b-2 transition-colors ${
+
+        {/* Tabs */}
+        <div className="flex border-b px-6 gap-4 shrink-0">
+          {(["report", "critic", "prompts"] as const).map(t => (
+            <button key={t} onClick={() => { setTab(t); setRerunMode(false) }}
+              className={`py-2.5 text-sm font-medium border-b-2 transition-colors ${
                 tab === t ? "border-primary text-primary" : "border-transparent text-gray-500 hover:text-gray-800"
               }`}>
               {t === "report" ? "Report" : t === "critic" ? "Critic Feedback" : "Optimized Prompts"}
             </button>
           ))}
         </div>
-        <div className="flex-1 overflow-y-auto p-6 text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-          {tab === "report" && (session.final_report || session.merged_report || "No report yet.")}
-          {tab === "critic" && (session.critic_feedback || "No critic feedback yet.")}
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-6 text-sm text-gray-700 leading-relaxed">
+          {tab === "report" && (
+            <div className="whitespace-pre-wrap">{session.final_report || session.merged_report || "No report yet."}</div>
+          )}
+
+          {tab === "critic" && (
+            <div className="whitespace-pre-wrap">{session.critic_feedback || "No critic feedback yet."}</div>
+          )}
+
           {tab === "prompts" && (
-            session.optimized_prompts
-              ? Object.entries(session.optimized_prompts).map(([llm, prompt]) => (
-                  <div key={llm} className="mb-4">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mb-2 ${LLM_META[llm]?.bg ?? "bg-gray-100"} ${LLM_META[llm]?.color ?? "text-gray-700"}`}>
-                      {LLM_META[llm]?.label ?? llm}
-                    </span>
-                    <p className="text-xs text-gray-600 whitespace-pre-wrap">{prompt}</p>
-                  </div>
-                ))
-              : "Prompts not yet generated."
+            <div className="space-y-5">
+              {session.optimized_prompts
+                ? Object.entries(rerunMode ? editedPrompts : session.optimized_prompts).map(([llm, prompt]) => (
+                    <div key={llm}>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mb-2 ${LLM_META[llm]?.bg ?? "bg-gray-100"} ${LLM_META[llm]?.color ?? "text-gray-700"}`}>
+                        {LLM_META[llm]?.label ?? llm}
+                        {session.critic_llm === llm && <span className="ml-1 opacity-70">★ Critic</span>}
+                      </span>
+                      {rerunMode ? (
+                        <textarea
+                          value={editedPrompts[llm] ?? prompt}
+                          onChange={e => setEditedPrompts(prev => ({ ...prev, [llm]: e.target.value }))}
+                          rows={6}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
+                        />
+                      ) : (
+                        <p className="text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 rounded-lg p-3">{prompt}</p>
+                      )}
+                    </div>
+                  ))
+                : <p className="text-gray-400">Prompts not yet generated.</p>
+              }
+            </div>
           )}
-          {session.drive_link && (
-            <a href={session.drive_link} target="_blank" rel="noopener noreferrer"
-               className="mt-4 inline-flex items-center gap-1.5 text-primary text-sm font-medium hover:underline">
-              <span className="material-symbols-outlined text-base">open_in_new</span>
-              Download PDF from Drive
-            </a>
-          )}
+
           {session.error && (
-            <div className="mt-4 p-3 bg-red-50 text-red-700 rounded text-xs">Error: {session.error}</div>
+            <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-lg text-xs">
+              <strong>Error:</strong> {session.error}
+            </div>
           )}
         </div>
+
+        {/* Footer actions */}
+        {tab === "prompts" && session.optimized_prompts && isDone && (
+          <div className="shrink-0 px-6 py-4 border-t bg-gray-50 rounded-b-2xl flex items-center justify-between gap-3">
+            {rerunMode ? (
+              <>
+                <p className="text-xs text-gray-500">Edit the prompts above, then rerun.</p>
+                <div className="flex gap-2">
+                  <button onClick={() => { setRerunMode(false); setEditedPrompts({ ...session.optimized_prompts! }) }}
+                    className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 transition-colors">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      onRerun(session.topic, editedPrompts, session.selected_llms, session.critic_llm)
+                      onClose()
+                    }}
+                    className="px-4 py-2 text-sm rounded-lg bg-primary text-white font-semibold hover:bg-primary/90 transition-colors flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm">replay</span>
+                    Rerun Research
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-gray-500">Adjust individual prompts and rerun the full pipeline.</p>
+                <button onClick={() => setRerunMode(true)}
+                  className="px-4 py-2 text-sm rounded-lg border border-primary text-primary font-medium hover:bg-primary/5 transition-colors flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm">edit</span>
+                  Adjust & Rerun
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -1888,7 +1977,16 @@ function MarketResearchTab() {
 
       {/* Detail drawer */}
       {detailId && detail && (
-        <SessionDetailDrawer session={detail} onClose={() => setDetailId(null)} />
+        <SessionDetailDrawer
+          session={detail}
+          onClose={() => setDetailId(null)}
+          onRerun={(_topic, prompts, llms, critic) => {
+            rerunResearchSession(detailId!, prompts, llms, critic).then(sess => {
+              queryClient.invalidateQueries({ queryKey: ["market-research-sessions"] })
+              setPollingId(sess.id)
+            })
+          }}
+        />
       )}
     </div>
   )

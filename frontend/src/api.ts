@@ -532,3 +532,17 @@ export async function fetchMarketResearchSession(id: string): Promise<MarketRese
   const res = await fetch(`${BASE}/api/ventures/market-research/sessions/${id}`, { headers: getHeaders() })
   return handleResponse<MarketResearchDetail>(res)
 }
+
+export async function rerunResearchSession(
+  sessionId: string,
+  adjustedPrompts: Record<string, string>,
+  selectedLlms?: string[],
+  criticLlm?: string,
+): Promise<MarketResearchSession> {
+  const res = await fetch(`${BASE}/api/ventures/market-research/sessions/${sessionId}/rerun`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ adjusted_prompts: adjustedPrompts, selected_llms: selectedLlms, critic_llm: criticLlm }),
+  })
+  return handleResponse<MarketResearchSession>(res)
+}

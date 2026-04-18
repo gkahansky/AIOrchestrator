@@ -182,3 +182,48 @@ def get_session(
         raise HTTPException(status_code=404, detail="Session not found")
 
     return _to_detail(record)
+
+
+class RerunRequest(BaseModel):
+    adjusted_prompts: dict[str, str]            # {llm_id: edited_prompt}
+    selected_llms: list[str] | None = None      # defaults to original session's selection
+    critic_llm: str | None = None
+
+
+@router.post("/sessions/{session_id}/rerun", status_code=status.HTTP_202_ACCEPTED)
+def rerun_session(
+    session_id: str,
+    req: RerunRequest,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_auth),
+) -> ResearchSummary:
+    """Clone a completed session with adjusted prompts and queue a new pipeline run."""
+    from aiplatform.worker import run_market_research as celery_task
+
+    try:
+        record_id = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+
+    original = db.get(MarketResearch, record_id)
+    if not original:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    new_record = MarketResearch(
+        topic=original.topic,
+        selected_llms=req.selected_llms or original.selected_llms,
+        critic_llm=req.critic_llm or original.critic_llm,
+        client_email=original.client_email,
+        # Inject the adjusted prompts so the pipeline skips the optimizer step
+        optimized_prompts=req.adjusted_prompts,
+        status="researching",   # skip optimizing — prompts already set
+    )
+    db.add(new_record)
+    db.commit()
+    db.refresh(new_record)
+
+    task = celery_task.delay(str(new_record.id))
+    new_record.celery_task_id = task.id
+    db.commit()
+
+    return _to_summary(new_record)

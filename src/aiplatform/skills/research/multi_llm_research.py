@@ -83,8 +83,11 @@ async def _call_gemini(prompt: str, system: str, timeout: int) -> str:
 
 async def _call_grok(prompt: str, system: str, timeout: int) -> str:
     from openai import AsyncOpenAI
+    api_key = next((os.environ[k] for k in ["XAI_API_KEY", "GROK_API_KEY", "X_AI_API_KEY"] if os.environ.get(k)), None)
+    if not api_key:
+        raise RuntimeError("No xAI API key found (tried XAI_API_KEY, GROK_API_KEY, X_AI_API_KEY)")
     client = AsyncOpenAI(
-        api_key=os.environ["XAI_API_KEY"],
+        api_key=api_key,
         base_url=_XAI_BASE_URL,
     )
     resp = await asyncio.wait_for(
@@ -108,10 +111,25 @@ _CALLERS = {
     "grok":   (_call_grok,   "XAI_API_KEY"),
 }
 
+# xAI key may be set under any of these names on Railway
+_GROK_KEY_ALIASES = ["XAI_API_KEY", "GROK_API_KEY", "X_AI_API_KEY"]
+
+
+def _grok_api_key() -> str | None:
+    for name in _GROK_KEY_ALIASES:
+        val = os.environ.get(name)
+        if val:
+            return val
+    return None
+
 
 def available_llms() -> list[str]:
     """Return LLM IDs whose API key is present in the environment."""
-    return [llm for llm, (_, key) in _CALLERS.items() if os.environ.get(key)]
+    result = [llm for llm, (_, key) in _CALLERS.items() if os.environ.get(key)]
+    # Add grok if found under any alias and not already present
+    if "grok" not in result and _grok_api_key():
+        result.append("grok")
+    return result
 
 
 async def _safe_call(llm_id: str, prompt: str, system: str, timeout: int) -> tuple[str, str | None, str | None]:

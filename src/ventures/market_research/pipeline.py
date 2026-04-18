@@ -299,10 +299,10 @@ def run_market_research(research_id: str, db: Session) -> None:
             send_email(
                 to=record.client_email,
                 subject=f"Your Market Research Report: {topic}",
-                body=(
-                    f"Your market research report on '{topic}' is ready.\n\n"
-                    f"{download_line}"
-                    "— Plan B AI Platform"
+                body_html=(
+                    f"<p>Your market research report on <strong>{topic}</strong> is ready.</p>"
+                    f"{f'<p><a href=\"{drive_link}\">Download your report</a></p>' if drive_link else ''}"
+                    "<p>— Plan B AI Platform</p>"
                 ),
             )
             _set_status(db, record, "delivered")

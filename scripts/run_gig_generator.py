@@ -178,6 +178,85 @@ VENTURE_CONFIGS: dict[str, dict] = {
             "marketing review",
         ],
     },
+    "security_audit": {
+        "service_name": "Web Application Security Audit & Vulnerability Report",
+        "service_description": (
+            "Automated black-box security assessment that identifies real, confirmed exploitable "
+            "vulnerabilities in your web application. Covers OSINT recon, surface mapping, "
+            "vulnerability scanning, and active exploit testing (Professional/Agency). "
+            "Delivered as a professional PDF report with CVSS-scored findings, attack chain "
+            "narratives, and a prioritised remediation roadmap."
+        ),
+        "packages": [
+            {
+                "name": "Starter",
+                "price_usd": 49,
+                "delivery_days": 1,
+                "revisions": 0,
+                "includes": [
+                    "Single domain, up to 50 endpoints",
+                    "Passive OSINT recon (subdomains, leaks, CVEs)",
+                    "Active surface mapping (ports, tech stack, exposed paths)",
+                    "Automated vulnerability scan (9,000+ nuclei templates)",
+                    "5–10 page PDF report with CVSS-scored findings",
+                    "Prioritised remediation checklist",
+                ],
+            },
+            {
+                "name": "Professional",
+                "price_usd": 149,
+                "delivery_days": 1,
+                "revisions": 1,
+                "includes": [
+                    "Single domain, unlimited endpoints",
+                    "All Starter phases",
+                    "Active exploit testing (SQLi, XSS, SSRF, LFI, JWT, open redirect)",
+                    "Optional authenticated session testing",
+                    "Attack chain narrative with PoC evidence",
+                    "10–15 page PDF report",
+                    "30-day remediation roadmap",
+                ],
+            },
+            {
+                "name": "Agency",
+                "price_usd": 349,
+                "delivery_days": 1,
+                "revisions": 1,
+                "includes": [
+                    "Up to 5 subdomains scanned",
+                    "All Professional phases",
+                    "White-label branded PDF report",
+                    "Critical finding alert email on discovery",
+                    "15–25 page executive + technical PDF",
+                    "Priority turnaround (<3 hours)",
+                ],
+            },
+        ],
+        "target_audience": (
+            "SaaS founders, startup CTOs, and SMB owners who need a credible security assessment "
+            "before a product launch, investor due diligence, or compliance audit — without paying "
+            "$5,000+ for a traditional penetration test."
+        ),
+        "key_benefits": [
+            "Real confirmed exploits — not just a scanner output dump",
+            "CVSS-scored findings with attack chain narratives your dev team can act on",
+            "Covers OWASP Top 10 plus modern attack vectors (JWT flaws, SSRF, SSTI)",
+            "Delivered in hours, not weeks — no scheduling, no NDAs required",
+            "Professional PDF report you can share with investors, clients, or compliance teams",
+        ],
+        "keywords": [
+            "security audit",
+            "web security audit",
+            "penetration test",
+            "vulnerability assessment",
+            "OWASP audit",
+            "security scan",
+            "pentest report",
+            "website security",
+            "vulnerability report",
+        ],
+    },
+
     "accessibility_audit": {
         "service_name": "WCAG Website Accessibility Audit \& VPAT Report",
         "service_description": (

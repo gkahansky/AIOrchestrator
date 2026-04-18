@@ -273,6 +273,7 @@ def run_market_research(research_id: str, db: Session) -> None:
 
         # Stage 6 — Drive upload (optional — skipped if no folder ID configured)
         record.pdf_path = pdf_path
+        drive_link = ""
         folder_id = os.environ.get("MARKET_RESEARCH_DRIVE_FOLDER_ID") or os.environ.get("GOOGLE_DRIVE_AUDIT_ROOT_ID", "")
         if folder_id:
             try:
@@ -283,7 +284,8 @@ def run_market_research(research_id: str, db: Session) -> None:
                     filename=filename,
                     share_anyone_with_link=True,
                 )
-                record.drive_link = result.get("view_link") or result.get("web_view_link", "")
+                drive_link = result.get("view_link") or result.get("web_view_link", "")
+                record.drive_link = drive_link
             except Exception as drive_exc:
                 logger.warning("Drive upload failed (non-fatal): %s", drive_exc)
         else:

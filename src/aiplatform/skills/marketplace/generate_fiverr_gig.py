@@ -157,7 +157,8 @@ Return ONLY valid JSON matching this exact structure — no markdown fences, no 
 }}
 
 Rules:
-- gig_title must start with "I will" and be under 80 characters total
+- gig_title must start with "I will" and be under 80 characters total (Fiverr platform requirement — this is the only place "I" is used)
+- All other text (gig_description, package descriptions, FAQ answers, requirements) must use "We/Our/Us" — never "I/My". Write as a professional team/agency, not a solo freelancer.
 - gig_description MUST be under 1200 characters total, persuasive, NOT generic
 - packages description MUST be under 100 characters total each
 - prices MUST be multiples of 5 (e.g. 30, 80, 150)

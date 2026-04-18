@@ -126,3 +126,4 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 - Added subprocess timeouts: nuclei 15min, nmap 5min, nikto 10min, testssl 8min, sqlmap 15min, dalfox 8min. Timeout produces Info finding rather than crash.
 - Parallelized Phase 3 tools with ThreadPoolExecutor(max_workers=4) — cuts worst-case Phase 3 from ~40min to ~15min
 - Phase 5 crawl now adapts page cap based on measured load time: >5s→15 pages, >3s→30 pages, else 60 pages
+| 2026-04-18 | | | Fix NameError: initialize `drive_link = ""` before Drive upload block in market_research/pipeline.py (line 301 referenced unbound variable) |

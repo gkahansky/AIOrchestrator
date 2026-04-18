@@ -28,9 +28,13 @@ _qdrant_client = None
 def _get_qdrant():
     global _qdrant_client
     if _qdrant_client is None:
+        qdrant_url = os.environ.get("QDRANT_URL")
+        if not qdrant_url:
+            logger.warning("rag_store: QDRANT_URL not set — RAG disabled")
+            return None
         from qdrant_client import QdrantClient
         _qdrant_client = QdrantClient(
-            url=os.environ["QDRANT_URL"],
+            url=qdrant_url,
             api_key=os.environ.get("QDRANT_API_KEY"),
         )
         _ensure_collection(_qdrant_client)
@@ -86,6 +90,11 @@ def ingest_document(filename: str, data: bytes, session_id: str) -> list[str]:
 
     Returns list of point ID strings stored for this document.
     """
+    client = _get_qdrant()
+    if client is None:
+        logger.warning("rag_store: skipping ingest — Qdrant unavailable")
+        return []
+
     text = _extract_text(filename, data)
     if not text.strip():
         logger.warning("rag_store: %s produced no text", filename)
@@ -95,7 +104,6 @@ def ingest_document(filename: str, data: bytes, session_id: str) -> list[str]:
     logger.info("rag_store: %s → %d chunks", filename, len(chunks))
 
     embeddings = _embed(chunks)
-    client = _get_qdrant()
 
     from qdrant_client.models import PointStruct
     point_ids = [str(uuid.uuid4()) for _ in chunks]
@@ -124,8 +132,10 @@ def retrieve_context(query: str, session_id: str, top_k: int = 5) -> str:
     Returns a single string to be appended to LLM prompts.
     """
     try:
-        query_vec = _embed([query])[0]
         client = _get_qdrant()
+        if client is None:
+            return ""
+        query_vec = _embed([query])[0]
         hits = client.search(
             collection_name=_COLLECTION,
             query_vector=query_vec,

@@ -471,3 +471,64 @@ export async function chatWithAdvisors(body: ChatRequest): Promise<ChatApiRespon
   })
   return handleResponse<ChatApiResponse>(res)
 }
+
+// ── Market Research ───────────────────────────────────────────────────────────
+
+export interface MarketResearchSession {
+  id: string
+  topic: string
+  status: string
+  selected_llms: string[]
+  critic_llm: string
+  drive_link: string | null
+  created_at: string
+}
+
+export interface MarketResearchDetail extends MarketResearchSession {
+  optimized_prompts: Record<string, string> | null
+  research_results: Record<string, string> | null
+  merged_report: string | null
+  critic_feedback: string | null
+  final_report: string | null
+  error: string | null
+}
+
+export async function fetchAvailableLlms(): Promise<{ available: string[] }> {
+  const res = await fetch(`${BASE}/api/ventures/market-research/available-llms`, { headers: getHeaders() })
+  return handleResponse<{ available: string[] }>(res)
+}
+
+export async function createMarketResearchSession(body: {
+  topic: string
+  selected_llms?: string[]
+  critic_llm?: string
+  client_email?: string
+}): Promise<MarketResearchSession> {
+  const res = await fetch(`${BASE}/api/ventures/market-research/sessions`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(body),
+  })
+  return handleResponse<MarketResearchSession>(res)
+}
+
+export async function uploadResearchDocs(sessionId: string, files: File[]): Promise<{ ingested: { filename: string; chunks: number }[]; total_chunks: number }> {
+  const form = new FormData()
+  files.forEach(f => form.append("files", f))
+  const res = await fetch(`${BASE}/api/ventures/market-research/sessions/${sessionId}/upload`, {
+    method: "POST",
+    headers: { Authorization: (getHeaders() as Record<string, string>).Authorization },
+    body: form,
+  })
+  return handleResponse(res)
+}
+
+export async function fetchMarketResearchSessions(): Promise<MarketResearchSession[]> {
+  const res = await fetch(`${BASE}/api/ventures/market-research/sessions`, { headers: getHeaders() })
+  return handleResponse<MarketResearchSession[]>(res)
+}
+
+export async function fetchMarketResearchSession(id: string): Promise<MarketResearchDetail> {
+  const res = await fetch(`${BASE}/api/ventures/market-research/sessions/${id}`, { headers: getHeaders() })
+  return handleResponse<MarketResearchDetail>(res)
+}

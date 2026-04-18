@@ -54,6 +54,7 @@ from aiplatform.webapp.routers.ventures import etsy as ventures_etsy
 from aiplatform.webapp.routers.ventures import marketing_audit as ventures_audit
 from aiplatform.webapp.routers.ventures import content_studio as ventures_podcast
 from aiplatform.webapp.routers.ventures import security_audit as ventures_security
+from aiplatform.webapp.routers.ventures import market_research as ventures_market_research
 from aiplatform.webapp.routers import accessibility as audit_accessibility
 from aiplatform.webapp.routers.public import sample as public_sample
 from aiplatform.webapp.routers import outreach as platform_outreach
@@ -133,7 +134,8 @@ def create_app() -> FastAPI:
     app.include_router(ventures_etsy.router,    prefix="/api/ventures/etsy",              tags=["etsy"])
     app.include_router(ventures_audit.router,   prefix="/api/ventures/marketing-audit",   tags=["marketing-audit"])
     app.include_router(ventures_podcast.router,   prefix="/api/ventures/content-studio",   tags=["content-studio"])
-    app.include_router(ventures_security.router, prefix="/api/ventures/security-audit",   tags=["security-audit"])
+    app.include_router(ventures_security.router,          prefix="/api/ventures/security-audit",    tags=["security-audit"])
+    app.include_router(ventures_market_research.router,   prefix="/api/ventures/market-research",   tags=["market-research"])
     app.include_router(audit_accessibility.router, prefix="/api/audit/accessibility",     tags=["accessibility"])
     # Outreach — lead discovery, campaign management, A/B email testing
     app.include_router(platform_outreach.router, prefix="/api/outreach",                  tags=["outreach"])

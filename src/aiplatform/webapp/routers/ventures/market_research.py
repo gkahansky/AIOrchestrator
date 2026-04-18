@@ -1,0 +1,184 @@
+"""
+Market Research venture router.
+
+  POST /api/ventures/market-research/sessions         — create + queue a research session
+  POST /api/ventures/market-research/sessions/{id}/upload — upload RAG documents
+  GET  /api/ventures/market-research/sessions         — list sessions
+  GET  /api/ventures/market-research/sessions/{id}    — get session detail
+  GET  /api/ventures/market-research/available-llms   — which LLMs are configured
+"""
+
+import uuid
+from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from aiplatform.database.models import MarketResearch
+from aiplatform.database.session import get_db
+from aiplatform.webapp.auth import require_auth
+from aiplatform.skills.research.multi_llm_research import available_llms
+from aiplatform.skills.research.rag_store import ingest_document
+
+router = APIRouter()
+
+
+# ── Schemas ────────────────────────────────────────────────────────────────────
+
+class CreateResearchRequest(BaseModel):
+    topic: str
+    selected_llms: list[str] | None = None   # None → all available
+    critic_llm: str = "grok"
+    client_email: str | None = None
+
+
+class ResearchSummary(BaseModel):
+    id: str
+    topic: str
+    status: str
+    selected_llms: list[str]
+    critic_llm: str
+    drive_link: str | None
+    created_at: str
+
+
+class ResearchDetail(ResearchSummary):
+    optimized_prompts: dict | None
+    research_results: dict | None
+    merged_report: str | None
+    critic_feedback: str | None
+    final_report: str | None
+    error: str | None
+
+
+def _to_summary(r: MarketResearch) -> ResearchSummary:
+    return ResearchSummary(
+        id=str(r.id),
+        topic=r.topic,
+        status=r.status,
+        selected_llms=r.selected_llms or [],
+        critic_llm=r.critic_llm,
+        drive_link=r.drive_link,
+        created_at=r.created_at.isoformat(),
+    )
+
+
+def _to_detail(r: MarketResearch) -> ResearchDetail:
+    return ResearchDetail(
+        id=str(r.id),
+        topic=r.topic,
+        status=r.status,
+        selected_llms=r.selected_llms or [],
+        critic_llm=r.critic_llm,
+        drive_link=r.drive_link,
+        created_at=r.created_at.isoformat(),
+        optimized_prompts=r.optimized_prompts,
+        research_results=r.research_results,
+        merged_report=r.merged_report,
+        critic_feedback=r.critic_feedback,
+        final_report=r.final_report,
+        error=r.error,
+    )
+
+
+# ── Endpoints ──────────────────────────────────────────────────────────────────
+
+@router.get("/available-llms")
+def get_available_llms(_: str = Depends(require_auth)) -> dict:
+    """Return which LLMs are configured (API key present)."""
+    return {"available": available_llms()}
+
+
+@router.post("/sessions", status_code=status.HTTP_202_ACCEPTED)
+def create_session(
+    req: CreateResearchRequest,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_auth),
+) -> ResearchSummary:
+    """Create a market research session and queue the pipeline."""
+    from aiplatform.worker import run_market_research as celery_task
+
+    avail = available_llms()
+    selected = req.selected_llms or avail
+    invalid = [llm for llm in selected if llm not in avail]
+    if invalid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"LLMs not configured (missing API keys): {invalid}",
+        )
+
+    record = MarketResearch(
+        topic=req.topic,
+        selected_llms=selected,
+        critic_llm=req.critic_llm,
+        client_email=req.client_email,
+        status="pending",
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    task = celery_task.delay(str(record.id))
+    record.celery_task_id = task.id
+    db.commit()
+
+    return _to_summary(record)
+
+
+@router.post("/sessions/{session_id}/upload", status_code=status.HTTP_200_OK)
+async def upload_documents(
+    session_id: str,
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    _: str = Depends(require_auth),
+) -> dict:
+    """Upload RAG documents for a research session."""
+    try:
+        record_id = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+
+    record = db.get(MarketResearch, record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    point_ids: list[str] = list(record.rag_doc_ids or [])
+    ingested = []
+    for f in files:
+        data = await f.read()
+        ids = ingest_document(f.filename or "upload", data, session_id)
+        point_ids.extend(ids)
+        ingested.append({"filename": f.filename, "chunks": len(ids)})
+
+    record.rag_doc_ids = point_ids
+    db.commit()
+
+    return {"ingested": ingested, "total_chunks": len(point_ids)}
+
+
+@router.get("/sessions")
+def list_sessions(
+    db: Session = Depends(get_db),
+    _: str = Depends(require_auth),
+) -> list[ResearchSummary]:
+    records = db.query(MarketResearch).order_by(MarketResearch.created_at.desc()).limit(50).all()
+    return [_to_summary(r) for r in records]
+
+
+@router.get("/sessions/{session_id}")
+def get_session(
+    session_id: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_auth),
+) -> ResearchDetail:
+    try:
+        record_id = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+
+    record = db.get(MarketResearch, record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    return _to_detail(record)

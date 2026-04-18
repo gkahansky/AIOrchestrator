@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useEffect } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   fetchProposals, fetchAdvisorRuns, fetchAdvisorDiagnostics,
@@ -8,7 +8,10 @@ import {
   createRoadmapFeature, createRoadmapItem, updateRoadmapItem,
   deleteRoadmapItem, reorderRoadmapItems,
   triggerAdvisor, chatWithAdvisors,
+  fetchAvailableLlms, createMarketResearchSession, uploadResearchDocs,
+  fetchMarketResearchSessions, fetchMarketResearchSession,
 } from "../api"
+import type { MarketResearchDetail } from "../api"
 import type {
   AdvisorConfig,
   AdvisoryProposal,
@@ -1576,12 +1579,328 @@ function RoadmapTab() {
 // Main Page
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function StrategyRoom() {
-  const [activeTab, setActiveTab] = useState<"agents" | "roadmap">("agents")
+// ── Market Research Tab ────────────────────────────────────────────────────────
 
-  const tabs: { key: "agents" | "roadmap"; label: string; icon: string }[] = [
-    { key: "agents",  label: "Agents",  icon: "psychology" },
-    { key: "roadmap", label: "Roadmap", icon: "map" },
+const LLM_META: Record<string, { label: string; color: string; bg: string }> = {
+  claude: { label: "Claude",  color: "text-violet-700",  bg: "bg-violet-100" },
+  openai: { label: "OpenAI",  color: "text-emerald-700", bg: "bg-emerald-100" },
+  gemini: { label: "Gemini",  color: "text-blue-700",    bg: "bg-blue-100" },
+  grok:   { label: "Grok",    color: "text-orange-700",  bg: "bg-orange-100" },
+}
+
+const MR_STATUS_LABELS: Record<string, string> = {
+  pending:        "Pending",
+  optimizing:     "Optimizing prompts…",
+  researching:    "Researching…",
+  merging:        "Merging reports…",
+  reflecting:     "Critic reviewing…",
+  generating_pdf: "Generating PDF…",
+  pdf_ready:      "PDF ready",
+  delivering:     "Delivering…",
+  delivered:      "Delivered",
+  failed:         "Failed",
+}
+
+function MrStatusBadge({ status }: { status: string }) {
+  const active = ["optimizing","researching","merging","reflecting","generating_pdf","delivering"].includes(status)
+  const done   = ["pdf_ready","delivered"].includes(status)
+  const failed = status === "failed"
+  const cls = active ? "bg-blue-100 text-blue-700 animate-pulse"
+             : done   ? "bg-green-100 text-green-700"
+             : failed ? "bg-red-100 text-red-700"
+             :          "bg-gray-100 text-gray-600"
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${cls}`}>
+      {MR_STATUS_LABELS[status] ?? status}
+    </span>
+  )
+}
+
+function SessionDetailDrawer({ session, onClose }: { session: MarketResearchDetail; onClose: () => void }) {
+  const [tab, setTab] = useState<"report" | "critic" | "prompts">("report")
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40">
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div>
+            <h3 className="font-semibold text-gray-900 truncate">{session.topic}</h3>
+            <MrStatusBadge status={session.status} />
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+        <div className="flex border-b px-6 gap-4">
+          {(["report","critic","prompts"] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`py-2 text-sm font-medium border-b-2 transition-colors ${
+                tab === t ? "border-primary text-primary" : "border-transparent text-gray-500 hover:text-gray-800"
+              }`}>
+              {t === "report" ? "Report" : t === "critic" ? "Critic Feedback" : "Optimized Prompts"}
+            </button>
+          ))}
+        </div>
+        <div className="flex-1 overflow-y-auto p-6 text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+          {tab === "report" && (session.final_report || session.merged_report || "No report yet.")}
+          {tab === "critic" && (session.critic_feedback || "No critic feedback yet.")}
+          {tab === "prompts" && (
+            session.optimized_prompts
+              ? Object.entries(session.optimized_prompts).map(([llm, prompt]) => (
+                  <div key={llm} className="mb-4">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mb-2 ${LLM_META[llm]?.bg ?? "bg-gray-100"} ${LLM_META[llm]?.color ?? "text-gray-700"}`}>
+                      {LLM_META[llm]?.label ?? llm}
+                    </span>
+                    <p className="text-xs text-gray-600 whitespace-pre-wrap">{prompt}</p>
+                  </div>
+                ))
+              : "Prompts not yet generated."
+          )}
+          {session.drive_link && (
+            <a href={session.drive_link} target="_blank" rel="noopener noreferrer"
+               className="mt-4 inline-flex items-center gap-1.5 text-primary text-sm font-medium hover:underline">
+              <span className="material-symbols-outlined text-base">open_in_new</span>
+              Download PDF from Drive
+            </a>
+          )}
+          {session.error && (
+            <div className="mt-4 p-3 bg-red-50 text-red-700 rounded text-xs">Error: {session.error}</div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MarketResearchTab() {
+  const [topic, setTopic] = useState("")
+  const [selectedLlms, setSelectedLlms] = useState<string[]>([])
+  const [criticLlm, setCriticLlm] = useState("grok")
+  const [email, setEmail] = useState("")
+  const [files, setFiles] = useState<File[]>([])
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const [pollingId, setPollingId] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const queryClient = useQueryClient()
+
+  const { data: llmsData } = useQuery({ queryKey: ["market-research-llms"], queryFn: fetchAvailableLlms })
+  const { data: sessions = [] } = useQuery({ queryKey: ["market-research-sessions"], queryFn: fetchMarketResearchSessions, refetchInterval: pollingId ? 3000 : false })
+  const { data: detail } = useQuery({
+    queryKey: ["market-research-session", detailId],
+    queryFn: () => fetchMarketResearchSession(detailId!),
+    enabled: !!detailId,
+    refetchInterval: detailId && sessions.find(s => s.id === detailId && !["delivered","pdf_ready","failed"].includes(s.status)) ? 4000 : false,
+  })
+
+  const availableLlms = llmsData?.available ?? []
+
+  useEffect(() => {
+    if (availableLlms.length && selectedLlms.length === 0) {
+      setSelectedLlms(availableLlms)
+      if (availableLlms.includes("grok")) setCriticLlm("grok")
+      else if (availableLlms.length > 0) setCriticLlm(availableLlms[availableLlms.length - 1])
+    }
+  }, [availableLlms])
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const sess = await createMarketResearchSession({
+        topic,
+        selected_llms: selectedLlms,
+        critic_llm: criticLlm,
+        client_email: email || undefined,
+      })
+      if (files.length > 0) {
+        await uploadResearchDocs(sess.id, files)
+      }
+      return sess
+    },
+    onSuccess: (sess) => {
+      queryClient.invalidateQueries({ queryKey: ["market-research-sessions"] })
+      setPollingId(sess.id)
+      setTopic("")
+      setFiles([])
+      setEmail("")
+    },
+  })
+
+  const toggleLlm = (llm: string) => {
+    setSelectedLlms(prev =>
+      prev.includes(llm) ? prev.filter(l => l !== llm) : [...prev, llm]
+    )
+  }
+
+  const activeSession = sessions.find(s => pollingId && s.id === pollingId)
+  useEffect(() => {
+    if (activeSession && ["delivered","pdf_ready","failed"].includes(activeSession.status)) {
+      setPollingId(null)
+    }
+  }, [activeSession])
+
+  return (
+    <div className="space-y-8">
+      {/* Control Panel */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-5">
+        <h3 className="font-semibold text-gray-900 text-base">New Research Session</h3>
+
+        {/* Topic */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Research Topic</label>
+          <textarea
+            value={topic}
+            onChange={e => setTopic(e.target.value)}
+            rows={3}
+            placeholder="e.g. 'Market opportunity for AI-powered podcast editing tools in 2025'"
+            className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+          />
+        </div>
+
+        {/* LLM selector */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Research Committee</label>
+          <div className="flex flex-wrap gap-2">
+            {availableLlms.map(llm => {
+              const meta = LLM_META[llm]
+              const checked = selectedLlms.includes(llm)
+              const isCritic = criticLlm === llm
+              return (
+                <button
+                  key={llm}
+                  onClick={() => toggleLlm(llm)}
+                  className={`relative flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition-all ${
+                    checked
+                      ? `${meta?.bg ?? "bg-gray-100"} ${meta?.color ?? "text-gray-700"} border-current`
+                      : "bg-gray-50 text-gray-400 border-gray-200"
+                  }`}
+                >
+                  <span className={`w-4 h-4 rounded border-2 flex items-center justify-center ${checked ? "border-current bg-current" : "border-gray-300"}`}>
+                    {checked && <span className="material-symbols-outlined text-white text-xs">check</span>}
+                  </span>
+                  {meta?.label ?? llm}
+                  {isCritic && checked && (
+                    <span className="ml-1 px-1.5 py-0.5 bg-white/60 text-xs rounded-full font-medium">Critic</span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+          {selectedLlms.length > 0 && (
+            <div className="mt-3">
+              <label className="block text-xs text-gray-500 mb-1">Critic Model</label>
+              <div className="flex gap-2 flex-wrap">
+                {selectedLlms.map(llm => (
+                  <button key={llm} onClick={() => setCriticLlm(llm)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
+                      criticLlm === llm
+                        ? `${LLM_META[llm]?.bg ?? "bg-gray-100"} ${LLM_META[llm]?.color ?? "text-gray-700"} border-current`
+                        : "bg-white text-gray-500 border-gray-200 hover:border-gray-400"
+                    }`}>
+                    {LLM_META[llm]?.label ?? llm}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* File upload */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Supplementary Documents (optional)</label>
+          <div
+            className="border-2 border-dashed border-gray-300 rounded-xl px-4 py-5 text-center cursor-pointer hover:border-primary/50 transition-colors"
+            onClick={() => fileRef.current?.click()}
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => { e.preventDefault(); setFiles(prev => [...prev, ...Array.from(e.dataTransfer.files)]) }}
+          >
+            <span className="material-symbols-outlined text-2xl text-gray-400">upload_file</span>
+            <p className="text-sm text-gray-500 mt-1">Drag & drop PDFs or text files, or click to browse</p>
+            {files.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1 justify-center">
+                {files.map((f, i) => (
+                  <span key={i} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{f.name}</span>
+                ))}
+              </div>
+            )}
+          </div>
+          <input ref={fileRef} type="file" multiple accept=".pdf,.txt,.md" className="hidden"
+            onChange={e => setFiles(prev => [...prev, ...Array.from(e.target.files ?? [])])} />
+        </div>
+
+        {/* Email */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Delivery Email (optional)</label>
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+            placeholder="client@example.com"
+            className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+        </div>
+
+        <button
+          disabled={!topic.trim() || selectedLlms.length === 0 || createMutation.isPending}
+          onClick={() => createMutation.mutate()}
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold shadow hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <span className="material-symbols-outlined text-base">science</span>
+          {createMutation.isPending ? "Starting…" : "Start Research"}
+        </button>
+        {createMutation.isError && (
+          <p className="text-red-600 text-sm">{String((createMutation.error as Error)?.message)}</p>
+        )}
+      </div>
+
+      {/* Sessions list */}
+      <div>
+        <h3 className="font-semibold text-gray-900 text-base mb-4">Research Sessions</h3>
+        {sessions.length === 0 ? (
+          <p className="text-gray-400 text-sm text-center py-12">No sessions yet. Start your first research above.</p>
+        ) : (
+          <div className="space-y-3">
+            {sessions.map(sess => (
+              <div key={sess.id}
+                className="bg-white border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-4 hover:border-gray-300 transition-colors cursor-pointer"
+                onClick={() => { setDetailId(sess.id) }}>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-gray-900 text-sm truncate">{sess.topic}</p>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <MrStatusBadge status={sess.status} />
+                    {sess.selected_llms.map(llm => (
+                      <span key={llm} className={`text-xs px-1.5 py-0.5 rounded ${LLM_META[llm]?.bg ?? "bg-gray-100"} ${LLM_META[llm]?.color ?? "text-gray-600"}`}>
+                        {LLM_META[llm]?.label ?? llm}
+                        {sess.critic_llm === llm ? " ★" : ""}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {sess.drive_link && (
+                    <a href={sess.drive_link} target="_blank" rel="noopener noreferrer"
+                       onClick={e => e.stopPropagation()}
+                       className="text-primary text-sm hover:underline flex items-center gap-0.5">
+                      <span className="material-symbols-outlined text-sm">download</span>
+                      PDF
+                    </a>
+                  )}
+                  <span className="text-xs text-gray-400">{new Date(sess.created_at).toLocaleDateString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Detail drawer */}
+      {detailId && detail && (
+        <SessionDetailDrawer session={detail} onClose={() => setDetailId(null)} />
+      )}
+    </div>
+  )
+}
+
+export default function StrategyRoom() {
+  const [activeTab, setActiveTab] = useState<"agents" | "roadmap" | "market-research">("agents")
+
+  const tabs: { key: "agents" | "roadmap" | "market-research"; label: string; icon: string }[] = [
+    { key: "agents",          label: "Agents",          icon: "psychology" },
+    { key: "roadmap",         label: "Roadmap",         icon: "map" },
+    { key: "market-research", label: "Market Research", icon: "analytics" },
   ]
 
   return (
@@ -1618,6 +1937,7 @@ export default function StrategyRoom() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-8">
         {activeTab === "agents" && <AgentsTab />}
         {activeTab === "roadmap" && <RoadmapTab />}
+        {activeTab === "market-research" && <MarketResearchTab />}
       </main>
     </div>
   )

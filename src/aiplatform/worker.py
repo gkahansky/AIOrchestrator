@@ -1267,3 +1267,25 @@ def run_send_outreach(self, campaign_id: str, lead_ids: list | None = None, temp
         raise
     finally:
         db.close()
+
+
+# ── Market Research ────────────────────────────────────────────────────────────
+
+@celery_app.task(name="platform.run_market_research", bind=True, max_retries=1,
+                 soft_time_limit=900, time_limit=1000)
+def run_market_research(self, research_id: str) -> dict:
+    """Run the full market research pipeline for a given session ID."""
+    from ventures.market_research.pipeline import run_market_research as _run
+    from aiplatform.database.session import SessionLocal
+
+    db = SessionLocal()
+    try:
+        _run(research_id, db)
+        return {"research_id": research_id, "status": "done"}
+    except Exception as exc:
+        _slack_alert_failure("market_research", research_id, exc)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=30)
+        raise
+    finally:
+        db.close()

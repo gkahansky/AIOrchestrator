@@ -586,3 +586,42 @@ class SecurityAudit(Base):
                         onupdate=lambda: datetime.now(timezone.utc))
 
     job = relationship("Job")
+
+
+# ── Market Research ────────────────────────────────────────────────────────────
+
+class MarketResearch(Base):
+    """
+    Market Research venture — parallel multi-LLM research with RAG and critic review.
+
+    State machine:
+      pending → optimizing → researching → merging → reflecting → generating_pdf →
+      pdf_ready → delivering → delivered → failed
+    """
+    __tablename__ = "market_research"
+
+    id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    topic         = Column(Text, nullable=False)
+    status        = Column(String(50), nullable=False, default="pending", index=True)
+
+    selected_llms = Column(JSONB, nullable=False, default=list)
+    critic_llm    = Column(String(50), nullable=False, default="grok")
+    rag_doc_ids   = Column(JSONB, nullable=True)
+
+    optimized_prompts = Column(JSONB, nullable=True)   # {llm_id: prompt}
+    research_results  = Column(JSONB, nullable=True)   # {llm_id: result_text}
+    merged_report     = Column(Text, nullable=True)
+    critic_feedback   = Column(Text, nullable=True)
+    final_report      = Column(Text, nullable=True)
+
+    pdf_path       = Column(String(2048), nullable=True)
+    drive_link     = Column(String(2048), nullable=True)
+    client_email   = Column(String(255), nullable=True)
+    error          = Column(Text, nullable=True)
+    celery_task_id = Column(String(100), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))

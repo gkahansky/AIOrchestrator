@@ -1644,7 +1644,7 @@ function SessionDetailDrawer({
         <div className="flex items-start gap-3 px-6 pt-5 pb-4 border-b shrink-0">
           <div className="flex-1 min-w-0">
             <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Research Session</p>
-            <h3 className="font-semibold text-gray-900 text-base leading-snug break-words">{session.topic}</h3>
+            <h3 className="font-semibold text-gray-900 text-base leading-snug break-words">{session.title || session.topic}</h3>
             <div className="mt-1.5 flex items-center gap-2 flex-wrap">
               <MrStatusBadge status={session.status} />
               {session.drive_link && (
@@ -1947,7 +1947,7 @@ function MarketResearchTab() {
                 className="bg-white border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-4 hover:border-gray-300 transition-colors cursor-pointer"
                 onClick={() => { setDetailId(sess.id) }}>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-gray-900 text-sm truncate">{sess.topic}</p>
+                  <p className="font-medium text-gray-900 text-sm truncate">{sess.title || sess.topic}</p>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <MrStatusBadge status={sess.status} />
                     {sess.selected_llms.map(llm => (

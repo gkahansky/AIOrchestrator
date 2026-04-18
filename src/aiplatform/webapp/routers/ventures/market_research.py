@@ -36,6 +36,7 @@ class CreateResearchRequest(BaseModel):
 class ResearchSummary(BaseModel):
     id: str
     topic: str
+    title: str | None
     status: str
     selected_llms: list[str]
     critic_llm: str
@@ -56,6 +57,7 @@ def _to_summary(r: MarketResearch) -> ResearchSummary:
     return ResearchSummary(
         id=str(r.id),
         topic=r.topic,
+        title=r.title,
         status=r.status,
         selected_llms=r.selected_llms or [],
         critic_llm=r.critic_llm,

@@ -59,6 +59,18 @@ def _claude_sync(system: str, user: str, max_tokens: int = 4096) -> str:
 
 # ── Stage 1: Prompt Optimizer ──────────────────────────────────────────────────
 
+def _generate_title(topic: str) -> str:
+    """Ask Claude to produce a short (≤10 word) title summarising the research topic."""
+    raw = _claude_sync(
+        "You are a research librarian. Respond with ONLY a short title (maximum 10 words, "
+        "no punctuation at the end) that clearly summarises the research topic provided. "
+        "No preamble, no quotes — just the title.",
+        f"Research topic: {topic}",
+        max_tokens=64,
+    )
+    return raw.strip().strip('"').strip("'")[:200]
+
+
 def _optimize_prompts(topic: str, selected_llms: list[str], session_id: str) -> dict[str, str]:
     """Ask Claude to generate a tailored research prompt per LLM / angle."""
     angles = {
@@ -83,7 +95,6 @@ def _optimize_prompts(topic: str, selected_llms: list[str], session_id: str) -> 
     start = raw.find("{")
     end   = raw.rfind("}") + 1
     if start == -1 or end == 0:
-        # Fallback: same prompt for all
         fallback = f"Research the following topic focusing on your assigned angle:\n\nTopic: {topic}"
         return {llm: fallback for llm in selected_llms}
 
@@ -234,6 +245,7 @@ def run_market_research(research_id: str, db: Session) -> None:
             logger.info("run_market_research: using pre-set optimized prompts (rerun mode)")
         else:
             _set_status(db, record, "optimizing")
+            record.title = _generate_title(topic)
             prompts = _optimize_prompts(topic, selected, session_id)
             record.optimized_prompts = prompts
             db.commit()
@@ -273,7 +285,7 @@ def run_market_research(research_id: str, db: Session) -> None:
 
         # Stage 6 — Drive upload (optional — skipped if no folder ID configured)
         record.pdf_path = pdf_path
-        folder_id = os.environ.get("MARKET_RESEARCH_DRIVE_FOLDER_ID") or os.environ.get("GOOGLE_DRIVE_AUDIT_ROOT_ID", "")
+        folder_id = os.environ.get("DRIVE_MARKET_RESEARCH_ID") or os.environ.get("GOOGLE_DRIVE_AUDIT_ROOT_ID", "")
         drive_link = ""
         if folder_id:
             try:
@@ -295,22 +307,19 @@ def run_market_research(research_id: str, db: Session) -> None:
         # Optional email delivery
         if record.client_email:
             _set_status(db, record, "delivering")
-            download_line = f"Download: {drive_link}\n\n" if drive_link else ""
+            display_title = record.title or topic
+            download_line = (
+                f'<p><a href="{record.drive_link}">Download your report (PDF)</a></p>'
+                if record.drive_link else ""
+            )
             send_email(
                 to=record.client_email,
-                subject=f"Your Market Research Report: {topic}",
+                subject=f"Market Research Ready: {display_title}",
                 body_html=(
-                    f"<p>Your market research report on <strong>{topic}</strong> is ready.</p>"
-                    f"{f'<p><a href=\"{drive_link}\">Download your report</a></p>' if drive_link else ''}"
+                    f"<p>Your market research report is ready.</p>"
+                    f"<p><strong>Topic:</strong> {topic}</p>"
+                    f"{download_line}"
                     "<p>— Plan B AI Platform</p>"
                 ),
             )
-            _set_status(db, record, "delivered")
-        else:
-            _set_status(db, record, "delivered")
-
-    except Exception as exc:
-        logger.exception("Market research pipeline failed for %s", research_id)
-        record.error = str(exc)
-        _set_status(db, record, "failed")
-        raise
+   

@@ -602,6 +602,7 @@ class MarketResearch(Base):
 
     id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     topic         = Column(Text, nullable=False)
+    title         = Column(String(500), nullable=True)   # AI-generated short title
     status        = Column(String(50), nullable=False, default="pending", index=True)
 
     selected_llms = Column(JSONB, nullable=False, default=list)

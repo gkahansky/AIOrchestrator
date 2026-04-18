@@ -477,6 +477,7 @@ export async function chatWithAdvisors(body: ChatRequest): Promise<ChatApiRespon
 export interface MarketResearchSession {
   id: string
   topic: string
+  title: string | null
   status: string
   selected_llms: string[]
   critic_llm: string

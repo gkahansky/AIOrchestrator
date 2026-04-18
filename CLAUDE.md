@@ -14,7 +14,7 @@
 A reusable, multi-agent AI platform powering independent business ventures under two brands:
 
 - **MiroPrintStudio** — Etsy digital image shop (AI-generated wall art)
-- **EchoForge** (echoforge.biz) — Marketing & SEO services (Marketing Audit + Podcast Notes + Security Audit)
+- **EchoForge** (echoforge.biz) — Marketing & SEO services (Marketing Audit + Podcast Notes + Security Audit + Market Research)
 
 The core principle is that agents, skills, memory, and integrations live in a shared infrastructure layer. Each venture is a lightweight configuration and pipeline on top of that shared layer.
 
@@ -22,7 +22,8 @@ The core principle is that agents, skills, memory, and integrations live in a sh
 - **Venture B:** EchoForge — Podcast show notes — see `/ventures/podcast_notes/CLAUDE.md`
 - **Venture C:** EchoForge — Website marketing audit — see `/ventures/marketing_audit/CLAUDE.md`
 - **Venture D:** EchoForge — Web application security audit — see `/ventures/security_audit/CLAUDE.md`
-- **Venture E+:** Future ventures — each gets its own directory and CLAUDE.md
+- **Venture E:** Plan B AI — Market Research (multi-LLM research committee) — see `/ventures/market_research/CLAUDE.md`
+- **Venture F+:** Future ventures — each gets its own directory and CLAUDE.md
 
 ### Venture D — Security Audit: Architecture Notes
 
@@ -38,6 +39,15 @@ It adds components not shared with any other venture (do not move these to `/pla
 - MinIO/S3 artifact storage for raw scan output (screenshots, request/response logs)
 
 **Key constraint:** every active scanning phase (Phases 2–5) must validate target ownership before running. See Section 10 of the venture CLAUDE.md for legal/compliance requirements. Never bypass scope validation even in testing.
+
+### Venture E — Market Research: Architecture Notes
+
+The Market Research venture shares all platform components with existing ventures (Celery, FastAPI, PostgreSQL, Playwright PDF, Drive upload, email delivery). It adds:
+- `aiplatform/skills/research/multi_llm_research.py` — parallel async LLM execution (Claude, OpenAI, Gemini, Grok)
+- `aiplatform/skills/research/rag_store.py` — Qdrant-backed RAG for pre-uploaded documents
+- `ventures/market_research/config.py` — research angles, system prompts for optimizer/merger/critic
+
+Gig Generator also supports all four EchoForge services. All gig configs live in `scripts/run_gig_generator.py`. Voice is always "We/Our" (team/agency) — "I" only in the Fiverr title (platform requirement).
 
 Adding a new venture means writing a config, a pipeline, and a CLAUDE.md. It does not mean touching `/platform/`.
 

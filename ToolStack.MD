@@ -8,9 +8,10 @@ Complete inventory of every third-party tool, service, API, and library used acr
 
 | Tool | Purpose | Use Cases |
 |---|---|---|
-| **Anthropic Claude API** (`anthropic>=0.40.0`) | Primary LLM for all agent intelligence | Marketing audit report generation, Etsy listing copy, podcast show notes, theme research, SEO metadata, content scoring |
-| **OpenAI API** (`openai>=1.30.0`) | Audio transcription + image generation fallback | Whisper for podcast audio → transcript; DALL-E 3 as primary image generator while Gemini billing is pending |
-| **Google Gemini / Generative AI** (`google-genai`, `google-generativeai`) | Image generation + multimodal tasks | Gemini Imagen 3 for AI-generated wall art (pending billing approval; will replace DALL-E 3) |
+| **Anthropic Claude API** (`anthropic>=0.40.0`) | Primary LLM for all agent intelligence | Marketing audit report generation, Etsy listing copy, podcast show notes, theme research, SEO metadata, content scoring, market research optimizer/merger/critic |
+| **OpenAI API** (`openai>=1.30.0`) | Audio transcription + image generation + embeddings | Whisper for podcast audio → transcript; DALL-E 3 as primary image generator; `text-embedding-3-small` for RAG embeddings in market research |
+| **Google Gemini / Generative AI** (`google-genai`, `google-generativeai`) | Image generation + multimodal + research | Gemini Imagen 3 for AI-generated wall art (pending billing approval); `gemini-2.0-flash-001` as research committee member in Market Research |
+| **xAI Grok API** (OpenAI-compatible at `https://api.x.ai/v1`) | LLM research + critic | `grok-3-mini` participates in Market Research committee and as default critic/reflection model. Key aliases: `XAI_API_KEY`, `GROK_API_KEY`, `X_AI_API_KEY` |
 
 ---
 
@@ -91,6 +92,7 @@ Complete inventory of every third-party tool, service, API, and library used acr
 |---|---|---|
 | **Pillow** (`Pillow>=10.3.0`) | Image manipulation | Resize generated images to required aspect ratios, create product mockups, composite overlays |
 | **numpy** (`numpy>=1.26.0`) | Numerical operations | Image array operations during resizing and mockup generation |
+| **Playwright** (`playwright`) | HTML→PDF rendering + browser automation | Security audit Phase 5 (authenticated crawl, IDOR, session testing); PDF generation for Security Audit and Market Research reports |
 | **fpdf2** (`fpdf2>=2.7.0`) | PDF generation | Etsy review sheets, podcast sample PDFs, marketing audit PDF reports |
 | **reportlab** (`reportlab>=4.0.0`) | PDF generation (alternative) | Reserved for advanced PDF layouts (Hebrew/RTL documents) |
 | **arabic-reshaper** (`arabic-reshaper>=3.0.0`) | Arabic text shaping | Correct rendering of Arabic characters in PDFs |
@@ -136,12 +138,12 @@ Complete inventory of every third-party tool, service, API, and library used acr
 
 ---
 
-## Vector Database & Observability *(Planned)*
+## Vector Database & Observability
 
 | Tool | Purpose | Use Cases |
 |---|---|---|
-| **Qdrant Cloud** *(planned — Sprint 6+)* | Vector database | Long-term research memory; brand guideline embeddings; namespaced per venture |
-| **LangSmith** *(planned — Sprint 6+)* | Agent observability | Trace Claude API calls, token usage, cost per pipeline phase; debugging |
+| **Qdrant Cloud** (`qdrant-client>=1.9.0`) | Vector database | **Live** — Market Research RAG: ingests user-uploaded documents, retrieves context per session (`market_research_rag` collection). Gracefully skipped if `QDRANT_URL` not set. |
+| **LangSmith** *(planned)* | Agent observability | Trace Claude API calls, token usage, cost per pipeline phase; debugging |
 
 ---
 
@@ -203,5 +205,7 @@ No code changes required to swap — set `active: true` in `skills.json`.
 | Web app | `ALLOWED_EMAIL`, `CORS_ORIGINS` |
 | Frontend | `VITE_API_URL` |
 | Cloudflare | `CLOUDFLARE_GLOBAL_API_KEY` |
-| Qdrant *(future)* | `QDRANT_URL`, `QDRANT_API_KEY` |
-| LangSmith *(future)* | `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT`, `LANGCHAIN_TRACING_V2` |
+| Qdrant | `QDRANT_URL`, `QDRANT_API_KEY` |
+| xAI Grok | `XAI_API_KEY` (or `GROK_API_KEY` or `X_AI_API_KEY`) |
+| Market Research Drive | `DRIVE_MARKET_RESEARCH_ID` |
+| LangSmith *(planned)* | `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT`, `LANGCHAIN_TRACING_V2` |

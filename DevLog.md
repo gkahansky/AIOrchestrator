@@ -141,3 +141,7 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-18 10:43 |  | e2129e4 | Fix Gemini model + graceful Qdrant degradation |
 | 2026-04-18 10:50 |  | b679be6 | Market Research UI fixes + Adjust & Rerun feature |
 | 2026-04-18 10:55 |  | 0ec2a3e | Market research: skip Drive upload gracefully when no folder ID configured |
+| 2026-04-18 16:12 |  | a8a25f4 | Market research: AI-generated title, correct Drive folder, Drive link in email |
+| 2026-04-18 16:17 |  | e5a3358 | Gig Generator: add Security Audit venture config |
+| 2026-04-18 16:25 |  | a2665fb | Gig Generator: use We/Our voice in all generated copy |
+| 2026-04-18 17:00 |  | (pending) | Docs update — create market_research CLAUDE.md, update root CLAUDE.md + ToolStack.MD; create updateprojdocs skill |

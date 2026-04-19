@@ -168,10 +168,21 @@ function CreativeLab({ campaignId, detail, onUpdated }: {
     onSuccess: onUpdated,
   })
 
+  const saveAndRegenerateMutation = useMutation({
+    mutationFn: async () => {
+      await api.updatePrompt(campaignId, promptDraft)
+      return api.generateCreatives(campaignId)
+    },
+    onSuccess: () => { setEditingPrompt(false); onUpdated() },
+  })
+
   const approveMutation = useMutation({
     mutationFn: () => api.approveCreatives(campaignId),
     onSuccess: onUpdated,
   })
+
+  const hasAssets = !!detail.creative_assets?.length
+  const isBusy = generateMutation.isPending || saveAndRegenerateMutation.isPending
 
   return (
     <div className="space-y-4">
@@ -191,15 +202,24 @@ function CreativeLab({ campaignId, detail, onUpdated }: {
             <textarea value={promptDraft} onChange={e => setPromptDraft(e.target.value)} rows={3}
               placeholder="Describe the visual style of your ad creative — no text or logos in the image"
               className="w-full bg-surface border border-outline-variant/30 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-primary" />
-            <div className="flex gap-2">
-              <button onClick={() => promptMutation.mutate()} disabled={!promptDraft || promptMutation.isPending}
-                className="btn-primary px-3 py-1.5 text-xs">
-                {promptMutation.isPending ? "Saving..." : "Save Prompt"}
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={() => saveAndRegenerateMutation.mutate()}
+                disabled={!promptDraft || saveAndRegenerateMutation.isPending || promptMutation.isPending}
+                className="btn-primary px-3 py-1.5 text-xs flex items-center gap-1">
+                <span className="material-symbols-outlined text-[14px]">refresh</span>
+                {saveAndRegenerateMutation.isPending ? "Saving & Generating..." : "Save & Regenerate"}
+              </button>
+              <button onClick={() => promptMutation.mutate()}
+                disabled={!promptDraft || promptMutation.isPending || saveAndRegenerateMutation.isPending}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-outline-variant/40 text-on-surface hover:bg-surface-container-low">
+                {promptMutation.isPending ? "Saving..." : "Save Only"}
               </button>
               <button onClick={() => setEditingPrompt(false)}
                 className="px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface">Cancel</button>
             </div>
-            {promptMutation.isError && <p className="text-error text-xs">{promptMutation.error.message}</p>}
+            {(promptMutation.isError || saveAndRegenerateMutation.isError) && (
+              <p className="text-error text-xs">{(promptMutation.error ?? saveAndRegenerateMutation.error)?.message}</p>
+            )}
           </div>
         ) : (
           <p className="text-sm break-words">
@@ -213,9 +233,12 @@ function CreativeLab({ campaignId, detail, onUpdated }: {
       {/* Actions */}
       <div className="flex gap-3 flex-wrap">
         <button onClick={() => generateMutation.mutate()}
-          disabled={generateMutation.isPending || !detail.creative_prompt || editingPrompt}
-          className="btn-primary px-4 py-2 text-sm">
-          {generateMutation.isPending ? "Generating..." : "Generate Assets"}
+          disabled={isBusy || !detail.creative_prompt || editingPrompt}
+          className="btn-primary px-4 py-2 text-sm flex items-center gap-2">
+          {generateMutation.isPending
+            ? <><span className="material-symbols-outlined text-[16px] animate-spin">refresh</span>Generating...</>
+            : <><span className="material-symbols-outlined text-[16px]">{hasAssets ? "refresh" : "auto_awesome"}</span>
+               {hasAssets ? "Regenerate Assets" : "Generate Assets"}</>}
         </button>
         {detail.creative_assets && !detail.creative_approved && (
           <button onClick={() => approveMutation.mutate()} disabled={approveMutation.isPending}

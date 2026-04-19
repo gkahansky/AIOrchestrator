@@ -44,26 +44,18 @@ interface CampaignDetail extends CampaignSummary {
   metrics: { spend: number; clicks: number; impressions: number; cpa: number | null; timestamp: string }[]
 }
 
-interface CreativeFormat {
-  name: string
-  width: number
-  height: number
-  aspect_ratio: string
-  format_type: string
-}
-
 // ── API helpers ────────────────────────────────────────────────────────────────
 
 const api = {
-  listCampaigns: () => apiFetch<CampaignSummary[]>("/api/platform/campaigns"),
-  getCampaign: (id: string) => apiFetch<CampaignDetail>(`/api/platform/campaigns/${id}`),
-  getVendors: () => apiFetch<{ available: string[] }>("/api/platform/campaigns/vendors"),
-  getFormats: (vendor: string) => apiFetch<{ vendor: string; formats: CreativeFormat[] }>(`/api/platform/campaigns/formats/${vendor}`),
-  createCampaign: (body: object) => apiFetch<CampaignSummary>("/api/platform/campaigns", { method: "POST", body: JSON.stringify(body) }),
-  setStatus: (id: string, status: string) => apiFetch<CampaignSummary>(`/api/platform/campaigns/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  listCampaigns:     () => apiFetch<CampaignSummary[]>("/api/platform/campaigns"),
+  getCampaign:       (id: string) => apiFetch<CampaignDetail>(`/api/platform/campaigns/${id}`),
+  getVendors:        () => apiFetch<{ available: string[] }>("/api/platform/campaigns/vendors"),
+  createCampaign:    (body: object) => apiFetch<CampaignSummary>("/api/platform/campaigns", { method: "POST", body: JSON.stringify(body) }),
+  setStatus:         (id: string, status: string) => apiFetch<CampaignSummary>(`/api/platform/campaigns/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  updatePrompt:      (id: string, prompt: string) => apiFetch<CampaignDetail>(`/api/platform/campaigns/${id}/prompt`, { method: "PATCH", body: JSON.stringify({ creative_prompt: prompt }) }),
   generateCreatives: (id: string) => apiFetch<{ assets: object[]; pending_approval: boolean }>(`/api/platform/campaigns/${id}/creatives/generate`, { method: "POST", body: JSON.stringify({}) }),
-  approveCreatives: (id: string) => apiFetch<CampaignSummary>(`/api/platform/campaigns/${id}/creatives/approve`, { method: "POST", body: JSON.stringify({}) }),
-  generateInsights: (id: string) => apiFetch<{ insights: object }>(`/api/platform/campaigns/${id}/insights`, { method: "POST", body: JSON.stringify({}) }),
+  approveCreatives:  (id: string) => apiFetch<CampaignSummary>(`/api/platform/campaigns/${id}/creatives/approve`, { method: "POST", body: JSON.stringify({}) }),
+  generateInsights:  (id: string) => apiFetch<{ insights: object }>(`/api/platform/campaigns/${id}/insights`, { method: "POST", body: JSON.stringify({}) }),
 }
 
 // ── Status badge ───────────────────────────────────────────────────────────────
@@ -83,23 +75,7 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-// ── Budget bar ─────────────────────────────────────────────────────────────────
-
-function BudgetBar({ spend, budget }: { spend: number | null; budget: number | null }) {
-  if (!budget || spend === null) return <span className="text-xs text-on-surface-variant">—</span>
-  const pct = Math.min((spend / budget) * 100, 100)
-  const color = pct >= 100 ? "bg-red-500" : pct >= 90 ? "bg-yellow-400" : "bg-primary"
-  return (
-    <div className="w-full">
-      <div className="text-xs font-medium mb-1">${spend.toFixed(2)} / ${budget.toFixed(2)}</div>
-      <div className="h-1.5 bg-surface-variant rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  )
-}
-
-// ── Create campaign form ────────────────────────────────────────────────────────
+// ── Create campaign form ───────────────────────────────────────────────────────
 
 function CreateCampaignForm({ onCreated }: { onCreated: () => void }) {
   const qc = useQueryClient()
@@ -145,15 +121,19 @@ function CreateCampaignForm({ onCreated }: { onCreated: () => void }) {
             className="w-full bg-surface border border-outline-variant/30 rounded-lg px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="block text-xs font-label font-bold uppercase tracking-wider text-on-surface-variant mb-1">Total Budget Limit ($) <span className="text-on-surface-variant font-normal normal-case">(optional)</span></label>
+          <label className="block text-xs font-label font-bold uppercase tracking-wider text-on-surface-variant mb-1">
+            Total Budget Limit ($) <span className="text-on-surface-variant font-normal normal-case">(optional)</span>
+          </label>
           <input type="number" value={totalBudget} onChange={e => setTotalBudget(e.target.value)} placeholder="500"
             className="w-full bg-surface border border-outline-variant/30 rounded-lg px-3 py-2 text-sm" />
         </div>
       </div>
       <div>
-        <label className="block text-xs font-label font-bold uppercase tracking-wider text-on-surface-variant mb-1">Creative Prompt <span className="text-on-surface-variant font-normal normal-case">(optional — used in Creative Lab)</span></label>
+        <label className="block text-xs font-label font-bold uppercase tracking-wider text-on-surface-variant mb-1">
+          Creative Prompt <span className="text-on-surface-variant font-normal normal-case">(optional — can be edited later in Creative Lab)</span>
+        </label>
         <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={2}
-          placeholder="e.g. Modern professional looking at analytics dashboard, calm blue tones, no text"
+          placeholder="e.g. Modern professional looking at analytics dashboard, calm blue tones, no text, no logos"
           className="w-full bg-surface border border-outline-variant/30 rounded-lg px-3 py-2 text-sm resize-none" />
       </div>
       {mutation.isError && <p className="text-error text-sm">{mutation.error.message}</p>}
@@ -164,6 +144,118 @@ function CreateCampaignForm({ onCreated }: { onCreated: () => void }) {
           {mutation.isPending ? "Creating..." : "Create Campaign"}
         </button>
       </div>
+    </div>
+  )
+}
+
+// ── Creative Lab tab ───────────────────────────────────────────────────────────
+
+function CreativeLab({ campaignId, detail, onUpdated }: {
+  campaignId: string
+  detail: CampaignDetail
+  onUpdated: () => void
+}) {
+  const [editingPrompt, setEditingPrompt] = useState(false)
+  const [promptDraft, setPromptDraft] = useState(detail.creative_prompt ?? "")
+
+  const promptMutation = useMutation({
+    mutationFn: () => api.updatePrompt(campaignId, promptDraft),
+    onSuccess: () => { setEditingPrompt(false); onUpdated() },
+  })
+
+  const generateMutation = useMutation({
+    mutationFn: () => api.generateCreatives(campaignId),
+    onSuccess: onUpdated,
+  })
+
+  const approveMutation = useMutation({
+    mutationFn: () => api.approveCreatives(campaignId),
+    onSuccess: onUpdated,
+  })
+
+  return (
+    <div className="space-y-4">
+      {/* Prompt editor */}
+      <div className="bg-surface-container-lowest rounded-lg p-4 border border-outline-variant/20 space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-label font-bold uppercase text-on-surface-variant">Creative Prompt</p>
+          {!editingPrompt && (
+            <button onClick={() => { setPromptDraft(detail.creative_prompt ?? ""); setEditingPrompt(true) }}
+              className="text-xs text-primary hover:underline flex items-center gap-1">
+              <span className="material-symbols-outlined text-[14px]">edit</span>Edit
+            </button>
+          )}
+        </div>
+        {editingPrompt ? (
+          <div className="space-y-2">
+            <textarea value={promptDraft} onChange={e => setPromptDraft(e.target.value)} rows={3}
+              placeholder="Describe the visual style of your ad creative — no text or logos in the image"
+              className="w-full bg-surface border border-outline-variant/30 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-primary" />
+            <div className="flex gap-2">
+              <button onClick={() => promptMutation.mutate()} disabled={!promptDraft || promptMutation.isPending}
+                className="btn-primary px-3 py-1.5 text-xs">
+                {promptMutation.isPending ? "Saving..." : "Save Prompt"}
+              </button>
+              <button onClick={() => setEditingPrompt(false)}
+                className="px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface">Cancel</button>
+            </div>
+            {promptMutation.isError && <p className="text-error text-xs">{promptMutation.error.message}</p>}
+          </div>
+        ) : (
+          <p className="text-sm break-words">
+            {detail.creative_prompt
+              ? detail.creative_prompt
+              : <span className="text-on-surface-variant italic">No prompt set — click Edit to add one</span>}
+          </p>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-3 flex-wrap">
+        <button onClick={() => generateMutation.mutate()}
+          disabled={generateMutation.isPending || !detail.creative_prompt || editingPrompt}
+          className="btn-primary px-4 py-2 text-sm">
+          {generateMutation.isPending ? "Generating..." : "Generate Assets"}
+        </button>
+        {detail.creative_assets && !detail.creative_approved && (
+          <button onClick={() => approveMutation.mutate()} disabled={approveMutation.isPending}
+            className="px-4 py-2 text-sm font-medium rounded-lg bg-green-100 text-green-800 hover:bg-green-200">
+            {approveMutation.isPending ? "Publishing..." : "Approve & Publish"}
+          </button>
+        )}
+      </div>
+
+      {(generateMutation.isError || approveMutation.isError) && (
+        <p className="text-error text-sm">{(generateMutation.error ?? approveMutation.error)?.message}</p>
+      )}
+
+      {/* Asset list */}
+      {detail.creative_assets && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-bold flex items-center gap-2">
+            Generated Assets
+            {detail.creative_approved && (
+              <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full font-bold">Approved</span>
+            )}
+          </h3>
+          {detail.creative_assets.map((asset, i) => (
+            <div key={i} className="flex items-center justify-between p-3 bg-surface-container-lowest rounded-lg border border-outline-variant/20">
+              <div>
+                <p className="font-medium text-sm">{asset.format}</p>
+                <p className="text-xs text-on-surface-variant">{asset.aspect_ratio}</p>
+                {asset.error && <p className="text-xs text-error mt-1">{asset.error}</p>}
+              </div>
+              {asset.url && (
+                <a href={asset.url} target="_blank" rel="noreferrer"
+                  className="flex items-center gap-1 text-primary text-xs font-medium hover:underline">
+                  <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                  View in Drive
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -182,17 +274,10 @@ function CampaignDrawer({ campaign, onClose }: { campaign: CampaignSummary; onCl
 
   const statusMutation = useMutation({
     mutationFn: (s: string) => api.setStatus(campaign.id, s),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["campaigns"] }); qc.invalidateQueries({ queryKey: ["campaign", campaign.id] }) },
-  })
-
-  const generateMutation = useMutation({
-    mutationFn: () => api.generateCreatives(campaign.id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["campaign", campaign.id] }),
-  })
-
-  const approveMutation = useMutation({
-    mutationFn: () => api.approveCreatives(campaign.id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["campaigns"] }); qc.invalidateQueries({ queryKey: ["campaign", campaign.id] }) },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["campaigns"] })
+      qc.invalidateQueries({ queryKey: ["campaign", campaign.id] })
+    },
   })
 
   const insightsMutation = useMutation({
@@ -201,10 +286,15 @@ function CampaignDrawer({ campaign, onClose }: { campaign: CampaignSummary; onCl
   })
 
   const tabs = [
-    { key: "overview", label: "Overview" },
+    { key: "overview",  label: "Overview" },
     { key: "creatives", label: "Creative Lab" },
-    { key: "insights", label: "AI Insights" },
+    { key: "insights",  label: "AI Insights" },
   ]
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["campaigns"] })
+    qc.invalidateQueries({ queryKey: ["campaign", campaign.id] })
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex" onClick={onClose}>
@@ -253,7 +343,11 @@ function CampaignDrawer({ campaign, onClose }: { campaign: CampaignSummary; onCl
         <div className="px-6 pt-4 flex gap-4 border-b border-outline-variant/20 shrink-0">
           {tabs.map(t => (
             <button key={t.key} onClick={() => setActiveTab(t.key as typeof activeTab)}
-              className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === t.key ? "border-primary text-primary" : "border-transparent text-on-surface-variant hover:text-on-surface"}`}>
+              className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === t.key
+                  ? "border-primary text-primary"
+                  : "border-transparent text-on-surface-variant hover:text-on-surface"
+              }`}>
               {t.label}
             </button>
           ))}
@@ -262,10 +356,9 @@ function CampaignDrawer({ campaign, onClose }: { campaign: CampaignSummary; onCl
         <div className="flex-1 p-6 space-y-6 overflow-y-auto">
           {isLoading && <p className="text-sm text-on-surface-variant">Loading...</p>}
 
-          {/* ── Overview tab ─── */}
+          {/* ── Overview ── */}
           {activeTab === "overview" && detail && (
             <div className="space-y-6">
-              {/* Budget */}
               <div className="card p-4 space-y-3">
                 <h3 className="text-xs font-label font-bold uppercase text-on-surface-variant">Budget</h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
@@ -278,10 +371,8 @@ function CampaignDrawer({ campaign, onClose }: { campaign: CampaignSummary; onCl
                     <span className="font-bold">{campaign.total_budget_limit ? `$${campaign.total_budget_limit}` : "—"}</span>
                   </div>
                 </div>
-                <BudgetBar spend={campaign.latest_spend} budget={campaign.daily_budget_limit} />
               </div>
 
-              {/* Latest metrics */}
               <div className="card p-4 space-y-3">
                 <h3 className="text-xs font-label font-bold uppercase text-on-surface-variant">Latest Metrics</h3>
                 <div className="grid grid-cols-3 gap-4 text-center">
@@ -298,10 +389,9 @@ function CampaignDrawer({ campaign, onClose }: { campaign: CampaignSummary; onCl
                 </div>
               </div>
 
-              {/* Metrics history */}
               {detail.metrics.length > 0 && (
                 <div className="card p-4">
-                  <h3 className="text-xs font-label font-bold uppercase text-on-surface-variant mb-3">Metrics History (last 48h)</h3>
+                  <h3 className="text-xs font-label font-bold uppercase text-on-surface-variant mb-3">Metrics History</h3>
                   <div className="space-y-1 max-h-48 overflow-y-auto">
                     {detail.metrics.map((m, i) => (
                       <div key={i} className="flex justify-between text-xs text-on-surface-variant py-1 border-b border-outline-variant/10">
@@ -312,70 +402,15 @@ function CampaignDrawer({ campaign, onClose }: { campaign: CampaignSummary; onCl
                   </div>
                 </div>
               )}
-
-              {campaign.drive_folder_id && (
-                <p className="text-xs text-on-surface-variant">
-                  Drive folder ID: <code className="font-mono">{campaign.drive_folder_id}</code>
-                </p>
-              )}
             </div>
           )}
 
-          {/* ── Creative Lab tab ─── */}
+          {/* ── Creative Lab ── */}
           {activeTab === "creatives" && detail && (
-            <div className="space-y-4">
-              <div className="bg-surface-container-lowest rounded-lg p-4 border border-outline-variant/20">
-                <p className="text-xs font-label font-bold uppercase text-on-surface-variant mb-2">Creative Prompt</p>
-                <p className="text-sm">{detail.creative_prompt || <span className="text-on-surface-variant italic">No prompt set</span>}</p>
-              </div>
-
-              <div className="flex gap-3">
-                <button onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending || !detail.creative_prompt}
-                  className="btn-primary px-4 py-2 text-sm">
-                  {generateMutation.isPending ? "Generating..." : "Generate Assets"}
-                </button>
-                {detail.creative_assets && !detail.creative_approved && (
-                  <button onClick={() => approveMutation.mutate()} disabled={approveMutation.isPending}
-                    className="px-4 py-2 text-sm font-medium rounded-lg bg-green-100 text-green-800 hover:bg-green-200">
-                    {approveMutation.isPending ? "Publishing..." : "Approve & Publish"}
-                  </button>
-                )}
-              </div>
-
-              {(generateMutation.isError || approveMutation.isError) && (
-                <p className="text-error text-sm">{(generateMutation.error || approveMutation.error)?.message}</p>
-              )}
-
-              {detail.creative_assets && (
-                <div className="space-y-3">
-                  <h3 className="text-sm font-bold">
-                    Generated Assets
-                    {detail.creative_approved && (
-                      <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full font-bold">Approved</span>
-                    )}
-                  </h3>
-                  {detail.creative_assets.map((asset, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-surface-container-lowest rounded-lg border border-outline-variant/20">
-                      <div>
-                        <p className="font-medium text-sm">{asset.format}</p>
-                        <p className="text-xs text-on-surface-variant">{asset.aspect_ratio}</p>
-                        {asset.error && <p className="text-xs text-error mt-1">{asset.error}</p>}
-                      </div>
-                      {asset.url && (
-                        <a href={asset.url} target="_blank" rel="noreferrer"
-                          className="flex items-center gap-1 text-primary text-xs font-medium hover:underline">
-                          <span className="material-symbols-outlined text-[16px]">open_in_new</span>
-                          View in Drive
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <CreativeLab campaignId={campaign.id} detail={detail} onUpdated={invalidate} />
           )}
 
-          {/* ── AI Insights tab ─── */}
+          {/* ── AI Insights ── */}
           {activeTab === "insights" && detail && (
             <div className="space-y-4">
               <button onClick={() => insightsMutation.mutate()} disabled={insightsMutation.isPending}
@@ -398,7 +433,9 @@ function CampaignDrawer({ campaign, onClose }: { campaign: CampaignSummary; onCl
                     {detail.ai_insights.suggestions?.map((s, i) => (
                       <div key={i} className="flex items-start gap-3 p-3 bg-surface-container-lowest rounded-lg">
                         <span className={`mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
-                          s.priority === "high" ? "bg-red-100 text-red-700" : s.priority === "medium" ? "bg-yellow-100 text-yellow-700" : "bg-surface-variant text-on-surface-variant"
+                          s.priority === "high" ? "bg-red-100 text-red-700"
+                          : s.priority === "medium" ? "bg-yellow-100 text-yellow-700"
+                          : "bg-surface-variant text-on-surface-variant"
                         }`}>{s.priority}</span>
                         <div>
                           <p className="font-medium text-sm">{s.action}</p>
@@ -448,7 +485,6 @@ export default function CampaignManager() {
         </button>
       </div>
 
-      {/* Create form */}
       {showCreate && (
         <div className="card p-6">
           <h2 className="font-bold text-base mb-4">New Campaign</h2>
@@ -456,7 +492,6 @@ export default function CampaignManager() {
         </div>
       )}
 
-      {/* Campaigns table */}
       {isLoading && <p className="text-sm text-on-surface-variant">Loading campaigns...</p>}
       {isError && <p className="text-sm text-error">{(error as Error).message}</p>}
 
@@ -488,8 +523,7 @@ export default function CampaignManager() {
                   ? (c.latest_spend / c.daily_budget_limit) * 100 : 0
                 const rowBg = pct >= 100 ? "bg-red-50" : pct >= 90 ? "bg-yellow-50" : ""
                 return (
-                  <tr key={c.id}
-                    onClick={() => setSelected(c)}
+                  <tr key={c.id} onClick={() => setSelected(c)}
                     className={`border-b border-outline-variant/10 hover:bg-surface-container-lowest cursor-pointer transition-colors ${rowBg}`}>
                     <td className="px-4 py-3 font-medium">{c.name}</td>
                     <td className="px-4 py-3 capitalize text-on-surface-variant">{c.vendor}</td>

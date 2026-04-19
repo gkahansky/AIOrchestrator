@@ -35,6 +35,7 @@ For each venture directory modified (`src/ventures/{name}/`):
 - **Venture list** — if a new venture was added, append it to the venture list (Venture A, B, C…) and update the brand description line
 - **Architecture Notes** — if the new venture introduces components not shared with others, add a `### Venture X — Name: Architecture Notes` block
 - **Gig Generator** — if a new venture config was added to the Gig Generator, mention it in the Venture E architecture notes block
+- **Feature list** — if a new feature or sub-module was added to an existing feature or venture, mention that under the relevant parent feature/venture section.
 
 ### 3. ToolStack.MD (`/ToolStack.MD`)
 

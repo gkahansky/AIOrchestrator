@@ -10,6 +10,7 @@ Campaign Manager router.
   POST   /api/platform/campaigns/{id}/insights       — trigger AI insight engine
   GET    /api/platform/campaigns/formats/{vendor}    — supported creative formats
   GET    /api/platform/campaigns/vendors             — which vendors are configured
+  PATCH  /api/platform/campaigns/{id}/prompt         — update creative prompt
 """
 
 from __future__ import annotations
@@ -45,6 +46,10 @@ class CreateCampaignRequest(BaseModel):
 
 class StatusRequest(BaseModel):
     status: str                             # active | paused | stopped
+
+
+class UpdatePromptRequest(BaseModel):
+    creative_prompt: str
 
 
 class InsightRequest(BaseModel):
@@ -262,6 +267,22 @@ def update_status(
     return _to_summary(record)
 
 
+@router.patch("/{campaign_id}/prompt")
+def update_prompt(
+    campaign_id: str,
+    req: UpdatePromptRequest,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_auth),
+) -> CampaignDetail:
+    """Update the creative prompt for a campaign."""
+    record = _get_or_404(db, campaign_id)
+    record.creative_prompt = req.creative_prompt
+    record.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(record)
+    return _to_detail(record)
+
+
 @router.post("/{campaign_id}/creatives/generate")
 def generate_creatives(
     campaign_id: str,
@@ -290,8 +311,10 @@ def generate_creatives(
 
     for fmt in formats[:3]:  # generate top-3 formats (limit cost)
         sized_prompt = (
-            f"{record.creative_prompt} — {fmt.aspect_ratio} aspect ratio, "
-            f"professional ad creative, no text, clean composition"
+            f"{record.creative_prompt}. "
+            f"Professional advertising photography, {fmt.aspect_ratio} aspect ratio. "
+            f"Absolutely no text, no words, no letters, no numbers, no typography, no captions, "
+            f"no watermarks anywhere in the image. Clean composition, striking visuals only."
         )
         try:
             tmp_dir = pathlib.Path(tempfile.mkdtemp())

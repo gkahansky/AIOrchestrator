@@ -184,7 +184,7 @@ def generate_via_gemini(
             number_of_images=1,
             aspect_ratio=gemini_ratio,
             output_mime_type="image/png",
-            safety_filter_level="BLOCK_LOW_AND_ABOVE",
+            safety_filter_level="BLOCK_ONLY_HIGH",
             person_generation="DONT_ALLOW",
         ),
     )

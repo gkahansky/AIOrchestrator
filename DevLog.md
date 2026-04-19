@@ -145,3 +145,6 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-18 16:17 |  | e5a3358 | Gig Generator: add Security Audit venture config |
 | 2026-04-18 16:25 |  | a2665fb | Gig Generator: use We/Our voice in all generated copy |
 | 2026-04-18 17:00 |  | (pending) | Docs update — create market_research CLAUDE.md, update root CLAUDE.md + ToolStack.MD; create updateprojdocs skill |
+| 2026-04-18 21:15 |  | cb5a1a0 | docs: update project docs â€” Market Research venture + updateprojdocs skill |
+| 2026-04-18 21:27 |  | 65ad52a | Campaign Manager â€” full implementation |
+| 2026-04-19 10:00 |  | (pending) | Campaign Manager fixes — add PATCH /prompt endpoint, fix Gemini safety filter (BLOCK_ONLY_HIGH), stronger no-text directive for ad creatives, inline prompt editor in Creative Lab |

@@ -1619,11 +1619,13 @@ function MrStatusBadge({ status }: { status: string }) {
 
 function SessionDetailDrawer({
   session,
+  isLoading,
   onClose,
   onRerun,
   onRetry,
 }: {
-  session: MarketResearchDetail
+  session: MarketResearchDetail | null
+  isLoading: boolean
   onClose: () => void
   onRerun: (topic: string, prompts: Record<string, string>, selectedLlms: string[], criticLlm: string) => void
   onRetry: () => void
@@ -1633,12 +1635,12 @@ function SessionDetailDrawer({
   const [editedPrompts, setEditedPrompts] = useState<Record<string, string>>({})
   const [retrying, setRetrying] = useState(false)
 
-  // Initialise editable prompts whenever the drawer opens or prompts arrive
   useEffect(() => {
-    if (session.optimized_prompts) setEditedPrompts({ ...session.optimized_prompts })
-  }, [session.optimized_prompts])
+    if (session?.optimized_prompts) setEditedPrompts({ ...session.optimized_prompts })
+  }, [session?.optimized_prompts])
 
-  const isDone = ["pdf_ready", "delivered", "failed"].includes(session.status)
+  const isDone = session ? ["pdf_ready", "delivered", "failed"].includes(session.status) : false
+  const canRetry = session ? ["failed", "pending"].includes(session.status) : false
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -1648,10 +1650,13 @@ function SessionDetailDrawer({
         <div className="flex items-start gap-3 px-6 pt-5 pb-4 border-b shrink-0">
           <div className="flex-1 min-w-0">
             <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Research Session</p>
-            <h3 className="font-semibold text-gray-900 text-base leading-snug break-words">{session.title || session.topic}</h3>
+            {isLoading || !session
+              ? <div className="h-5 w-48 bg-gray-100 rounded animate-pulse" />
+              : <h3 className="font-semibold text-gray-900 text-base leading-snug break-words">{session.title || session.topic}</h3>
+            }
             <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-              <MrStatusBadge status={session.status} />
-              {session.drive_link && (
+              {session && <MrStatusBadge status={session.status} />}
+              {session?.drive_link && (
                 <a href={session.drive_link} target="_blank" rel="noopener noreferrer"
                    className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline">
                   <span className="material-symbols-outlined text-sm">download</span>
@@ -1684,65 +1689,77 @@ function SessionDetailDrawer({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 text-sm text-gray-700 leading-relaxed">
-          {tab === "report" && (
-            <div className="whitespace-pre-wrap">{session.final_report || session.merged_report || "No report yet."}</div>
-          )}
-
-          {tab === "critic" && (
-            <div className="whitespace-pre-wrap">{session.critic_feedback || "No critic feedback yet."}</div>
-          )}
-
-          {tab === "prompts" && (
-            <div className="space-y-5">
-              {session.optimized_prompts
-                ? Object.entries(rerunMode ? editedPrompts : session.optimized_prompts).map(([llm, prompt]) => (
-                    <div key={llm}>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mb-2 ${LLM_META[llm]?.bg ?? "bg-gray-100"} ${LLM_META[llm]?.color ?? "text-gray-700"}`}>
-                        {LLM_META[llm]?.label ?? llm}
-                        {session.critic_llm === llm && <span className="ml-1 opacity-70">★ Critic</span>}
-                      </span>
-                      {rerunMode ? (
-                        <textarea
-                          value={editedPrompts[llm] ?? prompt}
-                          onChange={e => setEditedPrompts(prev => ({ ...prev, [llm]: e.target.value }))}
-                          rows={6}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
-                        />
-                      ) : (
-                        <p className="text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 rounded-lg p-3">{prompt}</p>
-                      )}
-                    </div>
-                  ))
-                : <p className="text-gray-400">Prompts not yet generated.</p>
-              }
+          {isLoading || !session ? (
+            <div className="space-y-3 animate-pulse">
+              <div className="h-4 bg-gray-100 rounded w-3/4" />
+              <div className="h-4 bg-gray-100 rounded w-full" />
+              <div className="h-4 bg-gray-100 rounded w-5/6" />
             </div>
-          )}
+          ) : (
+            <>
+              {tab === "report" && (
+                <div className="whitespace-pre-wrap">{session.final_report || session.merged_report || "No report yet."}</div>
+              )}
 
-          {session.error && (
-            <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-lg text-xs">
-              <strong>Error:</strong> {session.error}
-            </div>
-          )}
+              {tab === "critic" && (
+                <div className="whitespace-pre-wrap">{session.critic_feedback || "No critic feedback yet."}</div>
+              )}
 
-          {(session.status === "failed" || session.status === "pending") && (
-            <div className="mt-4 flex items-center gap-3">
-              <button
-                disabled={retrying}
-                onClick={async () => {
-                  setRetrying(true)
-                  try { await onRetry() } finally { setRetrying(false) }
-                }}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50">
-                <span className="material-symbols-outlined text-sm">replay</span>
-                {retrying ? "Retrying..." : "Retry Now"}
-              </button>
-              <span className="text-xs text-gray-400">Re-queues the same session from scratch</span>
-            </div>
+              {tab === "prompts" && (
+                <div className="space-y-5">
+                  {session.optimized_prompts
+                    ? Object.entries(rerunMode ? editedPrompts : session.optimized_prompts).map(([llm, prompt]) => (
+                        <div key={llm}>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mb-2 ${LLM_META[llm]?.bg ?? "bg-gray-100"} ${LLM_META[llm]?.color ?? "text-gray-700"}`}>
+                            {LLM_META[llm]?.label ?? llm}
+                            {session.critic_llm === llm && <span className="ml-1 opacity-70">★ Critic</span>}
+                          </span>
+                          {rerunMode ? (
+                            <textarea
+                              value={editedPrompts[llm] ?? prompt}
+                              onChange={e => setEditedPrompts(prev => ({ ...prev, [llm]: e.target.value }))}
+                              rows={6}
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
+                            />
+                          ) : (
+                            <p className="text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 rounded-lg p-3">{prompt}</p>
+                          )}
+                        </div>
+                      ))
+                    : <p className="text-gray-400">Prompts not yet generated.</p>
+                  }
+                </div>
+              )}
+
+              {session.error && (
+                <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-lg text-xs">
+                  <strong>Error:</strong> {session.error}
+                </div>
+              )}
+            </>
           )}
         </div>
 
-        {/* Footer actions */}
-        {tab === "prompts" && session.optimized_prompts && isDone && (
+        {/* Footer actions — Retry (always visible for failed/pending) or Adjust & Rerun */}
+        {canRetry && (
+          <div className="shrink-0 px-6 py-4 border-t bg-red-50 rounded-b-2xl flex items-center justify-between gap-3">
+            <p className="text-xs text-gray-500">
+              {session?.status === "failed" ? "This session failed — retry to run it again." : "This session is stuck pending — retry to re-queue it."}
+            </p>
+            <button
+              disabled={retrying}
+              onClick={async () => {
+                setRetrying(true)
+                try { await onRetry() } finally { setRetrying(false) }
+              }}
+              className="shrink-0 flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50">
+              <span className="material-symbols-outlined text-sm">replay</span>
+              {retrying ? "Retrying..." : "Retry Now"}
+            </button>
+          </div>
+        )}
+
+        {!canRetry && tab === "prompts" && session?.optimized_prompts && isDone && (
           <div className="shrink-0 px-6 py-4 border-t bg-gray-50 rounded-b-2xl flex items-center justify-between gap-3">
             {rerunMode ? (
               <>
@@ -1793,7 +1810,7 @@ function MarketResearchTab() {
 
   const { data: llmsData } = useQuery({ queryKey: ["market-research-llms"], queryFn: fetchAvailableLlms })
   const { data: sessions = [] } = useQuery({ queryKey: ["market-research-sessions"], queryFn: fetchMarketResearchSessions, refetchInterval: pollingId ? 3000 : false })
-  const { data: detail } = useQuery({
+  const { data: detail, isLoading: isLoadingDetail } = useQuery({
     queryKey: ["market-research-session", detailId],
     queryFn: () => fetchMarketResearchSession(detailId!),
     enabled: !!detailId,
@@ -1996,9 +2013,10 @@ function MarketResearchTab() {
       </div>
 
       {/* Detail drawer */}
-      {detailId && detail && (
+      {detailId && (
         <SessionDetailDrawer
-          session={detail}
+          session={detail ?? null}
+          isLoading={isLoadingDetail}
           onClose={() => setDetailId(null)}
           onRerun={(_topic, prompts, llms, critic) => {
             rerunResearchSession(detailId!, prompts, llms, critic).then(sess => {

@@ -10,6 +10,7 @@ import {
   triggerAdvisor, chatWithAdvisors,
   fetchAvailableLlms, createMarketResearchSession, uploadResearchDocs,
   fetchMarketResearchSessions, fetchMarketResearchSession, rerunResearchSession,
+  retryResearchSession,
 } from "../api"
 import type { MarketResearchDetail } from "../api"
 import type {
@@ -1620,14 +1621,17 @@ function SessionDetailDrawer({
   session,
   onClose,
   onRerun,
+  onRetry,
 }: {
   session: MarketResearchDetail
   onClose: () => void
   onRerun: (topic: string, prompts: Record<string, string>, selectedLlms: string[], criticLlm: string) => void
+  onRetry: () => void
 }) {
   const [tab, setTab] = useState<"report" | "critic" | "prompts">("report")
   const [rerunMode, setRerunMode] = useState(false)
   const [editedPrompts, setEditedPrompts] = useState<Record<string, string>>({})
+  const [retrying, setRetrying] = useState(false)
 
   // Initialise editable prompts whenever the drawer opens or prompts arrive
   useEffect(() => {
@@ -1717,6 +1721,22 @@ function SessionDetailDrawer({
           {session.error && (
             <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-lg text-xs">
               <strong>Error:</strong> {session.error}
+            </div>
+          )}
+
+          {(session.status === "failed" || session.status === "pending") && (
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                disabled={retrying}
+                onClick={async () => {
+                  setRetrying(true)
+                  try { await onRetry() } finally { setRetrying(false) }
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50">
+                <span className="material-symbols-outlined text-sm">replay</span>
+                {retrying ? "Retrying..." : "Retry Now"}
+              </button>
+              <span className="text-xs text-gray-400">Re-queues the same session from scratch</span>
             </div>
           )}
         </div>
@@ -1985,6 +2005,12 @@ function MarketResearchTab() {
               queryClient.invalidateQueries({ queryKey: ["market-research-sessions"] })
               setPollingId(sess.id)
             })
+          }}
+          onRetry={async () => {
+            await retryResearchSession(detailId!)
+            queryClient.invalidateQueries({ queryKey: ["market-research-sessions"] })
+            queryClient.invalidateQueries({ queryKey: ["market-research-session", detailId] })
+            setPollingId(detailId)
           }}
         />
       )}

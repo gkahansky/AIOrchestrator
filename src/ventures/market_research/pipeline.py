@@ -322,4 +322,11 @@ def run_market_research(research_id: str, db: Session) -> None:
                     "<p>— Plan B AI Platform</p>"
                 ),
             )
-   
+        _set_status(db, record, "delivered")
+
+    except Exception as exc:
+        logger.exception("run_market_research failed for %s", research_id)
+        record.status = "failed"
+        record.error = str(exc)
+        db.commit()
+        raise

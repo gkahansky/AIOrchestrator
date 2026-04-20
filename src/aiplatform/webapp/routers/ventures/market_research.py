@@ -70,6 +70,7 @@ def _to_detail(r: MarketResearch) -> ResearchDetail:
     return ResearchDetail(
         id=str(r.id),
         topic=r.topic,
+        title=r.title,
         status=r.status,
         selected_llms=r.selected_llms or [],
         critic_llm=r.critic_llm,
@@ -190,6 +191,37 @@ class RerunRequest(BaseModel):
     adjusted_prompts: dict[str, str]            # {llm_id: edited_prompt}
     selected_llms: list[str] | None = None      # defaults to original session's selection
     critic_llm: str | None = None
+
+
+@router.post("/sessions/{session_id}/retry", status_code=status.HTTP_202_ACCEPTED)
+def retry_session(
+    session_id: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_auth),
+) -> ResearchSummary:
+    """Re-queue a failed or stuck-pending session without cloning it."""
+    from aiplatform.worker import run_market_research as celery_task
+
+    try:
+        record_id = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+
+    record = db.get(MarketResearch, record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if record.status not in ("failed", "pending"):
+        raise HTTPException(status_code=400, detail=f"Only failed or pending sessions can be retried (current: {record.status})")
+
+    record.status = "pending"
+    record.error = None
+    db.commit()
+
+    task = celery_task.delay(str(record.id))
+    record.celery_task_id = task.id
+    db.commit()
+    db.refresh(record)
+    return _to_summary(record)
 
 
 @router.post("/sessions/{session_id}/rerun", status_code=status.HTTP_202_ACCEPTED)

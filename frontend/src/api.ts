@@ -547,3 +547,11 @@ export async function rerunResearchSession(
   })
   return handleResponse<MarketResearchSession>(res)
 }
+
+export async function retryResearchSession(sessionId: string): Promise<MarketResearchSession> {
+  const res = await fetch(`${BASE}/api/ventures/market-research/sessions/${sessionId}/retry`, {
+    method: "POST",
+    headers: getHeaders(),
+  })
+  return handleResponse<MarketResearchSession>(res)
+}

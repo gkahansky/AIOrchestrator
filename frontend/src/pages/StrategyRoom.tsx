@@ -1901,7 +1901,7 @@ function MarketResearchTab() {
             onDrop={e => { e.preventDefault(); setFiles(prev => [...prev, ...Array.from(e.dataTransfer.files)]) }}
           >
             <span className="material-symbols-outlined text-2xl text-gray-400">upload_file</span>
-            <p className="text-sm text-gray-500 mt-1">Drag & drop PDFs or text files, or click to browse</p>
+            <p className="text-sm text-gray-500 mt-1">Drag & drop or click to browse — PDF, Word, Excel, PowerPoint, TXT, MD</p>
             {files.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1 justify-center">
                 {files.map((f, i) => (
@@ -1910,7 +1910,7 @@ function MarketResearchTab() {
               </div>
             )}
           </div>
-          <input ref={fileRef} type="file" multiple accept=".pdf,.txt,.md" className="hidden"
+          <input ref={fileRef} type="file" multiple accept=".pdf,.txt,.md,.docx,.doc,.xlsx,.xls,.pptx,.ppt" className="hidden"
             onChange={e => setFiles(prev => [...prev, ...Array.from(e.target.files ?? [])])} />
         </div>
 

@@ -1,11 +1,12 @@
 """
 RAG document store skill.
 
-Ingests uploaded files (PDF, TXT, MD) into a Qdrant collection keyed by
-research session ID. Returns stored point IDs so the pipeline can retrieve
-context for each LLM's research prompt.
+Ingests uploaded files (PDF, TXT, MD, DOCX, XLSX, PPTX) into a Qdrant
+collection keyed by research session ID. Returns stored point IDs so the
+pipeline can retrieve context for each LLM's research prompt.
 
-Dependencies: qdrant-client, openai (embeddings), pypdf
+Dependencies: qdrant-client, openai (embeddings), pypdf,
+              python-docx, openpyxl, python-pptx
 """
 
 import io
@@ -55,11 +56,40 @@ def _ensure_collection(client) -> None:
 # ── Text extraction ────────────────────────────────────────────────────────────
 
 def _extract_text(filename: str, data: bytes) -> str:
-    ext = filename.rsplit(".", 1)[-1].lower()
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext == "pdf":
         from pypdf import PdfReader
         reader = PdfReader(io.BytesIO(data))
         return "\n".join(page.extract_text() or "" for page in reader.pages)
+    if ext in ("docx", "doc"):
+        from docx import Document
+        doc = Document(io.BytesIO(data))
+        return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+    if ext in ("xlsx", "xls"):
+        from openpyxl import load_workbook
+        wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+        lines: list[str] = []
+        for sheet in wb.worksheets:
+            lines.append(f"[Sheet: {sheet.title}]")
+            for row in sheet.iter_rows(values_only=True):
+                cells = [str(c) for c in row if c is not None]
+                if cells:
+                    lines.append("\t".join(cells))
+        return "\n".join(lines)
+    if ext in ("pptx", "ppt"):
+        from pptx import Presentation
+        prs = Presentation(io.BytesIO(data))
+        lines: list[str] = []
+        for i, slide in enumerate(prs.slides, 1):
+            lines.append(f"[Slide {i}]")
+            for shape in slide.shapes:
+                if shape.has_text_frame:
+                    for para in shape.text_frame.paragraphs:
+                        text = para.text.strip()
+                        if text:
+                            lines.append(text)
+        return "\n".join(lines)
+    # plain text fallback (txt, md, csv, etc.)
     return data.decode("utf-8", errors="replace")
 
 

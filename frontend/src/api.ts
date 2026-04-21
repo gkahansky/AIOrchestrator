@@ -485,9 +485,34 @@ export interface MarketResearchSession {
   created_at: string
 }
 
+export interface WorkPackage {
+  id: string
+  name: string
+  scope: string
+  sections: string[]
+}
+
+export interface PackageResult {
+  name: string
+  scope: string
+  sections: string[]
+  merged: string
+}
+
+export interface V2OptimizedPrompts {
+  version: 2
+  packages: WorkPackage[]
+}
+
+export interface V2ResearchResults {
+  version: 2
+  packages: Record<string, PackageResult>
+  total: number
+}
+
 export interface MarketResearchDetail extends MarketResearchSession {
-  optimized_prompts: Record<string, string> | null
-  research_results: Record<string, string> | null
+  optimized_prompts: Record<string, string> | V2OptimizedPrompts | null
+  research_results: Record<string, string> | V2ResearchResults | null
   merged_report: string | null
   critic_feedback: string | null
   final_report: string | null

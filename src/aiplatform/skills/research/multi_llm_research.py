@@ -32,13 +32,13 @@ _XAI_BASE_URL = "https://api.x.ai/v1"
 
 # ── Per-provider async callers ─────────────────────────────────────────────────
 
-async def _call_claude(prompt: str, system: str, timeout: int) -> str:
+async def _call_claude(prompt: str, system: str, timeout: int, max_tokens: int = 4096) -> str:
     import anthropic
     client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     msg = await asyncio.wait_for(
         client.messages.create(
             model=_MODELS["claude"],
-            max_tokens=4096,
+            max_tokens=max_tokens,
             system=system,
             messages=[{"role": "user", "content": prompt}],
         ),
@@ -47,13 +47,13 @@ async def _call_claude(prompt: str, system: str, timeout: int) -> str:
     return msg.content[0].text
 
 
-async def _call_openai(prompt: str, system: str, timeout: int) -> str:
+async def _call_openai(prompt: str, system: str, timeout: int, max_tokens: int = 4096) -> str:
     from openai import AsyncOpenAI
     client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
     resp = await asyncio.wait_for(
         client.chat.completions.create(
             model=_MODELS["openai"],
-            max_tokens=4096,
+            max_tokens=max_tokens,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
@@ -64,16 +64,19 @@ async def _call_openai(prompt: str, system: str, timeout: int) -> str:
     return resp.choices[0].message.content
 
 
-async def _call_gemini(prompt: str, system: str, timeout: int) -> str:
+async def _call_gemini(prompt: str, system: str, timeout: int, max_tokens: int = 4096) -> str:
     from google import genai
+    from google.genai import types as genai_types
     client = genai.Client(api_key=os.environ["GOOGLE_AI_API_KEY"])
     full_prompt = f"{system}\n\n{prompt}"
+    _max = max_tokens
     resp = await asyncio.wait_for(
         asyncio.get_event_loop().run_in_executor(
             None,
             lambda: client.models.generate_content(
                 model=_MODELS["gemini"],
                 contents=full_prompt,
+                config=genai_types.GenerateContentConfig(max_output_tokens=_max),
             ),
         ),
         timeout=timeout,
@@ -81,7 +84,7 @@ async def _call_gemini(prompt: str, system: str, timeout: int) -> str:
     return resp.text
 
 
-async def _call_grok(prompt: str, system: str, timeout: int) -> str:
+async def _call_grok(prompt: str, system: str, timeout: int, max_tokens: int = 4096) -> str:
     from openai import AsyncOpenAI
     api_key = next((os.environ[k] for k in ["XAI_API_KEY", "GROK_API_KEY", "X_AI_API_KEY"] if os.environ.get(k)), None)
     if not api_key:
@@ -93,7 +96,7 @@ async def _call_grok(prompt: str, system: str, timeout: int) -> str:
     resp = await asyncio.wait_for(
         client.chat.completions.create(
             model=_MODELS["grok"],
-            max_tokens=4096,
+            max_tokens=max_tokens,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
@@ -132,11 +135,11 @@ def available_llms() -> list[str]:
     return result
 
 
-async def _safe_call(llm_id: str, prompt: str, system: str, timeout: int) -> tuple[str, str | None, str | None]:
+async def _safe_call(llm_id: str, prompt: str, system: str, timeout: int, max_tokens: int = 4096) -> tuple[str, str | None, str | None]:
     """Call one LLM. Returns (llm_id, result_text | None, error | None)."""
     caller, _ = _CALLERS[llm_id]
     try:
-        text = await caller(prompt, system, timeout)
+        text = await caller(prompt, system, timeout, max_tokens)
         logger.info("multi_llm_research: %s completed (%d chars)", llm_id, len(text))
         return llm_id, text, None
     except Exception as exc:
@@ -149,6 +152,7 @@ async def run_parallel_research(
     system_prompt: str,
     selected_llms: list[str] | None = None,
     timeout: int = 120,
+    max_tokens: int = 4096,
 ) -> dict[str, Any]:
     """
     Run each LLM concurrently with its tailored research prompt.
@@ -181,7 +185,7 @@ async def run_parallel_research(
     fallback_prompt = next(iter(prompts.values())) if prompts else ""
 
     tasks = [
-        _safe_call(llm, prompts.get(llm, fallback_prompt), system_prompt, timeout)
+        _safe_call(llm, prompts.get(llm, fallback_prompt), system_prompt, timeout, max_tokens)
         for llm in to_run
     ]
     outcomes = await asyncio.gather(*tasks)
@@ -202,8 +206,9 @@ def run_parallel_research_sync(
     system_prompt: str,
     selected_llms: list[str] | None = None,
     timeout: int = 120,
+    max_tokens: int = 4096,
 ) -> dict[str, Any]:
     """Synchronous wrapper — for use inside Celery tasks."""
     return asyncio.run(
-        run_parallel_research(prompts, system_prompt, selected_llms, timeout)
+        run_parallel_research(prompts, system_prompt, selected_llms, timeout, max_tokens)
     )

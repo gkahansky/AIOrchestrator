@@ -14,7 +14,7 @@ import {
   fetchMarketResearchSessions, fetchMarketResearchSession, rerunResearchSession,
   retryResearchSession,
 } from "../api"
-import type { MarketResearchDetail } from "../api"
+import type { MarketResearchDetail, V2OptimizedPrompts } from "../api"
 import type {
   AdvisorConfig,
   AdvisoryProposal,
@@ -1671,9 +1671,13 @@ function SessionDetailDrawer({
   const [editedPrompts, setEditedPrompts] = useState<Record<string, string>>({})
   const [retrying, setRetrying] = useState(false)
 
+  const isV2 = (session?.optimized_prompts as V2OptimizedPrompts | null)?.version === 2
+
   useEffect(() => {
-    if (session?.optimized_prompts) setEditedPrompts({ ...session.optimized_prompts })
-  }, [session?.optimized_prompts])
+    if (session?.optimized_prompts && !isV2) {
+      setEditedPrompts({ ...(session.optimized_prompts as Record<string, string>) })
+    }
+  }, [session?.optimized_prompts, isV2])
 
   const isDone = session ? ["pdf_ready", "delivered", "failed"].includes(session.status) : false
   const canRetry = session ? ["failed", "pending"].includes(session.status) : false
@@ -1743,27 +1747,51 @@ function SessionDetailDrawer({
 
               {tab === "prompts" && (
                 <div className="space-y-5">
-                  {session.optimized_prompts
-                    ? Object.entries(rerunMode ? editedPrompts : session.optimized_prompts).map(([llm, prompt]) => (
-                        <div key={llm}>
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mb-2 ${LLM_META[llm]?.bg ?? "bg-gray-100"} ${LLM_META[llm]?.color ?? "text-gray-700"}`}>
-                            {LLM_META[llm]?.label ?? llm}
-                            {session.critic_llm === llm && <span className="ml-1 opacity-70">★ Critic</span>}
+                  {!session.optimized_prompts && (
+                    <p className="text-gray-400">Prompts not yet generated.</p>
+                  )}
+
+                  {/* V2: Work Package cards */}
+                  {isV2 && (session.optimized_prompts as V2OptimizedPrompts).packages.map((pkg, i) => (
+                    <div key={pkg.id} className="border border-gray-200 rounded-xl p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xs font-bold text-primary bg-primary/10 rounded px-2 py-0.5">
+                          Package {i + 1}
+                        </span>
+                        <span className="font-semibold text-sm text-gray-800">{pkg.name}</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mb-3">{pkg.scope}</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {pkg.sections.map(s => (
+                          <span key={s} className="text-xs bg-gray-100 text-gray-600 rounded px-2 py-0.5 font-mono">
+                            {s.replace(/^#+\s*/, "")}
                           </span>
-                          {rerunMode ? (
-                            <textarea
-                              value={editedPrompts[llm] ?? prompt}
-                              onChange={e => setEditedPrompts(prev => ({ ...prev, [llm]: e.target.value }))}
-                              rows={6}
-                              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
-                            />
-                          ) : (
-                            <p className="text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 rounded-lg p-3">{prompt}</p>
-                          )}
-                        </div>
-                      ))
-                    : <p className="text-gray-400">Prompts not yet generated.</p>
-                  }
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* V1: Per-LLM prompt editor */}
+                  {session.optimized_prompts && !isV2 && (
+                    Object.entries(rerunMode ? editedPrompts : (session.optimized_prompts as Record<string, string>)).map(([llm, prompt]) => (
+                      <div key={llm}>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mb-2 ${LLM_META[llm]?.bg ?? "bg-gray-100"} ${LLM_META[llm]?.color ?? "text-gray-700"}`}>
+                          {LLM_META[llm]?.label ?? llm}
+                          {session.critic_llm === llm && <span className="ml-1 opacity-70">★ Critic</span>}
+                        </span>
+                        {rerunMode ? (
+                          <textarea
+                            value={editedPrompts[llm] ?? prompt}
+                            onChange={e => setEditedPrompts(prev => ({ ...prev, [llm]: e.target.value }))}
+                            rows={6}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
+                          />
+                        ) : (
+                          <p className="text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 rounded-lg p-3">{prompt}</p>
+                        )}
+                      </div>
+                    ))
+                  )}
                 </div>
               )}
 
@@ -1795,13 +1823,13 @@ function SessionDetailDrawer({
           </div>
         )}
 
-        {!canRetry && tab === "prompts" && session?.optimized_prompts && isDone && (
+        {!canRetry && tab === "prompts" && session?.optimized_prompts && !isV2 && isDone && (
           <div className="shrink-0 px-6 py-4 border-t bg-gray-50 rounded-b-2xl flex items-center justify-between gap-3">
             {rerunMode ? (
               <>
                 <p className="text-xs text-gray-500">Edit the prompts above, then rerun.</p>
                 <div className="flex gap-2">
-                  <button onClick={() => { setRerunMode(false); setEditedPrompts({ ...session.optimized_prompts! }) }}
+                  <button onClick={() => { setRerunMode(false); setEditedPrompts({ ...(session.optimized_prompts as Record<string, string>) }) }}
                     className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 transition-colors">
                     Cancel
                   </button>

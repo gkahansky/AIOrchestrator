@@ -255,13 +255,39 @@ def _merge_package(topic: str, package: dict, llm_results: dict[str, str]) -> st
     return _claude_sync(PACKAGE_MERGE_SYSTEM, user_msg, max_tokens=8192)
 
 
-def _stitch_packages(topic: str, package_merges: list[tuple[str, str]]) -> str:
-    parts = "\n\n".join(
-        f"=== {name.upper()} ===\n{text}"
-        for name, text in package_merges
+def _generate_executive_summary(topic: str, pkg_store: dict) -> str:
+    """
+    Generate a focused Executive Summary from excerpts of all package merges.
+    This is the ONLY LLM call in the assembly stage — keeps it small and reliable.
+    """
+    excerpts = "\n\n".join(
+        f"=== {data['name'].upper()} ===\n{data['merged'][:2500]}"
+        for data in pkg_store.values()
     )
-    user_msg = f"Topic: {topic}\n\nWork package outputs to assemble:\n\n{parts}"
-    return _claude_sync(STITCH_SYSTEM, user_msg, max_tokens=8192)
+    system = (
+        "You are a chief market analyst. Write an Executive Summary for a market research report. "
+        "Produce 5-7 punchy bullet points capturing the most critical cross-cutting findings. "
+        "Be specific: include named companies, USD figures, percentages, and actionable insights. "
+        "Format exactly as:\n## Executive Summary\n- bullet 1\n- bullet 2\n...\n"
+        "Output only the Executive Summary — nothing else."
+    )
+    user_msg = f"Research topic: {topic}\n\nKey findings from all research packages:\n\n{excerpts}"
+    return _claude_sync(system, user_msg, max_tokens=1024)
+
+
+def _assemble_report(topic: str, packages: list[dict], pkg_store: dict) -> str:
+    """
+    Assemble the final report by Python-concatenating all package merges.
+    Eliminates the single-call stitch bottleneck that caused truncation:
+    no LLM call has to produce the full report — each package is already
+    a complete merged section, so we just join them in order.
+    """
+    exec_summary = _generate_executive_summary(topic, pkg_store)
+    parts = [exec_summary]
+    for pkg in packages:
+        if pkg["id"] in pkg_store:
+            parts.append(pkg_store[pkg["id"]]["merged"])
+    return "\n\n---\n\n".join(parts)
 
 
 def _run_v2(
@@ -345,22 +371,18 @@ def _run_v2(
 
         carry_forward = merged_pkg[-1500:]
 
-    # Stage 3: Level-2 stitch
+    # Stage 3: Sequential assembly — Python concatenation + focused exec summary
+    # No single LLM call produces the full report, so output length is unbounded.
     _set_status(db, record, "merging")
-    package_merges = [
-        (pkg_store[pkg["id"]]["name"], pkg_store[pkg["id"]]["merged"])
-        for pkg in packages
-        if pkg["id"] in pkg_store
-    ]
-    stitched = _stitch_packages(topic, package_merges)
-    record.merged_report = stitched
+    assembled = _assemble_report(topic, packages, pkg_store)
+    record.merged_report = assembled
     db.commit()
 
     # Stage 4: Critic
     _set_status(db, record, "reflecting")
-    feedback = _critic_review(topic, stitched, critic_llm)
+    feedback = _critic_review(topic, assembled, critic_llm)
     record.critic_feedback = feedback
-    record.final_report = stitched
+    record.final_report = assembled
     db.commit()
 
 

@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Strategy Room | PlanB</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "inverse-surface": "#2e3132",
+                        "secondary-container": "#d6e3fb",
+                        "on-tertiary-fixed-variant": "#812800",
+                        "tertiary-fixed-dim": "#ffb59b",
+                        "on-primary": "#ffffff",
+                        "surface-dim": "#d9dadb",
+                        "on-primary-fixed-variant": "#0040a2",
+                        "primary-fixed-dim": "#b2c5ff",
+                        "primary-container": "#0052cc",
+                        "on-error-container": "#93000a",
+                        "primary-fixed": "#dae2ff",
+                        "tertiary-container": "#a33500",
+                        "error-container": "#ffdad6",
+                        "surface-container-high": "#e7e8e9",
+                        "outline": "#737685",
+                        "on-primary-container": "#c4d2ff",
+                        "error": "#ba1a1a",
+                        "surface-bright": "#f8f9fa",
+                        "background": "#f8f9fa",
+                        "secondary": "#525f73",
+                        "on-secondary-container": "#586579",
+                        "surface-container": "#edeeef",
+                        "tertiary-fixed": "#ffdbcf",
+                        "surface": "#f8f9fa",
+                        "secondary-fixed": "#d6e3fb",
+                        "inverse-on-surface": "#f0f1f2",
+                        "on-tertiary-fixed": "#380d00",
+                        "on-secondary": "#ffffff",
+                        "on-primary-fixed": "#001848",
+                        "surface-container-highest": "#e1e3e4",
+                        "on-error": "#ffffff",
+                        "tertiary": "#7b2600",
+                        "surface-tint": "#0c56d0",
+                        "outline-variant": "#c3c6d6",
+                        "on-surface": "#191c1d",
+                        "on-tertiary-container": "#ffc6b2",
+                        "on-surface-variant": "#434654",
+                        "on-secondary-fixed-variant": "#3b485a",
+                        "primary": "#003d9b",
+                        "surface-container-lowest": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "on-background": "#191c1d",
+                        "inverse-primary": "#b2c5ff",
+                        "secondary-fixed-dim": "#bac7de",
+                        "surface-variant": "#e1e3e4",
+                        "on-secondary-fixed": "#0f1c2d",
+                        "surface-container-low": "#f3f4f5"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "fontFamily": {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3, .font-headline { font-family: 'Manrope', sans-serif; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface min-h-screen">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full flex flex-col py-6 bg-slate-50 dark:bg-slate-900 w-64 z-50">
+<div class="px-6 mb-8 flex items-center gap-3">
+<div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white">
+<span class="material-symbols-outlined text-sm" data-icon="rocket_launch">rocket_launch</span>
+</div>
+<div>
+<span class="text-xl font-bold text-slate-900 dark:text-white block font-headline">PlanB</span>
+<span class="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">Strategy Room</span>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center gap-3 py-3 px-4 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center gap-3 py-3 px-4 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined" data-icon="rocket_launch">rocket_launch</span>
+                Ventures
+            </a>
+<a class="flex items-center gap-3 py-3 px-4 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined" data-icon="bolt">bolt</span>
+                Gig Generator
+            </a>
+<a class="flex items-center gap-3 py-3 px-4 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg mx-2 text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined" data-icon="psychology">psychology</span>
+                Strategy Room
+            </a>
+<a class="flex items-center gap-3 py-3 px-4 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined" data-icon="campaign">campaign</span>
+                Marketing
+            </a>
+<a class="flex items-center gap-3 py-3 px-4 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+                Finance
+            </a>
+<a class="flex items-center gap-3 py-3 px-4 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+                Settings
+            </a>
+</nav>
+<div class="mt-auto space-y-1">
+<a class="flex items-center gap-3 py-3 px-4 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+                Support
+            </a>
+<a class="flex items-center gap-3 py-3 px-4 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+                Log Out
+            </a>
+</div>
+</aside>
+<!-- TopAppBar -->
+<header class="fixed top-0 right-0 left-64 h-16 flex justify-between items-center px-8 z-40 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md shadow-sm dark:shadow-none">
+<div class="flex items-center gap-8">
+<h1 class="text-xl font-bold font-headline text-on-surface">Strategy Room</h1>
+<div class="flex items-center gap-6">
+<a class="text-blue-700 dark:text-blue-400 border-b-2 border-blue-700 dark:border-blue-400 pb-2 text-sm font-semibold tracking-tight" href="#">Agents</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all text-sm font-semibold tracking-tight" href="#">Roadmap</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm" data-icon="search">search</span>
+<input class="pl-10 pr-4 py-2 bg-surface-container-low border-none rounded-full text-sm w-64 focus:ring-2 ring-blue-500/20 transition-all" placeholder="Search strategy..." type="text"/>
+</div>
+<button class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-on-surface-variant transition-colors">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-on-surface-variant transition-colors">
+<span class="material-symbols-outlined" data-icon="chat_bubble">chat_bubble</span>
+</button>
+<div class="w-8 h-8 bg-primary-fixed rounded-full overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="close-up portrait of professional executive in minimalist modern office with soft natural lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAcmqiqVnzt9B2PdUnQkMzJHzIXPQIe2heZDNEFJoirYOlOVE28ZBIAv2BMC64GrV8UUFJQRWk70Fp3WMV-6WeaoJ8dAl8JE0_QI11b1gBOlihw0nfeuFe4dsS0Fozzad_cZzTpFrAzLrSuEqdVIZoK86hXc418zUIgGkH1d3KWz_TPYAboLAUenmzNnUS2s1rXTXXRwFQeKOL59t8og3AtBf1YwVCgs3jJnL5FSpf9wFfozFs6IVmh9U6yiR0wJMvuVn4q38vxGVNq"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-64 pt-24 p-8 min-h-screen">
+<div class="max-w-7xl mx-auto space-y-12">
+<!-- Background Section: Active Agents Grid (Simulated Context) -->
+<section>
+<div class="flex items-center justify-between mb-8">
+<div>
+<h2 class="text-3xl font-bold font-headline tracking-tight text-on-surface">Specialized Agents</h2>
+<p class="text-on-surface-variant mt-2 font-body">Your AI advisory board actively monitoring project health.</p>
+</div>
+<button class="bg-primary hover:bg-primary-container text-white px-6 py-2.5 rounded-lg text-sm font-semibold shadow-md transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="add">add</span>
+                        Deploy New Agent
+                    </button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+<!-- Agent Card: The Architect -->
+<div class="bg-surface-container-lowest rounded-xl p-6 border-l-4 border-primary shadow-sm group hover:shadow-md transition-shadow">
+<div class="flex items-start justify-between mb-4">
+<div class="w-12 h-12 bg-primary-fixed flex items-center justify-center rounded-xl text-primary">
+<span class="material-symbols-outlined text-3xl" data-icon="architecture">architecture</span>
+</div>
+<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase">Active</span>
+</div>
+<h3 class="text-xl font-bold font-headline mb-1">The Architect</h3>
+<p class="text-sm text-on-surface-variant mb-6 leading-relaxed">System architecture optimization, database scalability, and infrastructure cost reduction.</p>
+<div class="flex items-center justify-between pt-4 border-t border-surface-container">
+<span class="text-xs font-semibold text-primary">4 Pending Proposals</span>
+<button class="text-xs font-bold text-on-surface hover:text-primary transition-colors flex items-center gap-1">
+                                Review Proposals
+                                <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Agent Card: Growth Catalyst -->
+<div class="bg-surface-container-lowest rounded-xl p-6 border-l-4 border-outline-variant shadow-sm group hover:shadow-md transition-shadow">
+<div class="flex items-start justify-between mb-4">
+<div class="w-12 h-12 bg-secondary-fixed flex items-center justify-center rounded-xl text-secondary">
+<span class="material-symbols-outlined text-3xl" data-icon="trending_up">trending_up</span>
+</div>
+<span class="bg-slate-100 text-slate-500 px-3 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase">Idle</span>
+</div>
+<h3 class="text-xl font-bold font-headline mb-1">Growth Catalyst</h3>
+<p class="text-sm text-on-surface-variant mb-6 leading-relaxed">User acquisition strategies, conversion rate optimization, and market expansion analysis.</p>
+<div class="flex items-center justify-between pt-4 border-t border-surface-container">
+<span class="text-xs font-semibold text-on-surface-variant">0 Pending Proposals</span>
+<button class="text-xs font-bold text-on-surface-variant cursor-not-allowed flex items-center gap-1 opacity-50">
+                                Review Proposals
+                            </button>
+</div>
+</div>
+<!-- Agent Card: Risk Sentinel -->
+<div class="bg-surface-container-lowest rounded-xl p-6 border-l-4 border-primary shadow-sm group hover:shadow-md transition-shadow">
+<div class="flex items-start justify-between mb-4">
+<div class="w-12 h-12 bg-tertiary-fixed flex items-center justify-center rounded-xl text-tertiary">
+<span class="material-symbols-outlined text-3xl" data-icon="security">security</span>
+</div>
+<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase">Active</span>
+</div>
+<h3 class="text-xl font-bold font-headline mb-1">Risk Sentinel</h3>
+<p class="text-sm text-on-surface-variant mb-6 leading-relaxed">Security audit compliance, fraud detection, and regulatory risk assessments.</p>
+<div class="flex items-center justify-between pt-4 border-t border-surface-container">
+<span class="text-xs font-semibold text-primary">1 Pending Proposal</span>
+<button class="text-xs font-bold text-on-surface hover:text-primary transition-colors flex items-center gap-1">
+                                Review Proposals
+                                <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- Modal Overlay -->
+<div class="fixed inset-0 z-[100] flex items-center justify-center px-4">
+<!-- Backdrop -->
+<div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
+<!-- Modal Dialog -->
+<div class="relative bg-surface-container-lowest w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[870px]">
+<!-- Modal Header -->
+<div class="bg-surface-container-low px-8 py-6 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white">
+<span class="material-symbols-outlined" data-icon="architecture">architecture</span>
+</div>
+<div>
+<h2 class="text-2xl font-bold font-headline tracking-tight text-on-surface">Architect: Pending Proposals</h2>
+<p class="text-xs text-on-surface-variant font-medium tracking-wide">4 STRATEGIC INITIATIVES PENDING APPROVAL</p>
+</div>
+</div>
+<button class="w-10 h-10 flex items-center justify-center hover:bg-surface-container-high rounded-full transition-colors text-on-surface-variant">
+<span class="material-symbols-outlined" data-icon="close">close</span>
+</button>
+</div>
+<!-- Modal Content (Proposal List) -->
+<div class="flex-1 overflow-y-auto p-8 space-y-6">
+<!-- Proposal Card 1 -->
+<div class="group relative bg-white border border-outline-variant/20 rounded-xl p-6 hover:shadow-lg transition-all duration-300">
+<div class="flex items-start justify-between mb-3">
+<h3 class="text-lg font-bold font-headline text-on-surface leading-snug">Optimize SQL Queries: Payment Gateway</h3>
+<span class="bg-red-50 text-red-700 px-3 py-1 rounded-full text-[10px] font-extrabold tracking-tighter uppercase border border-red-100">High Priority</span>
+</div>
+<p class="text-sm text-on-surface-variant leading-relaxed mb-6">
+                        Identified 4 redundant joins in the `transactions` table indexing strategy. Implementation will reduce latency by 240ms per request.
+                    </p>
+<div class="flex items-center gap-3">
+<button class="flex-1 bg-primary hover:bg-primary-container text-white py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all">
+<span class="material-symbols-outlined text-sm" data-icon="check_circle">check_circle</span>
+                            Accept
+                        </button>
+<button class="flex-1 bg-surface-container-low hover:bg-surface-container-high text-on-surface-variant py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all">
+<span class="material-symbols-outlined text-sm" data-icon="archive">archive</span>
+                            Reject
+                        </button>
+</div>
+</div>
+<!-- Proposal Card 2 -->
+<div class="group relative bg-white border border-outline-variant/20 rounded-xl p-6 hover:shadow-lg transition-all duration-300">
+<div class="flex items-start justify-between mb-3">
+<h3 class="text-lg font-bold font-headline text-on-surface leading-snug">S3 Bucket Life Cycle Automation</h3>
+<span class="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-[10px] font-extrabold tracking-tighter uppercase border border-blue-100">Medium Priority</span>
+</div>
+<p class="text-sm text-on-surface-variant leading-relaxed mb-6">
+                        Archive logs older than 90 days to Glacier Deep Archive. Estimated monthly infrastructure savings: $420.
+                    </p>
+<div class="flex items-center gap-3">
+<button class="flex-1 bg-primary hover:bg-primary-container text-white py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all">
+<span class="material-symbols-outlined text-sm" data-icon="check_circle">check_circle</span>
+                            Accept
+                        </button>
+<button class="flex-1 bg-surface-container-low hover:bg-surface-container-high text-on-surface-variant py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all">
+<span class="material-symbols-outlined text-sm" data-icon="archive">archive</span>
+                            Reject
+                        </button>
+</div>
+</div>
+<!-- Proposal Card 3 -->
+<div class="group relative bg-white border border-outline-variant/20 rounded-xl p-6 hover:shadow-lg transition-all duration-300">
+<div class="flex items-start justify-between mb-3">
+<h3 class="text-lg font-bold font-headline text-on-surface leading-snug">Refactor Legacy Auth Module</h3>
+<span class="bg-amber-50 text-amber-700 px-3 py-1 rounded-full text-[10px] font-extrabold tracking-tighter uppercase border border-amber-100">Low Priority</span>
+</div>
+<p class="text-sm text-on-surface-variant leading-relaxed mb-6">
+                        Migrate custom OAuth2 implementation to standard library to reduce maintenance surface. Technical debt cleanup.
+                    </p>
+<div class="flex items-center gap-3">
+<button class="flex-1 bg-primary hover:bg-primary-container text-white py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all">
+<span class="material-symbols-outlined text-sm" data-icon="check_circle">check_circle</span>
+                            Accept
+                        </button>
+<button class="flex-1 bg-surface-container-low hover:bg-surface-container-high text-on-surface-variant py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all">
+<span class="material-symbols-outlined text-sm" data-icon="archive">archive</span>
+                            Reject
+                        </button>
+</div>
+</div>
+<!-- Proposal Card 4 -->
+<div class="group relative bg-white border border-outline-variant/20 rounded-xl p-6 hover:shadow-lg transition-all duration-300">
+<div class="flex items-start justify-between mb-3">
+<h3 class="text-lg font-bold font-headline text-on-surface leading-snug">Enable Edge Caching for Assets</h3>
+<span class="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-[10px] font-extrabold tracking-tighter uppercase border border-blue-100">Medium Priority</span>
+</div>
+<p class="text-sm text-on-surface-variant leading-relaxed mb-6">
+                        Deploy CloudFront distributions for static assets in the EU-West region to decrease global TTFB by 15%.
+                    </p>
+<div class="flex items-center gap-3">
+<button class="flex-1 bg-primary hover:bg-primary-container text-white py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all">
+<span class="material-symbols-outlined text-sm" data-icon="check_circle">check_circle</span>
+                            Accept
+                        </button>
+<button class="flex-1 bg-surface-container-low hover:bg-surface-container-high text-on-surface-variant py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all">
+<span class="material-symbols-outlined text-sm" data-icon="archive">archive</span>
+                            Reject
+                        </button>
+</div>
+</div>
+</div>
+<!-- Modal Footer -->
+<div class="bg-surface-container px-8 py-4 flex items-center justify-between">
+<p class="text-xs text-on-surface-variant font-medium">Reviewing these proposals will update the global Strategy Roadmap.</p>
+<button class="text-primary font-bold text-sm hover:underline transition-all">View All Archived</button>
+</div>
+</div>
+</div>
+</body></html>

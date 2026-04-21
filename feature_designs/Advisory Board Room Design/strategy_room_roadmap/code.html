@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-primary-fixed-variant": "#0040a2",
+                    "on-surface-variant": "#434654",
+                    "surface-container-lowest": "#ffffff",
+                    "on-error-container": "#93000a",
+                    "tertiary-fixed-dim": "#ffb59b",
+                    "inverse-primary": "#b2c5ff",
+                    "on-primary-fixed": "#001848",
+                    "primary-container": "#0052cc",
+                    "surface-bright": "#f8f9fa",
+                    "primary-fixed": "#dae2ff",
+                    "primary": "#003d9b",
+                    "surface-container-high": "#e7e8e9",
+                    "on-tertiary-fixed": "#380d00",
+                    "on-secondary-fixed-variant": "#3b485a",
+                    "on-primary-container": "#c4d2ff",
+                    "on-secondary-container": "#586579",
+                    "error": "#ba1a1a",
+                    "secondary-fixed": "#d6e3fb",
+                    "surface-container-low": "#f3f4f5",
+                    "on-secondary-fixed": "#0f1c2d",
+                    "outline": "#737685",
+                    "surface-container": "#edeeef",
+                    "on-tertiary": "#ffffff",
+                    "on-surface": "#191c1d",
+                    "surface-variant": "#e1e3e4",
+                    "surface-dim": "#d9dadb",
+                    "error-container": "#ffdad6",
+                    "surface-container-highest": "#e1e3e4",
+                    "on-tertiary-container": "#ffc6b2",
+                    "on-error": "#ffffff",
+                    "surface-tint": "#0c56d0",
+                    "outline-variant": "#c3c6d6",
+                    "tertiary": "#7b2600",
+                    "on-tertiary-fixed-variant": "#812800",
+                    "secondary-fixed-dim": "#bac7de",
+                    "secondary": "#525f73",
+                    "background": "#f8f9fa",
+                    "tertiary-fixed": "#ffdbcf",
+                    "secondary-container": "#d6e3fb",
+                    "tertiary-container": "#a33500",
+                    "on-background": "#191c1d",
+                    "on-primary": "#ffffff",
+                    "inverse-surface": "#2e3132",
+                    "on-secondary": "#ffffff",
+                    "surface": "#f8f9fa",
+                    "inverse-on-surface": "#f0f1f2",
+                    "primary-fixed-dim": "#b2c5ff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "fontFamily": {
+                    "headline": ["Manrope"],
+                    "body": ["Inter"],
+                    "label": ["Inter"]
+            }
+          },
+        }
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface">
+<!-- SideNavBar Shell -->
+<aside class="fixed left-0 top-0 h-full flex flex-col py-6 bg-slate-50 dark:bg-slate-900 h-screen w-64 border-r-0 z-50">
+<div class="px-6 mb-10 flex items-center gap-3">
+<div class="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-white">rocket_launch</span>
+</div>
+<div>
+<h1 class="text-xl font-bold text-slate-900 dark:text-white Manrope">PlanB</h1>
+<p class="text-xs text-slate-500 font-medium tracking-tight">Strategy Room</p>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<!-- Dashboard -->
+<a class="flex items-center px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight group" href="#">
+<span class="material-symbols-outlined mr-3 group-active:scale-95 duration-150 ease-in-out">dashboard</span>
+                Dashboard
+            </a>
+<!-- Ventures -->
+<a class="flex items-center px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight group" href="#">
+<span class="material-symbols-outlined mr-3 group-active:scale-95 duration-150 ease-in-out">rocket_launch</span>
+                Ventures
+            </a>
+<!-- Gig Generator -->
+<a class="flex items-center px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight group" href="#">
+<span class="material-symbols-outlined mr-3 group-active:scale-95 duration-150 ease-in-out">bolt</span>
+                Gig Generator
+            </a>
+<!-- Strategy Room (Active) -->
+<a class="flex items-center px-4 py-3 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg mx-2 text-sm font-medium tracking-tight group" href="#">
+<span class="material-symbols-outlined mr-3 group-active:scale-95 duration-150 ease-in-out">psychology</span>
+                Strategy Room
+            </a>
+<!-- Marketing -->
+<a class="flex items-center px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight group" href="#">
+<span class="material-symbols-outlined mr-3 group-active:scale-95 duration-150 ease-in-out">campaign</span>
+                Marketing
+            </a>
+<!-- Finance -->
+<a class="flex items-center px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight group" href="#">
+<span class="material-symbols-outlined mr-3 group-active:scale-95 duration-150 ease-in-out">payments</span>
+                Finance
+            </a>
+<!-- Settings -->
+<a class="flex items-center px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight group" href="#">
+<span class="material-symbols-outlined mr-3 group-active:scale-95 duration-150 ease-in-out">settings</span>
+                Settings
+            </a>
+</nav>
+<div class="mt-auto border-t border-slate-100 dark:border-slate-800 pt-6">
+<a class="flex items-center px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight group" href="#">
+<span class="material-symbols-outlined mr-3">help</span>
+                Support
+            </a>
+<a class="flex items-center px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight group" href="#">
+<span class="material-symbols-outlined mr-3">logout</span>
+                Log Out
+            </a>
+</div>
+</aside>
+<!-- TopAppBar Shell -->
+<header class="fixed top-0 right-0 left-64 h-16 flex justify-between items-center px-8 z-40 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md shadow-sm dark:shadow-none">
+<div class="flex items-center gap-8">
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+<input class="pl-10 pr-4 py-1.5 bg-surface-container-low border-none rounded-full text-sm focus:ring-2 ring-blue-500/20 w-64 transition-all outline-none" placeholder="Search roadmap..." type="text"/>
+</div>
+<nav class="flex gap-8 items-center h-full pt-1">
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all text-sm font-medium" href="#">Pending Proposals</a>
+<a class="text-blue-700 dark:text-blue-400 border-b-2 border-blue-700 dark:border-blue-400 pb-2 text-sm font-bold" href="#">Roadmap</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all text-sm font-medium" href="#">Agents</a>
+</nav>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+<span class="material-symbols-outlined">chat_bubble</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-primary/10 overflow-hidden ml-2 ring-2 ring-white/20">
+<img class="w-full h-full object-cover" data-alt="professional portrait of a creative director in a minimalist studio setting with soft natural light" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAEc7HuhLWydvIOlcDvvsUD0GViPkhYjiooedLcFSTl-3-pcf8wNni8GyqHr3cdeV_EN5gUZ0R4jk92yce2foa_hWN6MJC-pY5Bm5Yof-bMwaUkby885GNhF22Xgf5poDmqNYVs12rJMjanIAGI0ldp4y7rSH9peJqYTsOv_ID_CMLrXdTvQ8NHBmzYgliBW-bjVyGkMxXQafQRBtVFPJ4D1VvW9UB__3T7DfdEP_z6mUcl6RNjWjQavzP9aSoryoFLFFfc8HKWEB2k"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-64 pt-24 pb-12 px-12 min-h-screen">
+<!-- Hero Strategy Section -->
+<div class="flex justify-between items-end mb-10">
+<div>
+<span class="text-[11px] font-bold text-primary tracking-[0.1em] uppercase block mb-2">Strategy Execution</span>
+<h2 class="text-4xl font-extrabold tracking-tight text-on-surface Manrope">Roadmap</h2>
+<p class="text-on-surface-variant mt-2 max-w-lg">Track the evolution of PlanB's automated ventures and strategic expansions.</p>
+</div>
+<button class="flex items-center gap-2 bg-gradient-to-br from-primary to-primary-container text-white px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all active:scale-95 group">
+<span class="material-symbols-outlined text-sm">add</span>
+<span class="font-bold text-sm">Add to Roadmap</span>
+</button>
+</div>
+<!-- Filter Bar -->
+<div class="flex items-center gap-4 mb-8">
+<div class="bg-surface-container-low p-1 rounded-full flex gap-1">
+<button class="px-5 py-2 bg-white text-on-surface rounded-full text-xs font-semibold shadow-sm">All Items</button>
+<button class="px-5 py-2 text-on-surface-variant hover:text-on-surface rounded-full text-xs font-medium transition-colors">Backlog</button>
+<button class="px-5 py-2 text-on-surface-variant hover:text-on-surface rounded-full text-xs font-medium transition-colors">In Progress</button>
+<button class="px-5 py-2 text-on-surface-variant hover:text-on-surface rounded-full text-xs font-medium transition-colors">Completed</button>
+</div>
+<div class="h-6 w-px bg-outline-variant/30"></div>
+<button class="flex items-center gap-2 text-xs font-medium text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-lg">filter_list</span>
+                Filter by Effort
+            </button>
+</div>
+<!-- Bento Style Roadmap Grid -->
+<div class="grid grid-cols-12 gap-6">
+<!-- Roadmap Card 1: In Progress -->
+<div class="col-span-12 md:col-span-8 bg-surface-container-lowest p-8 rounded-3xl shadow-sm border-l-4 border-primary group hover:shadow-md transition-shadow relative overflow-hidden">
+<div class="flex justify-between items-start mb-6">
+<span class="px-3 py-1 bg-primary/10 text-primary text-[10px] font-bold rounded-full uppercase tracking-wider">In Progress</span>
+<div class="flex gap-1">
+<span class="material-symbols-outlined text-outline-variant cursor-pointer hover:text-primary transition-colors">more_horiz</span>
+</div>
+</div>
+<h3 class="text-2xl font-bold mb-3 Manrope group-hover:text-primary transition-colors">AI Content Syndicate Expansion</h3>
+<p class="text-on-surface-variant text-sm leading-relaxed mb-8 max-w-2xl">
+                    Scaling the multi-agent content generation workflow to support video and long-form narrative formats across 5 new niche domains.
+                </p>
+<div class="grid grid-cols-3 gap-8">
+<div>
+<p class="text-[10px] text-outline uppercase font-bold tracking-widest mb-1">Effort</p>
+<div class="flex items-center gap-2">
+<span class="text-xl font-bold Manrope">High</span>
+<div class="flex gap-0.5">
+<div class="w-3 h-1.5 rounded-full bg-primary"></div>
+<div class="w-3 h-1.5 rounded-full bg-primary"></div>
+<div class="w-3 h-1.5 rounded-full bg-primary"></div>
+</div>
+</div>
+</div>
+<div>
+<p class="text-[10px] text-outline uppercase font-bold tracking-widest mb-1">Target Margin</p>
+<p class="text-xl font-bold Manrope text-primary">68%</p>
+</div>
+<div>
+<p class="text-[10px] text-outline uppercase font-bold tracking-widest mb-1">Timeline</p>
+<p class="text-xl font-bold Manrope">Q3 2024</p>
+</div>
+</div>
+<!-- Decorative background element -->
+<div class="absolute -right-8 -bottom-8 opacity-5">
+<span class="material-symbols-outlined text-[160px]">auto_awesome</span>
+</div>
+</div>
+<!-- Roadmap Card 2: Backlog (Small) -->
+<div class="col-span-12 md:col-span-4 bg-surface-container-lowest p-8 rounded-3xl shadow-sm hover:shadow-md transition-shadow">
+<div class="flex justify-between items-start mb-6">
+<span class="px-3 py-1 bg-surface-container-high text-on-surface-variant text-[10px] font-bold rounded-full uppercase tracking-wider">Backlog</span>
+<span class="material-symbols-outlined text-outline-variant">low_priority</span>
+</div>
+<h3 class="text-xl font-bold mb-3 Manrope">Niche Directory Auto-Gen</h3>
+<p class="text-on-surface-variant text-xs mb-6 leading-relaxed">
+                    Automated scraping and SEO-landing page creation for high-intent directory niches.
+                </p>
+<div class="space-y-4">
+<div class="flex justify-between items-center text-xs">
+<span class="text-outline font-medium">Effort:</span>
+<span class="font-bold">Medium</span>
+</div>
+<div class="flex justify-between items-center text-xs">
+<span class="text-outline font-medium">Margin:</span>
+<span class="font-bold text-primary">45%</span>
+</div>
+</div>
+</div>
+<!-- Roadmap Card 3: Completed (Medium) -->
+<div class="col-span-12 md:col-span-4 bg-surface-container-lowest p-8 rounded-3xl shadow-sm border-l-4 border-tertiary-fixed-dim/50">
+<div class="flex justify-between items-start mb-6">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-green-600 text-sm" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="px-3 py-1 bg-green-50 text-green-700 text-[10px] font-bold rounded-full uppercase tracking-wider">Completed</span>
+</div>
+</div>
+<h3 class="text-xl font-bold mb-3 Manrope">Strategic P/L Dashboard</h3>
+<p class="text-on-surface-variant text-xs mb-6 leading-relaxed">
+                    Real-time financial tracking integrated with the Gig Generator workflow.
+                </p>
+<div class="bg-surface-container-low p-4 rounded-xl flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-white flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">trending_up</span>
+</div>
+<div>
+<p class="text-[10px] text-outline font-bold uppercase tracking-tight">Post-Launch Margin</p>
+<p class="text-sm font-bold Manrope">+12.4% over target</p>
+</div>
+</div>
+</div>
+<!-- Roadmap Card 4: In Progress (Asymmetric) -->
+<div class="col-span-12 md:col-span-8 bg-surface-container-lowest p-8 rounded-3xl shadow-sm border-l-4 border-primary flex gap-8 items-center group relative overflow-hidden">
+<div class="flex-1">
+<div class="flex justify-between items-start mb-4">
+<span class="px-3 py-1 bg-primary/10 text-primary text-[10px] font-bold rounded-full uppercase tracking-wider">In Progress</span>
+</div>
+<h3 class="text-2xl font-bold mb-3 Manrope group-hover:text-primary transition-colors">Crypto Arbitrage Agent V2</h3>
+<p class="text-on-surface-variant text-sm leading-relaxed mb-6">
+                        Implementation of high-frequency liquidity pool monitoring across Solana and Base networks for automated micro-opportunities.
+                    </p>
+<div class="flex gap-8">
+<div class="flex items-center gap-2">
+<span class="text-[11px] text-outline font-bold uppercase tracking-widest">Effort</span>
+<span class="text-sm font-bold bg-surface-container-high px-2 py-0.5 rounded text-on-surface">Extensive</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-[11px] text-outline font-bold uppercase tracking-widest">Margin</span>
+<span class="text-sm font-bold text-primary">High Variance (200%+)</span>
+</div>
+</div>
+</div>
+<div class="w-48 h-48 rounded-2xl bg-slate-50 overflow-hidden shrink-0 hidden lg:block">
+<img class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-500" data-alt="abstract digital visualization of blockchain nodes and cryptographic data streams in deep blue and neon accents" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCoIJxj66St4QFZrpY7XrmBzraU0IZ6G81eVlO_YAa5DZva6xrs1suo3fu84e2Wk29HXuEYH4B2MIYwWe9V6QSk0IMgzCNF1YHE5kvCc68QIK33n-wjVxNefY4UnPDgtCY-C_KwM_rmtXd9c8_v2h6gi_G2SE7rG5mJpkKcOiXtER-51G77CXxuHG3ZfP_l0xVj2nVanQ93LUBX_6TYBRs1ah_sAlCCg2zOrrB-uSgSrDsR6xsZslJurXs3MILt6swzESQ32hC0hvRQ"/>
+</div>
+</div>
+<!-- Roadmap Card 5: Backlog -->
+<div class="col-span-12 md:col-span-6 lg:col-span-3 bg-surface-container-lowest p-6 rounded-3xl shadow-sm border-l-4 border-transparent hover:border-outline-variant transition-all">
+<span class="px-2 py-0.5 bg-surface-container-high text-on-surface-variant text-[9px] font-bold rounded-full uppercase mb-4 inline-block">Backlog</span>
+<h4 class="font-bold text-lg mb-2 Manrope">Ad-Sense Arbitrage Bot</h4>
+<p class="text-xs text-on-surface-variant mb-4">High-velocity site creation for trending long-tail keywords.</p>
+<div class="flex justify-between items-end">
+<div>
+<p class="text-[9px] text-outline font-bold uppercase">Effort</p>
+<p class="text-sm font-bold">Low</p>
+</div>
+<span class="text-primary font-bold text-sm">30% Margin</span>
+</div>
+</div>
+<!-- Roadmap Card 6: Backlog -->
+<div class="col-span-12 md:col-span-6 lg:col-span-3 bg-surface-container-lowest p-6 rounded-3xl shadow-sm border-l-4 border-transparent hover:border-outline-variant transition-all">
+<span class="px-2 py-0.5 bg-surface-container-high text-on-surface-variant text-[9px] font-bold rounded-full uppercase mb-4 inline-block">Backlog</span>
+<h4 class="font-bold text-lg mb-2 Manrope">Lead-Gen Voice AI</h4>
+<p class="text-xs text-on-surface-variant mb-4">Autonomous outbound screening for real estate agents.</p>
+<div class="flex justify-between items-end">
+<div>
+<p class="text-[9px] text-outline font-bold uppercase">Effort</p>
+<p class="text-sm font-bold">Medium</p>
+</div>
+<span class="text-primary font-bold text-sm">55% Margin</span>
+</div>
+</div>
+<!-- Roadmap Card 7: Backlog -->
+<div class="col-span-12 md:col-span-6 lg:col-span-3 bg-surface-container-lowest p-6 rounded-3xl shadow-sm border-l-4 border-transparent hover:border-outline-variant transition-all">
+<span class="px-2 py-0.5 bg-surface-container-high text-on-surface-variant text-[9px] font-bold rounded-full uppercase mb-4 inline-block">Backlog</span>
+<h4 class="font-bold text-lg mb-2 Manrope">SaaS Micro-Acquisition</h4>
+<p class="text-xs text-on-surface-variant mb-4">Automated outreach for distressed Shopify app assets.</p>
+<div class="flex justify-between items-end">
+<div>
+<p class="text-[9px] text-outline font-bold uppercase">Effort</p>
+<p class="text-sm font-bold">High</p>
+</div>
+<span class="text-primary font-bold text-sm">Variable</span>
+</div>
+</div>
+<!-- Roadmap Card 8: Backlog -->
+<div class="col-span-12 md:col-span-6 lg:col-span-3 bg-surface-container-lowest p-6 rounded-3xl shadow-sm border-l-4 border-transparent hover:border-outline-variant transition-all">
+<span class="px-2 py-0.5 bg-surface-container-high text-on-surface-variant text-[9px] font-bold rounded-full uppercase mb-4 inline-block">Backlog</span>
+<h4 class="font-bold text-lg mb-2 Manrope">Newsletter Autopilot</h4>
+<p class="text-xs text-on-surface-variant mb-4">Curating daily strategy digests with zero human input.</p>
+<div class="flex justify-between items-end">
+<div>
+<p class="text-[9px] text-outline font-bold uppercase">Effort</p>
+<p class="text-sm font-bold">Low</p>
+</div>
+<span class="text-primary font-bold text-sm">70% Margin</span>
+</div>
+</div>
+</div>
+<!-- Strategy Insight Footer Card -->
+<div class="mt-12 bg-primary/5 rounded-[2rem] p-10 flex flex-col md:flex-row items-center gap-10">
+<div class="flex-1 text-center md:text-left">
+<h3 class="text-2xl font-extrabold Manrope text-primary mb-3">Portfolio Efficiency: 54.2%</h3>
+<p class="text-on-surface-variant leading-relaxed">
+                    Your roadmap currently prioritizes high-margin, high-effort ventures. To balance cash flow, consider adding two "Low Effort" items from the Pending Proposals tab.
+                </p>
+</div>
+<div class="shrink-0 flex gap-4">
+<button class="px-8 py-4 bg-white text-primary font-bold rounded-2xl hover:bg-slate-50 transition-colors shadow-sm">View Proposals</button>
+<button class="px-8 py-4 bg-primary text-white font-bold rounded-2xl hover:shadow-lg transition-all">Optimize Mix</button>
+</div>
+</div>
+</main>
+</body></html>

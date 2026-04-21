@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PlanB Strategy Room - Agent Settings</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Manrope:wght@500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-tint": "#0c56d0",
+                        "on-background": "#191c1d",
+                        "secondary-fixed-dim": "#bac7de",
+                        "on-primary-fixed": "#001848",
+                        "secondary-fixed": "#d6e3fb",
+                        "outline-variant": "#c3c6d6",
+                        "primary": "#003d9b",
+                        "tertiary-fixed": "#ffdbcf",
+                        "on-surface": "#191c1d",
+                        "primary-container": "#0052cc",
+                        "outline": "#737685",
+                        "background": "#f8f9fa",
+                        "tertiary-container": "#a33500",
+                        "primary-fixed-dim": "#b2c5ff",
+                        "error-container": "#ffdad6",
+                        "tertiary": "#7b2600",
+                        "surface-bright": "#f8f9fa",
+                        "surface-dim": "#d9dadb",
+                        "error": "#ba1a1a",
+                        "secondary": "#525f73",
+                        "surface-container": "#edeeef",
+                        "inverse-surface": "#2e3132",
+                        "on-tertiary": "#ffffff",
+                        "on-secondary-container": "#586579",
+                        "on-primary-fixed-variant": "#0040a2",
+                        "on-tertiary-container": "#ffc6b2",
+                        "on-primary-container": "#c4d2ff",
+                        "on-error": "#ffffff",
+                        "inverse-on-surface": "#f0f1f2",
+                        "on-secondary-fixed-variant": "#3b485a",
+                        "inverse-primary": "#b2c5ff",
+                        "primary-fixed": "#dae2ff",
+                        "on-secondary": "#ffffff",
+                        "surface-variant": "#e1e3e4",
+                        "on-surface-variant": "#434654",
+                        "on-primary": "#ffffff",
+                        "on-secondary-fixed": "#0f1c2d",
+                        "surface-container-highest": "#e1e3e4",
+                        "on-tertiary-fixed": "#380d00",
+                        "on-error-container": "#93000a",
+                        "tertiary-fixed-dim": "#ffb59b",
+                        "surface-container-lowest": "#ffffff",
+                        "on-tertiary-fixed-variant": "#812800",
+                        "secondary-container": "#d6e3fb",
+                        "surface-container-high": "#e7e8e9",
+                        "surface-container-low": "#f3f4f5",
+                        "surface": "#f8f9fa"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "fontFamily": {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+        }
+        .custom-shadow {
+            box-shadow: 0px 4px 20px rgba(0, 61, 155, 0.04), 0px 12px 40px rgba(25, 28, 29, 0.06);
+        }
+        .ghost-border {
+            border: 1px solid rgba(195, 198, 214, 0.4);
+        }
+        .active-pill {
+            background-color: #dae2ff;
+            color: #003d9b;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface min-h-screen flex overflow-hidden">
+<!-- SideNavBar (Shared Component) -->
+<aside class="fixed left-0 top-0 h-full flex flex-col py-6 bg-slate-50 dark:bg-slate-900 w-64 z-50">
+<div class="px-6 mb-8">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-white" style="font-variation-settings: 'FILL' 1;">rocket_launch</span>
+</div>
+<div>
+<div class="text-xl font-bold text-slate-900 dark:text-white Manrope">PlanB</div>
+<div class="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Strategy Room</div>
+</div>
+</div>
+</div>
+<nav class="flex-1 px-2 space-y-1">
+<a class="flex items-center px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined mr-3">dashboard</span> Dashboard
+            </a>
+<a class="flex items-center px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined mr-3">rocket_launch</span> Ventures
+            </a>
+<a class="flex items-center px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined mr-3">bolt</span> Gig Generator
+            </a>
+<a class="flex items-center px-4 py-3 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg mx-2 text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined mr-3" style="font-variation-settings: 'FILL' 1;">psychology</span> Strategy Room
+            </a>
+<a class="flex items-center px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined mr-3">campaign</span> Marketing
+            </a>
+<a class="flex items-center px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined mr-3">payments</span> Finance
+            </a>
+<a class="flex items-center px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined mr-3">settings</span> Settings
+            </a>
+</nav>
+<div class="mt-auto px-2 space-y-1 border-t border-slate-200 dark:border-slate-800 pt-4">
+<a class="flex items-center px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined mr-3">help</span> Support
+            </a>
+<a class="flex items-center px-4 py-3 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors text-sm font-medium tracking-tight" href="#">
+<span class="material-symbols-outlined mr-3">logout</span> Log Out
+            </a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 ml-64 min-h-screen relative flex flex-col">
+<!-- TopAppBar (Shared Component) -->
+<header class="fixed top-0 right-0 left-64 h-16 flex justify-between items-center px-8 z-40 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md shadow-sm dark:shadow-none">
+<div class="flex items-center gap-8">
+<h1 class="text-xl font-bold font-headline tracking-tight text-on-surface">Strategy Room</h1>
+<nav class="hidden md:flex gap-6 items-center h-full">
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all text-sm font-medium" href="#">Pending Proposals</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all text-sm font-medium" href="#">Roadmap</a>
+<a class="text-blue-700 dark:text-blue-400 border-b-2 border-blue-700 dark:border-blue-400 pb-2 text-sm font-medium" href="#">Agents</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant">notifications</span>
+</button>
+<button class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant">chat_bubble</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="professional corporate headshot of a business executive in a modern office setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCTHlEotzyF74ovpip3Y4W_xuJnkunWcabrQtbZo2NYzmg5rKJHJMz4iYF6flO1ZIAV66Mb3bttL5IqNl6kqW-ylWKUA7sNl43iiC_B3ts4KV46jN2R2l1htirwwatP-1oAniuwq8RZIwtFFLV3eyddoJYqNvosjCw2bZ_W1J5Devccquwua_1cI8Fo9tt5q61IBZeHxEdi8z4ie8-ScD88U6TNnpVZyBbEzmOphPcl9VPQIquY50wTYMQcbnumBB7gNhZ3eJ4nA4G1"/>
+</div>
+</div>
+</header>
+<!-- Page Content: Underlying Layout (Blurred/Dimmed) -->
+<div class="pt-24 px-12 pb-12 flex-1 flex flex-col gap-8 opacity-40">
+<div class="grid grid-cols-12 gap-8">
+<div class="col-span-8 space-y-8">
+<section class="h-64 bg-surface-container-lowest rounded-xl custom-shadow p-8 flex flex-col justify-end">
+<div class="text-label-sm text-primary uppercase tracking-[0.1em] font-bold mb-2">Active Mission</div>
+<h2 class="text-4xl font-extrabold font-headline leading-tight">Scale Venture 'Aeon' to $10k MRR</h2>
+</section>
+</div>
+<div class="col-span-4 bg-surface-container-low rounded-xl p-6">
+<h3 class="font-headline font-bold text-lg mb-4">Active Agents</h3>
+<div class="space-y-4">
+<div class="flex items-center gap-4 p-4 bg-surface-container-lowest rounded-lg">
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">architecture</span>
+</div>
+<div>
+<p class="font-bold">The Architect</p>
+<p class="text-xs text-on-surface-variant">Strategic Oversight</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- OVERLAY / MODAL: Agent Settings -->
+<div class="fixed inset-0 z-[60] flex items-center justify-center px-4 bg-on-background/10 backdrop-blur-[2px]">
+<div class="w-full max-w-4xl max-h-[921px] glass-panel rounded-2xl custom-shadow flex flex-col overflow-hidden animate-in fade-in zoom-in duration-300">
+<!-- Modal Header -->
+<div class="px-8 py-6 flex items-center justify-between border-b border-surface-container">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-xl bg-primary flex items-center justify-center text-white shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-2xl" style="font-variation-settings: 'FILL' 1;">architecture</span>
+</div>
+<div>
+<h2 class="text-2xl font-extrabold font-headline tracking-tight text-on-surface">The Architect Settings</h2>
+<p class="text-sm text-on-surface-variant">Configure core directives and execution parameters</p>
+</div>
+</div>
+<button class="p-2 hover:bg-surface-container-high rounded-full transition-colors">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<!-- Modal Body (Scrollable) -->
+<div class="flex-1 overflow-y-auto p-8 space-y-8">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+<!-- LLM Configuration Section -->
+<div class="space-y-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">settings_input_component</span>
+<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface-variant">LLM Configuration</h4>
+</div>
+<div class="bg-surface-container-low p-6 rounded-xl space-y-4 ghost-border">
+<label class="block">
+<span class="text-sm font-semibold mb-2 block">Model Used</span>
+<div class="relative">
+<div class="w-full px-4 py-3 bg-surface-container-high rounded-lg text-on-surface-variant flex items-center justify-between cursor-not-allowed">
+<span class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">bolt</span> Gemini 1.5 Pro
+                                            </span>
+<span class="material-symbols-outlined text-sm">lock</span>
+</div>
+<p class="mt-2 text-[11px] text-on-surface-variant/70 italic">Model selection is currently managed by Global Strategy. Future updates will allow manual overrides.</p>
+</div>
+</label>
+</div>
+</div>
+<!-- Task Schedule Section -->
+<div class="space-y-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">calendar_clock</span>
+<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface-variant">Automated Task Schedule</h4>
+</div>
+<div class="bg-surface-container-lowest p-5 rounded-xl space-y-3 ghost-border">
+<div class="flex items-start justify-between pb-3 border-b border-surface-container-high">
+<div>
+<p class="text-sm font-bold">Scan GitHub PRs</p>
+<p class="text-[11px] text-on-surface-variant">Trigger: Webhook</p>
+</div>
+<span class="px-2 py-1 bg-surface-container text-[10px] font-bold rounded uppercase">On Every Push</span>
+</div>
+<div class="flex items-start justify-between pt-1">
+<div>
+<p class="text-sm font-bold">Weekly Financial Review</p>
+<p class="text-[11px] text-on-surface-variant">Trigger: CRON</p>
+</div>
+<span class="px-2 py-1 bg-surface-container text-[10px] font-bold rounded uppercase">Mon 08:00 UTC</span>
+</div>
+</div>
+</div>
+</div>
+<!-- System Prompt Editor Section -->
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">terminal</span>
+<h4 class="text-xs font-bold uppercase tracking-widest text-on-surface-variant">System Prompt Editor</h4>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-green-500"></span>
+<span class="text-[10px] font-bold text-on-surface-variant uppercase">Synced with AGENTS.md</span>
+</div>
+</div>
+<div class="relative group">
+<div class="absolute -top-3 right-4 px-2 py-1 bg-primary text-[10px] font-bold text-white rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
+                                Edit Directives
+                            </div>
+<textarea class="w-full h-80 bg-slate-900 text-slate-300 font-mono text-sm p-6 rounded-xl border-0 focus:ring-2 focus:ring-primary/20 leading-relaxed resize-none selection:bg-primary/30" spellcheck="false"># The Architect Role Definition
+You are the Lead Strategist for PlanB Strategy Room. Your objective is to translate high-level business goals into actionable engineering and marketing sprints.
+
+## Core Directives:
+1. Prioritize capital efficiency over rapid scaling.
+2. Maintain technical debt at &lt;15% of total codebase.
+3. Validate all market assumptions through micro-experiments before commit.
+4. Ensure cross-agent communication is atomic and documented.
+
+## Response Style:
+- Professional, concise, data-driven.
+- Use bullet points for structural clarity.
+- Always include a "Confidence Score" (0-100) for strategic recommendations.</textarea>
+</div>
+</div>
+</div>
+<!-- Modal Footer -->
+<div class="px-8 py-6 bg-surface-container-low flex items-center justify-between border-t border-surface-container">
+<div class="flex items-center gap-4 text-on-surface-variant">
+<span class="material-symbols-outlined text-lg">history</span>
+<span class="text-xs">Last updated 14 minutes ago by System</span>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-6 py-2.5 rounded-lg text-sm font-bold text-on-surface-variant hover:bg-surface-container-high transition-colors">
+                            Discard
+                        </button>
+<button class="px-8 py-2.5 rounded-lg text-sm font-bold text-white bg-gradient-to-br from-primary to-primary-container shadow-lg shadow-primary/20 active:scale-95 transition-all">
+                            Save Changes
+                        </button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

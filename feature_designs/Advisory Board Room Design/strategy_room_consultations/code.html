@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PlanB - Strategy Room</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-primary-fixed-variant": "#0040a2",
+                        "on-surface-variant": "#434654",
+                        "surface-container-lowest": "#ffffff",
+                        "on-error-container": "#93000a",
+                        "tertiary-fixed-dim": "#ffb59b",
+                        "inverse-primary": "#b2c5ff",
+                        "on-primary-fixed": "#001848",
+                        "primary-container": "#0052cc",
+                        "surface-bright": "#f8f9fa",
+                        "primary-fixed": "#dae2ff",
+                        "primary": "#003d9b",
+                        "surface-container-high": "#e7e8e9",
+                        "on-tertiary-fixed": "#380d00",
+                        "on-secondary-fixed-variant": "#3b485a",
+                        "on-primary-container": "#c4d2ff",
+                        "on-secondary-container": "#586579",
+                        "error": "#ba1a1a",
+                        "secondary-fixed": "#d6e3fb",
+                        "surface-container-low": "#f3f4f5",
+                        "on-secondary-fixed": "#0f1c2d",
+                        "outline": "#737685",
+                        "surface-container": "#edeeef",
+                        "on-tertiary": "#ffffff",
+                        "on-surface": "#191c1d",
+                        "surface-variant": "#e1e3e4",
+                        "surface-dim": "#d9dadb",
+                        "error-container": "#ffdad6",
+                        "surface-container-highest": "#e1e3e4",
+                        "on-tertiary-container": "#ffc6b2",
+                        "on-error": "#ffffff",
+                        "surface-tint": "#0c56d0",
+                        "outline-variant": "#c3c6d6",
+                        "tertiary": "#7b2600",
+                        "on-tertiary-fixed-variant": "#812800",
+                        "secondary-fixed-dim": "#bac7de",
+                        "secondary": "#525f73",
+                        "background": "#f8f9fa",
+                        "tertiary-fixed": "#ffdbcf",
+                        "secondary-container": "#d6e3fb",
+                        "tertiary-container": "#a33500",
+                        "on-background": "#191c1d",
+                        "on-primary": "#ffffff",
+                        "inverse-surface": "#2e3132",
+                        "on-secondary": "#ffffff",
+                        "surface": "#f8f9fa",
+                        "inverse-on-surface": "#f0f1f2",
+                        "primary-fixed-dim": "#b2c5ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "fontFamily": {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                },
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3, .font-headline { font-family: 'Manrope', sans-serif; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full flex flex-col py-6 bg-slate-50 dark:bg-slate-900 h-screen w-64 border-r-0 z-50">
+<div class="px-6 mb-10 flex items-center gap-3">
+<div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-lg" style="font-variation-settings: 'FILL' 1;">rocket_launch</span>
+</div>
+<span class="text-xl font-bold text-slate-900 dark:text-white font-headline">PlanB</span>
+</div>
+<nav class="flex-1 space-y-1">
+<div class="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors flex items-center gap-3 px-4 py-3 cursor-pointer group">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-sm font-medium tracking-tight">Dashboard</span>
+</div>
+<div class="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors flex items-center gap-3 px-4 py-3 cursor-pointer group">
+<span class="material-symbols-outlined">rocket_launch</span>
+<span class="text-sm font-medium tracking-tight">Ventures</span>
+</div>
+<div class="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors flex items-center gap-3 px-4 py-3 cursor-pointer group">
+<span class="material-symbols-outlined">bolt</span>
+<span class="text-sm font-medium tracking-tight">Gig Generator</span>
+</div>
+<div class="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg mx-2 flex items-center gap-3 px-4 py-3 cursor-pointer">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">psychology</span>
+<span class="text-sm font-medium tracking-tight">Strategy Room</span>
+</div>
+<div class="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors flex items-center gap-3 px-4 py-3 cursor-pointer group">
+<span class="material-symbols-outlined">campaign</span>
+<span class="text-sm font-medium tracking-tight">Marketing</span>
+</div>
+<div class="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors flex items-center gap-3 px-4 py-3 cursor-pointer group">
+<span class="material-symbols-outlined">payments</span>
+<span class="text-sm font-medium tracking-tight">Finance</span>
+</div>
+<div class="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 transition-colors flex items-center gap-3 px-4 py-3 cursor-pointer group">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-sm font-medium tracking-tight">Settings</span>
+</div>
+</nav>
+<div class="mt-auto space-y-1">
+<div class="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 flex items-center gap-3 px-4 py-3 cursor-pointer">
+<span class="material-symbols-outlined">help</span>
+<span class="text-sm font-medium tracking-tight">Support</span>
+</div>
+<div class="text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg mx-2 flex items-center gap-3 px-4 py-3 cursor-pointer">
+<span class="material-symbols-outlined">logout</span>
+<span class="text-sm font-medium tracking-tight">Log Out</span>
+</div>
+</div>
+</aside>
+<!-- TopAppBar -->
+<header class="fixed top-0 right-0 left-64 h-16 flex justify-between items-center px-8 z-40 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md shadow-sm">
+<div class="flex items-center gap-8">
+<h1 class="text-xl font-bold tracking-tight text-primary font-headline">Strategy Room</h1>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 transition-all text-sm font-medium" href="#">Pending Proposals</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 transition-all text-sm font-medium" href="#">Roadmap</a>
+<a class="text-slate-500 dark:text-slate-400 hover:text-slate-900 transition-all text-sm font-medium" href="#">Agents</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 px-3 py-1.5 bg-surface-container-low rounded-full focus-within:ring-2 ring-blue-500/20">
+<span class="material-symbols-outlined text-outline text-lg">search</span>
+<input class="bg-transparent border-none text-xs focus:ring-0 w-48 placeholder:text-outline-variant" placeholder="Search strategy..." type="text"/>
+</div>
+<button class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500">
+<span class="material-symbols-outlined">chat_bubble</span>
+</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant/30">
+<img alt="professional headshot" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA83n4StlBZ50WXDfFVgkLBuwfaw3kBYMRt7CXbeuH5s3tZpq6fVfmGw1CUdhlNIsTo_MRUUpol59nmt0yykxXVZaXba0IK_KbDK3eCP6t00AuTFCbDPReXgvUqFMvoG01ZHGuHJf6ngjXrgBmCm7J6Ve4keJPKslmE-JvxqXuGv9kKoySprVRis-eCEv4-ahQPdE9BoMnp_HeAhgIlGD8vsYZ3jev98psLLZUp6wLoFRupHdEPaHmwskDzFhGW_FE-KNvgdl1qfKjo"/>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="pl-64 pt-16 h-screen overflow-hidden flex">
+<!-- Active Chats Sidebar -->
+<div class="w-80 flex-shrink-0 bg-surface-container-low flex flex-col border-r border-outline-variant/10">
+<div class="p-6">
+<button class="w-full py-3 px-4 bg-primary text-white rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-primary/20 hover:scale-[0.98] transition-transform">
+<span class="material-symbols-outlined text-lg">add</span>
+<span class="font-semibold text-sm">New Chat</span>
+</button>
+</div>
+<div class="flex-1 overflow-y-auto px-4 space-y-4 pb-6">
+<h3 class="text-[11px] font-bold text-outline-variant uppercase tracking-widest px-2 mb-2">Active Chats</h3>
+<!-- Active Now -->
+<div class="p-4 rounded-xl bg-surface-container-lowest shadow-sm border-l-4 border-primary cursor-pointer transition-all">
+<div class="flex justify-between items-start mb-2">
+<span class="text-xs font-bold text-on-surface">Go-to-Market Strategy</span>
+<div class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+<span class="text-[10px] text-emerald-600 font-bold uppercase">Active now</span>
+</div>
+</div>
+<div class="flex items-center gap-2 mb-1">
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[10px] border-2 border-white font-bold text-blue-700">PM</div>
+<div class="w-6 h-6 rounded-full bg-orange-100 flex items-center justify-center text-[10px] border-2 border-white font-bold text-orange-700">AR</div>
+</div>
+<span class="text-[11px] text-secondary font-medium">PM + Architect</span>
+</div>
+</div>
+<!-- 2m ago -->
+<div class="p-4 rounded-xl hover:bg-surface-container transition-colors cursor-pointer group">
+<div class="flex justify-between items-start mb-2">
+<span class="text-xs font-semibold text-on-surface-variant group-hover:text-on-surface">Financial Modeling</span>
+<span class="text-[10px] text-outline-variant">2m ago</span>
+</div>
+<div class="flex items-center gap-2 mb-1">
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center text-[10px] border-2 border-white font-bold text-emerald-700">FN</div>
+</div>
+<span class="text-[11px] text-secondary font-medium">Finance Lead</span>
+</div>
+</div>
+<!-- 1h ago -->
+<div class="p-4 rounded-xl hover:bg-surface-container transition-colors cursor-pointer group">
+<div class="flex justify-between items-start mb-2">
+<span class="text-xs font-semibold text-on-surface-variant group-hover:text-on-surface">Brand Identity v2</span>
+<span class="text-[10px] text-outline-variant">1h ago</span>
+</div>
+<div class="flex items-center gap-2 mb-1">
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center text-[10px] border-2 border-white font-bold text-purple-700">CR</div>
+</div>
+<span class="text-[11px] text-secondary font-medium">Creative Director</span>
+</div>
+</div>
+<!-- Yesterday -->
+<div class="p-4 rounded-xl hover:bg-surface-container transition-colors cursor-pointer group">
+<div class="flex justify-between items-start mb-2">
+<span class="text-xs font-semibold text-on-surface-variant group-hover:text-on-surface">Cloud Architecture</span>
+<span class="text-[10px] text-outline-variant">Yesterday</span>
+</div>
+<div class="flex items-center gap-2 mb-1">
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[10px] border-2 border-white font-bold text-blue-700">PM</div>
+<div class="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] border-2 border-white font-bold text-slate-700">EN</div>
+</div>
+<span class="text-[11px] text-secondary font-medium">PM + Engineer</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Chat Main Window -->
+<div class="flex-1 flex flex-col bg-surface relative">
+<!-- Chat Header with Agent Chips -->
+<div class="h-16 px-8 flex items-center justify-between border-b border-outline-variant/10">
+<div class="flex items-center gap-6">
+<div>
+<h2 class="text-lg font-bold leading-none mb-1">Go-to-Market Strategy</h2>
+<div class="flex items-center gap-2">
+<div class="flex items-center gap-1.5 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-md text-[10px] font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+                                LIAM (PM)
+                            </div>
+<div class="flex items-center gap-1.5 px-2 py-0.5 bg-orange-100 text-orange-700 rounded-md text-[10px] font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-orange-600"></span>
+                                SOPHIA (AR)
+                            </div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="px-4 py-2 text-xs font-bold text-primary bg-primary-fixed rounded-full hover:bg-primary-fixed-dim transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">ios_share</span>
+                        Export Brief
+                    </button>
+<button class="p-2 text-outline-variant hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Messages Area -->
+<div class="flex-1 overflow-y-auto p-8 space-y-10 scroll-smooth">
+<!-- Date Separator -->
+<div class="flex items-center justify-center">
+<span class="text-[11px] font-bold text-outline-variant px-4 bg-surface tracking-widest uppercase">Today</span>
+</div>
+<!-- Agent Message: Project Manager -->
+<div class="flex items-start gap-4 max-w-2xl">
+<div class="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700 flex-shrink-0 mt-1 shadow-sm">PM</div>
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<span class="text-[11px] font-bold text-on-surface">Liam Chen (Product Manager)</span>
+<span class="text-[10px] text-outline-variant">10:42 AM</span>
+</div>
+<div class="bg-surface-container-high text-on-surface p-5 rounded-2xl rounded-tl-none shadow-sm text-sm leading-relaxed border border-outline-variant/5">
+                            I've been reviewing the Q3 roadmap for the PlanB dashboard. We need to prioritize the Strategy Room integration as our core differentiator. Sophia, can the current architecture support 50+ concurrent real-time AI agents by the end of the quarter?
+                        </div>
+</div>
+</div>
+<!-- Agent Message: Architect -->
+<div class="flex items-start gap-4 max-w-2xl">
+<div class="w-8 h-8 rounded-xl bg-orange-100 flex items-center justify-center text-xs font-bold text-orange-700 flex-shrink-0 mt-1 shadow-sm">AR</div>
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<span class="text-[11px] font-bold text-on-surface">Sophia Varga (Lead Architect)</span>
+<span class="text-[10px] text-outline-variant">10:45 AM</span>
+</div>
+<div class="bg-surface-container-high text-on-surface p-5 rounded-2xl rounded-tl-none shadow-sm text-sm leading-relaxed border border-outline-variant/5">
+                            It's technically feasible. The modular microservices we deployed last month allow for asynchronous agent processing without blocking the main UI thread. I recommend a "Tonal Shift" layout for the chat window—no heavy borders, just elevation and subtle background contrast. It keeps the workspace feeling open and modern.
+                        </div>
+</div>
+</div>
+<!-- User Message -->
+<div class="flex flex-row-reverse items-start gap-4 max-w-2xl ml-auto">
+<div class="w-8 h-8 rounded-xl bg-primary flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-1 shadow-md">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">person</span>
+</div>
+<div class="space-y-1 text-right">
+<div class="flex flex-row-reverse items-center gap-2">
+<span class="text-[11px] font-bold text-on-surface">You (Stakeholder)</span>
+<span class="text-[10px] text-outline-variant">10:48 AM</span>
+</div>
+<div class="bg-primary text-white p-5 rounded-2xl rounded-tr-none shadow-lg shadow-primary/10 text-sm text-left leading-relaxed">
+                            I'm fully onboard with the tonal shift approach. It aligns perfectly with our "Architectural Curator" brand identity. Let's lock that in. Liam, please update the proposal status to "In Progress" and Sophia, please start documenting the API requirements for the multi-agent sync.
+                        </div>
+</div>
+</div>
+<!-- Agent Message: Project Manager -->
+<div class="flex items-start gap-4 max-w-2xl">
+<div class="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700 flex-shrink-0 mt-1 shadow-sm">PM</div>
+<div class="space-y-1">
+<div class="flex items-center gap-2">
+<span class="text-[11px] font-bold text-on-surface">Liam Chen (Product Manager)</span>
+<span class="text-[10px] text-outline-variant">10:50 AM</span>
+</div>
+<div class="bg-surface-container-high text-on-surface p-5 rounded-2xl rounded-tl-none shadow-sm text-sm leading-relaxed border border-outline-variant/5">
+                            Understood. Roadmap updated. Sophia and I will sync on the technical specs this afternoon. I'll have a revised project brief ready for your review by EOD.
+                        </div>
+</div>
+</div>
+</div>
+<!-- Chat Input Area -->
+<div class="p-6 bg-surface">
+<div class="max-w-4xl mx-auto space-y-4">
+<!-- Agent Selector -->
+<div class="flex items-center gap-3">
+<span class="text-[10px] font-bold text-outline-variant uppercase tracking-wider">Direct Message:</span>
+<div class="flex gap-2">
+<button class="flex items-center gap-2 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-full text-[11px] font-bold ring-2 ring-primary/20">
+<span class="w-2 h-2 rounded-full bg-blue-600"></span>
+                                Liam Chen (PM)
+                            </button>
+<button class="flex items-center gap-2 px-3 py-1.5 bg-surface-container text-secondary rounded-full text-[11px] font-medium hover:bg-orange-100 hover:text-orange-700 transition-colors">
+<span class="w-2 h-2 rounded-full bg-outline-variant"></span>
+                                Sophia Varga (AR)
+                            </button>
+<button class="flex items-center gap-2 px-3 py-1.5 bg-surface-container text-secondary rounded-full text-[11px] font-medium hover:bg-slate-200 transition-colors">
+<span class="material-symbols-outlined text-[14px]">group_add</span>
+                                Add Agent
+                            </button>
+</div>
+</div>
+<!-- Input Box -->
+<div class="relative bg-surface-container-lowest rounded-2xl shadow-xl shadow-slate-200/50 p-2 flex items-center gap-2 border border-outline-variant/10">
+<button class="p-3 text-outline-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">attach_file</span>
+</button>
+<textarea class="flex-1 bg-transparent border-none resize-none focus:ring-0 text-sm py-3 placeholder:text-outline-variant" placeholder="Type your directive to the group..." rows="1"></textarea>
+<button class="bg-primary text-on-primary p-3 rounded-xl hover:scale-105 transition-transform flex items-center justify-center">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">send</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Details Pane -->
+<div class="w-72 bg-white border-l border-outline-variant/10 p-6 flex flex-col gap-8">
+<div>
+<h4 class="text-[11px] font-bold text-outline-variant uppercase tracking-widest mb-4">Chat Context</h4>
+<div class="space-y-4">
+<div class="aspect-video rounded-xl bg-slate-100 overflow-hidden relative group">
+<img alt="architectural sketch" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBeAvUsl-Iz-Blek6lits9S8g6tRYH6H4kn9zOxc8uAmDWr9ikBXhgoukvMMJZmRXdABMbkaH2mf4NOu9cT31RHrD4gpM9juHnZHSkRVzogCHeWusoTCXWIn02oRcCysKuABtYPxEzwZ54T9x_aXcXe8H0IvkAqaNZQ3vk6C6W4R2rZLR_p36ystUknSJ-5YdNGf9ap_xYPbb751UqLBXvdywcsMYF9tlaOYVN_kAZIqovzb9D2ZNBzxT_Z4lxGUMvkGkahJd_Py-8c"/>
+<div class="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+<span class="material-symbols-outlined text-white">zoom_in</span>
+</div>
+</div>
+<div class="p-4 rounded-xl bg-primary-fixed/30 border border-primary-fixed">
+<span class="text-[10px] font-bold text-primary uppercase block mb-1">Active Objective</span>
+<p class="text-xs font-semibold text-on-primary-fixed">Scale Strategy Room to 50 active agents by Year End.</p>
+</div>
+</div>
+</div>
+<div>
+<h4 class="text-[11px] font-bold text-outline-variant uppercase tracking-widest mb-4">Discussion Group</h4>
+<div class="space-y-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700">PM</div>
+<div>
+<p class="text-xs font-bold">Liam Chen</p>
+<p class="text-[10px] text-outline-variant">Product Manager Agent</p>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-xs font-bold text-orange-700">AR</div>
+<div>
+<p class="text-xs font-bold">Sophia Varga</p>
+<p class="text-[10px] text-outline-variant">Lead Architect Agent</p>
+</div>
+</div>
+</div>
+</div>
+<div class="mt-auto">
+<button class="w-full py-2.5 text-[11px] font-bold border border-outline-variant/30 rounded-xl hover:bg-surface-container transition-colors">
+                    End Strategy Session
+                </button>
+</div>
+</div>
+</main>
+</body></html>

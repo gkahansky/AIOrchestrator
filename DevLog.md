@@ -148,3 +148,12 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-18 21:15 |  | cb5a1a0 | docs: update project docs â€” Market Research venture + updateprojdocs skill |
 | 2026-04-18 21:27 |  | 65ad52a | Campaign Manager â€” full implementation |
 | 2026-04-19 10:00 |  | (pending) | Campaign Manager fixes — add PATCH /prompt endpoint, fix Gemini safety filter (BLOCK_ONLY_HIGH), stronger no-text directive for ad creatives, inline prompt editor in Creative Lab |
+| 2026-04-19 20:23 |  | ceba302 | Campaign Manager fixes â€” prompt editor + image generation improvements |
+| 2026-04-19 21:43 |  | a7da328 | Campaign Manager: Save & Regenerate button in Creative Lab |
+| 2026-04-20 17:22 |  | c25948d | Market Research: add Office file format support for RAG uploads |
+| 2026-04-20 17:28 |  | e5e3b55 | Market Research: fix SyntaxError, missing title in detail, add retry |
+| 2026-04-20 17:38 |  | e465d1c | Market Research: fix drawer not opening + Retry button always visible |
+| 2026-04-20 19:00 |  | dee9334 | Fix Gemini Imagen safety filter â€” revert to BLOCK_LOW_AND_ABOVE |
+| 2026-04-21 10:26 |  | da44d34 | Market Research: render report as styled markdown with proper tables |
+| 2026-04-21 11:59 |  | 321c3d5 | Market Research: agentic work-package pipeline (v2) |
+| 2026-04-21 12:02 |  | f505b36 | docs: update project docs â€” Market Research v2 agentic pipeline |

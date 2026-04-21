@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PlanB Strategy Room - Agents</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Manrope:wght@600;700;800&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-primary-fixed-variant": "#0040a2",
+                    "on-surface-variant": "#434654",
+                    "surface-container-lowest": "#ffffff",
+                    "on-error-container": "#93000a",
+                    "tertiary-fixed-dim": "#ffb59b",
+                    "inverse-primary": "#b2c5ff",
+                    "on-primary-fixed": "#001848",
+                    "primary-container": "#0052cc",
+                    "surface-bright": "#f8f9fa",
+                    "primary-fixed": "#dae2ff",
+                    "primary": "#003d9b",
+                    "surface-container-high": "#e7e8e9",
+                    "on-tertiary-fixed": "#380d00",
+                    "on-secondary-fixed-variant": "#3b485a",
+                    "on-primary-container": "#c4d2ff",
+                    "on-secondary-container": "#586579",
+                    "error": "#ba1a1a",
+                    "secondary-fixed": "#d6e3fb",
+                    "surface-container-low": "#f3f4f5",
+                    "on-secondary-fixed": "#0f1c2d",
+                    "outline": "#737685",
+                    "surface-container": "#edeeef",
+                    "on-tertiary": "#ffffff",
+                    "on-surface": "#191c1d",
+                    "surface-variant": "#e1e3e4",
+                    "surface-dim": "#d9dadb",
+                    "error-container": "#ffdad6",
+                    "surface-container-highest": "#e1e3e4",
+                    "on-tertiary-container": "#ffc6b2",
+                    "on-error": "#ffffff",
+                    "surface-tint": "#0c56d0",
+                    "outline-variant": "#c3c6d6",
+                    "tertiary": "#7b2600",
+                    "on-tertiary-fixed-variant": "#812800",
+                    "secondary-fixed-dim": "#bac7de",
+                    "secondary": "#525f73",
+                    "background": "#f8f9fa",
+                    "tertiary-fixed": "#ffdbcf",
+                    "secondary-container": "#d6e3fb",
+                    "tertiary-container": "#a33500",
+                    "on-background": "#191c1d",
+                    "on-primary": "#ffffff",
+                    "inverse-surface": "#2e3132",
+                    "on-secondary": "#ffffff",
+                    "surface": "#f8f9fa",
+                    "inverse-on-surface": "#f0f1f2",
+                    "primary-fixed-dim": "#b2c5ff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "fontFamily": {
+                    "headline": ["Manrope"],
+                    "body": ["Inter"],
+                    "label": ["Inter"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(24px);
+        }
+        .primary-gradient {
+            background: linear-gradient(135deg, #003d9b 0%, #0052cc 100%);
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface min-h-screen">
+<!-- SideNavBar (Shared Component) -->
+<aside class="fixed left-0 top-0 h-full flex flex-col py-6 bg-slate-50 dark:bg-slate-900 h-screen w-64 border-r-0 z-50">
+<div class="px-6 mb-8 flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-primary flex items-center justify-center text-white">
+<span class="material-symbols-outlined text-sm">rocket_launch</span>
+</div>
+<div>
+<h1 class="text-xl font-bold text-slate-900 dark:text-white font-headline">PlanB</h1>
+<p class="text-xs text-slate-500 font-label">Strategy Room</p>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center px-4 py-3 mx-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-colors font-medium text-sm tracking-tight scale-95 duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined mr-3">dashboard</span>
+            Dashboard
+        </a>
+<a class="flex items-center px-4 py-3 mx-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-colors font-medium text-sm tracking-tight scale-95 duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined mr-3">rocket_launch</span>
+            Ventures
+        </a>
+<a class="flex items-center px-4 py-3 mx-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-colors font-medium text-sm tracking-tight scale-95 duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined mr-3">bolt</span>
+            Gig Generator
+        </a>
+<a class="flex items-center px-4 py-3 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg mx-2 font-medium text-sm tracking-tight scale-95 duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined mr-3">psychology</span>
+            Strategy Room
+        </a>
+<a class="flex items-center px-4 py-3 mx-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-colors font-medium text-sm tracking-tight scale-95 duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined mr-3">campaign</span>
+            Marketing
+        </a>
+<a class="flex items-center px-4 py-3 mx-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-colors font-medium text-sm tracking-tight scale-95 duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined mr-3">payments</span>
+            Finance
+        </a>
+<a class="flex items-center px-4 py-3 mx-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-colors font-medium text-sm tracking-tight scale-95 duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined mr-3">settings</span>
+            Settings
+        </a>
+</nav>
+<div class="mt-auto pt-6 border-t border-slate-200/50 mx-4 space-y-1">
+<a class="flex items-center px-4 py-2 text-slate-500 hover:bg-slate-200 rounded-lg transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined mr-3">help</span>
+            Support
+        </a>
+<a class="flex items-center px-4 py-2 text-slate-500 hover:bg-slate-200 rounded-lg transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined mr-3">logout</span>
+            Log Out
+        </a>
+</div>
+</aside>
+<!-- TopAppBar (Updated from DataStore) -->
+<header class="fixed top-0 right-0 left-64 h-16 flex justify-between items-center px-8 z-40 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md shadow-sm dark:shadow-none">
+<div class="flex items-center gap-8">
+<h2 class="text-xl font-extrabold font-headline tracking-tight text-on-surface">Strategy Room</h2>
+<nav class="flex items-center gap-6">
+<a class="text-sm font-medium text-blue-700 dark:text-blue-400 border-b-2 border-blue-700 dark:border-blue-400 pb-2 font-label" href="#">Agents</a>
+<a class="text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 transition-all font-label" href="#">Roadmap</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative group">
+<span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+<span class="material-symbols-outlined text-sm">search</span>
+</span>
+<input class="pl-10 pr-4 py-1.5 bg-surface-container-low border-none rounded-full text-sm focus:ring-2 ring-blue-500/20 w-64 transition-all" placeholder="Search strategy..." type="text"/>
+</div>
+<button class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500 transition-colors">
+<span class="material-symbols-outlined">chat_bubble</span>
+</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant/30">
+<img alt="User Profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAxClggKqs7s6XKWObMCKxGwLv271dGRHbS7IzpnxxUWfDBY38wmaSDxmgnApP5PdrGV_eLSZvacBNl2KqfGpb-S2vXpRCRAO2phDd_ZpqVwd2AnSzcxokRLU4FuIIihzzSuwwaYNzmQQBW9ziWtaayYngJHFiiFYueZNnBuo5PqdKzu3u5vcspkSob9M7YMj2XKj985tysz8UOTw6Op4mBPFOrmEf9QOqRIziVcughHTmiVMfMGhfZhNqp9QQDGYCVWsjNRY6RrGNB"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-64 mt-16 p-8 bg-surface min-h-[calc(100vh-64px)]">
+<div class="max-w-7xl mx-auto">
+<header class="flex justify-between items-end mb-10">
+<div>
+<h3 class="text-3xl font-extrabold font-headline text-on-surface tracking-tight mb-2">Agent Roster</h3>
+<p class="text-on-surface-variant font-label">Configure and deploy specialized AI agents to execute your venture strategy.</p>
+</div>
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-outline-variant/40 font-medium text-sm hover:bg-surface-container transition-all"><span class="material-symbols-outlined text-sm">tune</span> Agent Settings</button>
+<button class="primary-gradient text-on-primary px-6 py-2.5 rounded-xl font-bold text-sm shadow-md flex items-center gap-2 hover:brightness-110 transition-all">
+<span class="material-symbols-outlined text-sm">chat</span>
+                    Start Selection Consult (2)
+                </button>
+</div>
+</header>
+<!-- Agents Grid -->
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
+<!-- Architect Agent -->
+<div class="bg-surface-container-lowest rounded-xl p-8 border-l-4 border-primary shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+<div class="absolute top-4 right-4 flex items-center gap-3">
+<input checked="" class="w-5 h-5 rounded border-outline-variant text-primary focus:ring-primary/20" type="checkbox"/>
+</div>
+<div class="flex items-start gap-6 mb-8">
+<div class="w-16 h-16 rounded-2xl bg-primary-fixed flex items-center justify-center text-primary shrink-0">
+<span class="material-symbols-outlined text-4xl" style="font-variation-settings: 'FILL' 1;">architecture</span>
+</div>
+<div>
+<div class="flex items-center gap-2 mb-1">
+<h4 class="text-xl font-bold font-headline">The Architect</h4>
+<span class="bg-blue-100 text-blue-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Strategic Foundation</span>
+</div>
+<p class="text-sm text-on-surface-variant leading-relaxed">System specialist focused on business model design, technical scaffolding, and long-term structural integrity.</p>
+</div>
+</div>
+<div class="space-y-6">
+<div>
+<h5 class="text-[11px] font-bold text-on-surface-variant uppercase tracking-widest mb-4 font-label opacity-60">Skills &amp; Capabilities</h5>
+<div class="grid grid-cols-2 gap-3">
+<button class="flex items-center justify-between px-4 py-3 bg-surface-container-low hover:bg-surface-container-high rounded-lg text-sm font-medium transition-all group/skill text-left">
+<span>Business Model Canvas</span>
+<span class="material-symbols-outlined text-xs opacity-0 group-hover/skill:opacity-100 transition-opacity">bolt</span>
+</button>
+<button class="flex items-center justify-between px-4 py-3 bg-surface-container-low hover:bg-surface-container-high rounded-lg text-sm font-medium transition-all group/skill text-left">
+<span>Tech Stack Mapping</span>
+<span class="material-symbols-outlined text-xs opacity-0 group-hover/skill:opacity-100 transition-opacity">bolt</span>
+</button>
+<button class="flex items-center justify-between px-4 py-3 bg-surface-container-low hover:bg-surface-container-high rounded-lg text-sm font-medium transition-all group/skill text-left">
+<span>Unit Economics</span>
+<span class="material-symbols-outlined text-xs opacity-0 group-hover/skill:opacity-100 transition-opacity">bolt</span>
+</button>
+<button class="flex items-center justify-between px-4 py-3 bg-surface-container-low hover:bg-surface-container-high rounded-lg text-sm font-medium transition-all group/skill text-left">
+<span>Scalability Audit</span>
+<span class="material-symbols-outlined text-xs opacity-0 group-hover/skill:opacity-100 transition-opacity">bolt</span>
+</button>
+</div>
+</div>
+<div class="pt-6 border-t border-surface-container flex items-center justify-between">
+<button class="primary-gradient text-on-primary px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 duration-200">
+<span class="material-symbols-outlined text-sm">terminal</span>
+                            Agent Prompt
+                        </button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full text-blue-700 text-xs font-bold shadow-sm hover:bg-blue-100 transition-colors">
+<span class="material-symbols-outlined text-[14px]">assignment_late</span>
+<span>8 Proposals</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Marketing Agent -->
+<div class="bg-surface-container-lowest rounded-xl p-8 border-l-4 border-tertiary-container shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+<div class="absolute top-4 right-4 flex items-center gap-3">
+<input class="w-5 h-5 rounded border-outline-variant text-primary focus:ring-primary/20" type="checkbox"/>
+</div>
+<div class="flex items-start gap-6 mb-8">
+<div class="w-16 h-16 rounded-2xl bg-tertiary-fixed flex items-center justify-center text-tertiary-container shrink-0">
+<span class="material-symbols-outlined text-4xl" style="font-variation-settings: 'FILL' 1;">campaign</span>
+</div>
+<div>
+<div class="flex items-center gap-2 mb-1">
+<h4 class="text-xl font-bold font-headline">Growth Strategist</h4>
+<span class="bg-orange-100 text-orange-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Marketing</span>
+</div>
+<p class="text-sm text-on-surface-variant leading-relaxed">Psychology-driven growth specialist. Handles brand positioning, user acquisition funnels, and narrative design.</p>
+</div>
+</div>
+<div class="space-y-6">
+<div>
+<h5 class="text-[11px] font-bold text-on-surface-variant uppercase tracking-widest mb-4 font-label opacity-60">Skills &amp; Capabilities</h5>
+<div class="grid grid-cols-2 gap-3">
+<button class="flex items-center justify-between px-4 py-3 bg-surface-container-low hover:bg-surface-container-high rounded-lg text-sm font-medium transition-all group/skill text-left">
+<span>Positioning Matrix</span>
+<span class="material-symbols-outlined text-xs opacity-0 group-hover/skill:opacity-100 transition-opacity">bolt</span>
+</button>
+<button class="flex items-center justify-between px-4 py-3 bg-surface-container-low hover:bg-surface-container-high rounded-lg text-sm font-medium transition-all group/skill text-left">
+<span>Ad Creative Audit</span>
+<span class="material-symbols-outlined text-xs opacity-0 group-hover/skill:opacity-100 transition-opacity">bolt</span>
+</button>
+<button class="flex items-center justify-between px-4 py-3 bg-surface-container-low hover:bg-surface-container-high rounded-lg text-sm font-medium transition-all group/skill text-left">
+<span>Content Ecosystem</span>
+<span class="material-symbols-outlined text-xs opacity-0 group-hover/skill:opacity-100 transition-opacity">bolt</span>
+</button>
+<button class="flex items-center justify-between px-4 py-3 bg-surface-container-low hover:bg-surface-container-high rounded-lg text-sm font-medium transition-all group/skill text-left">
+<span>Viral Loop Design</span>
+<span class="material-symbols-outlined text-xs opacity-0 group-hover/skill:opacity-100 transition-opacity">bolt</span>
+</button>
+</div>
+</div>
+<div class="pt-6 border-t border-surface-container flex items-center justify-between">
+<button class="primary-gradient text-on-primary px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 duration-200">
+<span class="material-symbols-outlined text-sm">terminal</span>
+                            Agent Prompt
+                        </button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-full text-orange-700 text-xs font-bold shadow-sm hover:bg-orange-100 transition-colors">
+<span class="material-symbols-outlined text-[14px]">assignment_late</span>
+<span>15 Proposals</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Product Agent -->
+<div class="bg-surface-container-lowest rounded-xl p-8 border-l-4 border-secondary shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+<div class="absolute top-4 right-4 flex items-center gap-3">
+<input checked="" class="w-5 h-5 rounded border-outline-variant text-primary focus:ring-primary/20" type="checkbox"/>
+</div>
+<div class="flex items-start gap-6 mb-8">
+<div class="w-16 h-16 rounded-2xl bg-secondary-fixed flex items-center justify-center text-secondary shrink-0">
+<span class="material-symbols-outlined text-4xl" style="font-variation-settings: 'FILL' 1;">inventory_2</span>
+</div>
+<div>
+<div class="flex items-center gap-2 mb-1">
+<h4 class="text-xl font-bold font-headline">Product Lead</h4>
+<span class="bg-slate-100 text-slate-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Execution</span>
+</div>
+<p class="text-sm text-on-surface-variant leading-relaxed">Translates vision into roadmap. Expert in MVP scoping, feature prioritization, and user experience workflows.</p>
+</div>
+</div>
+<div class="space-y-6">
+<div>
+<h5 class="text-[11px] font-bold text-on-surface-variant uppercase tracking-widest mb-4 font-label opacity-60">Skills &amp; Capabilities</h5>
+<div class="grid grid-cols-2 gap-3">
+<button class="flex items-center justify-between px-4 py-3 bg-surface-container-low hover:bg-surface-container-high rounded-lg text-sm font-medium transition-all group/skill text-left">
+<span>User Flow Mapping</span>
+<span class="material-symbols-outlined text-xs opacity-0 group-hover/skill:opacity-100 transition-opacity">bolt</span>
+</button>
+<button class="flex items-center justify-between px-4 py-3 bg-surface-container-low hover:bg-surface-container-high rounded-lg text-sm font-medium transition-all group/skill text-left">
+<span>MVP Scoping</span>
+<span class="material-symbols-outlined text-xs opacity-0 group-hover/skill:opacity-100 transition-opacity">bolt</span>
+</button>
+<button class="flex items-center justify-between px-4 py-3 bg-surface-container-low hover:bg-surface-container-high rounded-lg text-sm font-medium transition-all group/skill text-left">
+<span>Feedback Synthesis</span>
+<span class="material-symbols-outlined text-xs opacity-0 group-hover/skill:opacity-100 transition-opacity">bolt</span>
+</button>
+<button class="flex items-center justify-between px-4 py-3 bg-surface-container-low hover:bg-surface-container-high rounded-lg text-sm font-medium transition-all group/skill text-left">
+<span>Sprint Planning</span>
+<span class="material-symbols-outlined text-xs opacity-0 group-hover/skill:opacity-100 transition-opacity">bolt</span>
+</button>
+</div>
+</div>
+<div class="pt-6 border-t border-surface-container flex items-center justify-between">
+<button class="primary-gradient text-on-primary px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 duration-200">
+<span class="material-symbols-outlined text-sm">terminal</span>
+                            Agent Prompt
+                        </button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-full text-slate-700 text-xs font-bold shadow-sm hover:bg-slate-200 transition-colors">
+<span class="material-symbols-outlined text-[14px]">assignment_late</span>
+<span>4 Proposals</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Executive Agent -->
+<div class="bg-surface-container-lowest rounded-xl p-8 border-l-4 border-on-surface-variant shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+<div class="absolute top-4 right-4 flex items-center gap-3">
+<input class="w-5 h-5 rounded border-outline-variant text-primary focus:ring-primary/20" type="checkbox"/>
+</div>
+<div class="flex items-start gap-6 mb-8">
+<div class="w-16 h-16 rounded-2xl bg-surface-container-high flex items-center justify-center text-on-surface shrink-0">
+<span class="material-symbols-outlined text-4xl" style="font-variation-settings: 'FILL' 1;">account_balance</span>
+</div>
+<div>
+<div class="flex items-center gap-2 mb-1">
+<h4 class="text-xl font-bold font-headline">The Executive</h4>
+<span class="bg-gray-200 text-gray-800 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Governance</span>
+</div>
+<p class="text-sm text-on-surface-variant leading-relaxed">Risk management and capital allocation specialist. Ensures regulatory compliance and fiduciary responsibility.</p>
+</div>
+</div>
+<div class="space-y-6">
+<div>
+<h5 class="text-[11px] font-bold text-on-surface-variant uppercase tracking-widest mb-4 font-label opacity-60">Skills &amp; Capabilities</h5>
+<div class="grid grid-cols-2 gap-3">
+<button class="flex items-center justify-between px-4 py-3 bg-surface-container-low hover:bg-surface-container-high rounded-lg text-sm font-medium transition-all group/skill text-left">
+<span>Risk Assessment</span>
+<span class="material-symbols-outlined text-xs opacity-0 group-hover/skill:opacity-100 transition-opacity">bolt</span>
+</button>
+<button class="flex items-center justify-between px-4 py-3 bg-surface-container-low hover:bg-surface-container-high rounded-lg text-sm font-medium transition-all group/skill text-left">
+<span>Cap Table Audit</span>
+<span class="material-symbols-outlined text-xs opacity-0 group-hover/skill:opacity-100 transition-opacity">bolt</span>
+</button>
+<button class="flex items-center justify-between px-4 py-3 bg-surface-container-low hover:bg-surface-container-high rounded-lg text-sm font-medium transition-all group/skill text-left">
+<span>Governance Framework</span>
+<span class="material-symbols-outlined text-xs opacity-0 group-hover/skill:opacity-100 transition-opacity">bolt</span>
+</button>
+<button class="flex items-center justify-between px-4 py-3 bg-surface-container-low hover:bg-surface-container-high rounded-lg text-sm font-medium transition-all group/skill text-left">
+<span>Capital Readiness</span>
+<span class="material-symbols-outlined text-xs opacity-0 group-hover/skill:opacity-100 transition-opacity">bolt</span>
+</button>
+</div>
+</div>
+<div class="pt-6 border-t border-surface-container flex items-center justify-between">
+<button class="primary-gradient text-on-primary px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 duration-200">
+<span class="material-symbols-outlined text-sm">terminal</span>
+                            Agent Prompt
+                        </button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-full text-gray-700 text-xs font-bold shadow-sm hover:bg-gray-200 transition-colors">
+<span class="material-symbols-outlined text-[14px]">assignment_late</span>
+<span>21 Proposals</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Code Editor Modal (Simplified Mockup) -->
+<div class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+<div class="bg-slate-950 w-full max-w-4xl rounded-2xl overflow-hidden shadow-2xl border border-white/10 flex flex-col h-[716px]">
+<div class="flex items-center justify-between px-6 py-4 bg-slate-900 border-b border-white/5">
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-full bg-red-500"></div>
+<div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+<div class="w-3 h-3 rounded-full bg-green-500"></div>
+</div>
+<span class="text-xs font-mono text-slate-400 ml-4">edit_architect_prompt.system</span>
+</div>
+<button class="text-slate-400 hover:text-white">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<div class="flex-1 p-6 font-mono text-sm leading-relaxed overflow-y-auto">
+<div class="text-slate-500 mb-2">/* System Instruction v4.2 */</div>
+<div class="text-blue-400">role: <span class="text-green-400">"ARCHITECT"</span></div>
+<div class="text-blue-400">objective: <span class="text-white">"Maintain structural integrity of all business models."</span></div>
+<div class="text-slate-300 mt-4 ml-4">
+                        You are the PlanB Lead Architect. Your primary function is to deconstruct venture proposals into first principles. When analyzing a new venture, you MUST apply the "Anti-Fragile" framework. Identify points of failure in technical architecture before suggesting scaling strategies.
+                    </div>
+<div class="text-blue-400 mt-4">constraints: [</div>
+<div class="text-white ml-8">"Prioritize LTV/CAC ratios over top-line growth",</div>
+<div class="text-white ml-8">"Flag technical debt with high severity",</div>
+<div class="text-white ml-8">"Enforce modular tech stacks"</div>
+<div class="text-blue-400">]</div>
+<div class="mt-4 border-l-2 border-blue-500 bg-blue-500/10 px-4 py-2 text-white animate-pulse">
+                        _ |
+                    </div>
+</div>
+<div class="p-4 bg-slate-900 border-t border-white/5 flex justify-end gap-3">
+<button class="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors">Discard</button>
+<button class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg text-sm font-bold transition-all shadow-lg">Commit Prompt</button>
+</div>
+</div>
+</div>
+<!-- Bento Status Section -->
+<div class="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="bg-surface-container-low rounded-xl p-6 flex items-center justify-between md:col-span-3 border border-outline-variant/20">
+<div class="flex items-center gap-4">
+<div class="relative">
+<img alt="Consultation UI" class="w-20 h-20 rounded-lg object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC_e6aGSJwyoPrrAWPfvqNYxu1J_WK-I-7yLr0jPqEFbJat0Fo2-37uAdwbqWgkcoGCkanJrBlHhmfUM7pWVzkhtmx1E4H9Zh0m-WBNuNGzC5e-hR5iUV7fG69Oeb420UxtRnYMM0mTptY51sx1w8YcSuawwEO-FzUI2lbNQUHs83Byi5TalDoPBrAi03mBPSRwskCYR2EuHZ1qjn9TyTVOOODL-Zsjv0HnvakJrnJsyM_Eq8GkbHhzLcfw7KitpM_WD1pUOb9tHcpT"/>
+<div class="absolute -top-2 -right-2 bg-green-500 w-4 h-4 rounded-full border-2 border-surface shadow-sm"></div>
+</div>
+<div>
+<h4 class="font-bold font-headline text-on-surface">Ongoing Consultation</h4>
+<p class="text-xs text-on-surface-variant font-label">Architect &amp; Product Lead analyzing 'Project Helios' MVP.</p>
+</div>
+</div>
+<button class="text-primary text-sm font-bold hover:underline transition-all">View Chat Stream</button>
+</div>
+</div>
+</div>
+</main>
+</body></html>

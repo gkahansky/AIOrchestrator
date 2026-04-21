@@ -111,6 +111,12 @@ celery_app.conf.update(
         #     "schedule": 900,
         #     "options": {"expires": 300},
         # },
+        # Every 10 min — re-queue market research sessions stuck in in-progress states
+        "market-research-watchdog": {
+            "task": "platform.market_research_watchdog",
+            "schedule": 600,             # 10 minutes
+            "options": {"expires": 300},
+        },
         # Hourly — fetch spend from vendor APIs; auto-pause campaigns that hit 100% budget
         "campaign-budget-monitor": {
             "task": "platform.monitor_campaign_budgets",
@@ -1397,6 +1403,58 @@ def generate_campaign_insights() -> dict:
 
 
 # ── Market Research ────────────────────────────────────────────────────────────
+
+_MR_IN_PROGRESS = {"optimizing", "researching", "merging", "reflecting", "generating_pdf"}
+_MR_STUCK_THRESHOLD_MINUTES = 40  # max realistic single-package runtime; anything older is stuck
+
+
+@celery_app.task(name="platform.market_research_watchdog", bind=False)
+def market_research_watchdog() -> dict:
+    """
+    Scan for market research sessions stuck in in-progress states and re-queue them.
+
+    A session is considered stuck if its status is in _MR_IN_PROGRESS and updated_at
+    has not changed in more than _MR_STUCK_THRESHOLD_MINUTES minutes (i.e. no package
+    completed and no status transition happened). Runs every 10 minutes via Beat.
+    """
+    from aiplatform.database.models import MarketResearch
+    from aiplatform.database.session import SessionLocal
+    from datetime import datetime, timezone, timedelta
+
+    db = SessionLocal()
+    try:
+        threshold = datetime.now(timezone.utc) - timedelta(minutes=_MR_STUCK_THRESHOLD_MINUTES)
+        stuck = (
+            db.query(MarketResearch)
+            .filter(
+                MarketResearch.status.in_(list(_MR_IN_PROGRESS)),
+                MarketResearch.updated_at < threshold,
+            )
+            .all()
+        )
+
+        requeued = []
+        for record in stuck:
+            logger.warning(
+                "market_research_watchdog: session %s stuck in '%s' since %s — requeuing",
+                record.id, record.status, record.updated_at,
+            )
+            prior_status = record.status
+            record.status = "pending"
+            record.error = f"Auto-requeued by watchdog (was stuck in '{prior_status}' since {record.updated_at})"
+            db.commit()
+            task = run_market_research.delay(str(record.id))
+            record.celery_task_id = task.id
+            db.commit()
+            requeued.append(str(record.id))
+
+        if requeued:
+            _slack_alert_failure("market_research_watchdog", None,
+                                 Exception(f"Requeued {len(requeued)} stuck session(s): {requeued}"))
+        return {"requeued": requeued, "count": len(requeued)}
+    finally:
+        db.close()
+
 
 @celery_app.task(name="platform.run_market_research", bind=True, max_retries=2,
                  soft_time_limit=1800, time_limit=1900)

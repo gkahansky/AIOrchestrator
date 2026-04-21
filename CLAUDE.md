@@ -43,9 +43,11 @@ It adds components not shared with any other venture (do not move these to `/pla
 ### Venture E — Market Research: Architecture Notes
 
 The Market Research venture shares all platform components with existing ventures (Celery, FastAPI, PostgreSQL, Playwright PDF, Drive upload, email delivery). It adds:
-- `aiplatform/skills/research/multi_llm_research.py` — parallel async LLM execution (Claude, OpenAI, Gemini, Grok)
-- `aiplatform/skills/research/rag_store.py` — Qdrant-backed RAG for pre-uploaded documents
-- `ventures/market_research/config.py` — research angles, system prompts for optimizer/merger/critic
+- `aiplatform/skills/research/multi_llm_research.py` — parallel async LLM execution (Claude, OpenAI, Gemini, Grok); `max_tokens` param configurable per call
+- `aiplatform/skills/research/rag_store.py` — Qdrant-backed RAG for pre-uploaded documents; supports PDF, DOCX, XLSX, PPTX, TXT, CSV
+- `ventures/market_research/config.py` — system prompts for decomposer, package merge, stitch, critic, optimizer
+
+**V2 Agentic Pipeline:** Topics are decomposed into 3-4 Work Packages. Each package runs all selected LLMs in parallel (8192 token budget), results are Level-1 merged, missing sections are filled via a completeness gate, and carry-forward context prevents repetition. All packages are Level-2 stitched into a final report with Executive Summary. Package results persist after each package completes, enabling resumability on retry. V1 sessions (pre-set per-LLM prompts via Adjust & Rerun) remain backwards compatible.
 
 Gig Generator also supports all four EchoForge services. All gig configs live in `scripts/run_gig_generator.py`. Voice is always "We/Our" (team/agency) — "I" only in the Fiverr title (platform requirement).
 

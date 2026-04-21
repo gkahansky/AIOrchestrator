@@ -8,7 +8,7 @@ Complete inventory of every third-party tool, service, API, and library used acr
 
 | Tool | Purpose | Use Cases |
 |---|---|---|
-| **Anthropic Claude API** (`anthropic>=0.40.0`) | Primary LLM for all agent intelligence | Marketing audit report generation, Etsy listing copy, podcast show notes, theme research, SEO metadata, content scoring, market research optimizer/merger/critic |
+| **Anthropic Claude API** (`anthropic>=0.40.0`) | Primary LLM for all agent intelligence | Marketing audit report generation, Etsy listing copy, podcast show notes, theme research, SEO metadata, content scoring, market research decomposer/package-merge/stitch/critic |
 | **OpenAI API** (`openai>=1.30.0`) | Audio transcription + image generation + embeddings | Whisper for podcast audio → transcript; DALL-E 3 as primary image generator; `text-embedding-3-small` for RAG embeddings in market research |
 | **Google Gemini / Generative AI** (`google-genai`, `google-generativeai`) | Image generation + multimodal + research | Gemini Imagen 3 for AI-generated wall art (pending billing approval); `gemini-2.0-flash-001` as research committee member in Market Research |
 | **xAI Grok API** (OpenAI-compatible at `https://api.x.ai/v1`) | LLM research + critic | `grok-3-mini` participates in Market Research committee and as default critic/reflection model. Key aliases: `XAI_API_KEY`, `GROK_API_KEY`, `X_AI_API_KEY` |
@@ -97,6 +97,9 @@ Complete inventory of every third-party tool, service, API, and library used acr
 | **reportlab** (`reportlab>=4.0.0`) | PDF generation (alternative) | Reserved for advanced PDF layouts (Hebrew/RTL documents) |
 | **arabic-reshaper** (`arabic-reshaper>=3.0.0`) | Arabic text shaping | Correct rendering of Arabic characters in PDFs |
 | **python-bidi** (`python-bidi>=0.4.2`) | Bidirectional text | Right-to-left text layout for Hebrew and Arabic content in reports |
+| **python-docx** (`python-docx>=1.1.0`) | Word document parsing | Extract text from DOCX/DOC files uploaded as RAG documents in Market Research |
+| **openpyxl** (`openpyxl>=3.1.0`) | Excel spreadsheet parsing | Extract cell data from XLSX/XLS files uploaded as RAG documents in Market Research |
+| **python-pptx** (`python-pptx>=0.6.23`) | PowerPoint parsing | Extract slide text from PPTX/PPT files uploaded as RAG documents in Market Research |
 
 ---
 

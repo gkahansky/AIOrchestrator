@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 _MODELS: dict[str, str] = {
     "claude": "claude-sonnet-4-6",
     "openai": "gpt-4o",
-    "gemini": "gemini-2.0-flash-001",
+    "gemini": "gemini-2.0-flash",
     "grok":   "grok-3-mini",
 }
 

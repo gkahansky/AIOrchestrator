@@ -210,8 +210,9 @@ def retry_session(
     record = db.get(MarketResearch, record_id)
     if not record:
         raise HTTPException(status_code=404, detail="Session not found")
-    if record.status not in ("failed", "pending"):
-        raise HTTPException(status_code=400, detail=f"Only failed or pending sessions can be retried (current: {record.status})")
+    _RETRYABLE = {"failed", "pending", "optimizing", "researching", "merging", "reflecting", "generating_pdf"}
+    if record.status not in _RETRYABLE:
+        raise HTTPException(status_code=400, detail=f"Session cannot be retried in status: {record.status}")
 
     record.status = "pending"
     record.error = None

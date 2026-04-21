@@ -1680,7 +1680,8 @@ function SessionDetailDrawer({
   }, [session?.optimized_prompts, isV2])
 
   const isDone = session ? ["pdf_ready", "delivered", "failed"].includes(session.status) : false
-  const canRetry = session ? ["failed", "pending"].includes(session.status) : false
+  const _RETRYABLE = ["failed", "pending", "optimizing", "researching", "merging", "reflecting", "generating_pdf"]
+  const canRetry = session ? _RETRYABLE.includes(session.status) : false
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -1808,7 +1809,12 @@ function SessionDetailDrawer({
         {canRetry && (
           <div className="shrink-0 px-6 py-4 border-t bg-red-50 rounded-b-2xl flex items-center justify-between gap-3">
             <p className="text-xs text-gray-500">
-              {session?.status === "failed" ? "This session failed — retry to run it again." : "This session is stuck pending — retry to re-queue it."}
+              {session?.status === "failed"
+                ? "This session failed — retry to run it again."
+                : session?.status === "pending"
+                  ? "This session is stuck pending — retry to re-queue it."
+                  : `Session appears stuck in "${session?.status}" — retry to resume from last checkpoint.`
+              }
             </p>
             <button
               disabled={retrying}

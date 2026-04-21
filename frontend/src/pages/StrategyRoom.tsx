@@ -1,4 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   fetchProposals, fetchAdvisorRuns, fetchAdvisorDiagnostics,
@@ -1617,6 +1619,40 @@ function MrStatusBadge({ status }: { status: string }) {
   )
 }
 
+function MdReport({ content, empty }: { content: string; empty: string }) {
+  if (!content) return <p className="text-gray-400 italic">{empty}</p>
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        h1: ({ children }) => <h1 className="text-xl font-bold text-gray-900 mt-6 mb-3 pb-1 border-b border-gray-200">{children}</h1>,
+        h2: ({ children }) => <h2 className="text-lg font-bold text-gray-900 mt-5 mb-2">{children}</h2>,
+        h3: ({ children }) => <h3 className="text-base font-semibold text-gray-800 mt-4 mb-2">{children}</h3>,
+        h4: ({ children }) => <h4 className="text-sm font-semibold text-gray-700 mt-3 mb-1">{children}</h4>,
+        p: ({ children }) => <p className="mb-3 leading-relaxed">{children}</p>,
+        ul: ({ children }) => <ul className="mb-3 ml-4 space-y-1 list-disc">{children}</ul>,
+        ol: ({ children }) => <ol className="mb-3 ml-4 space-y-1 list-decimal">{children}</ol>,
+        li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+        strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
+        blockquote: ({ children }) => <blockquote className="border-l-4 border-primary/40 pl-4 italic text-gray-600 my-3">{children}</blockquote>,
+        hr: () => <hr className="my-4 border-gray-200" />,
+        table: ({ children }) => (
+          <div className="overflow-x-auto my-4">
+            <table className="min-w-full text-sm border border-gray-200 rounded-lg overflow-hidden">{children}</table>
+          </div>
+        ),
+        thead: ({ children }) => <thead className="bg-gray-50">{children}</thead>,
+        tbody: ({ children }) => <tbody className="divide-y divide-gray-100">{children}</tbody>,
+        tr: ({ children }) => <tr className="hover:bg-gray-50 transition-colors">{children}</tr>,
+        th: ({ children }) => <th className="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider text-gray-600 border-b border-gray-200">{children}</th>,
+        td: ({ children }) => <td className="px-4 py-2.5 text-gray-700 align-top">{children}</td>,
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  )
+}
+
 function SessionDetailDrawer({
   session,
   isLoading,
@@ -1698,11 +1734,11 @@ function SessionDetailDrawer({
           ) : (
             <>
               {tab === "report" && (
-                <div className="whitespace-pre-wrap">{session.final_report || session.merged_report || "No report yet."}</div>
+                <MdReport content={session.final_report || session.merged_report || ""} empty="No report yet." />
               )}
 
               {tab === "critic" && (
-                <div className="whitespace-pre-wrap">{session.critic_feedback || "No critic feedback yet."}</div>
+                <MdReport content={session.critic_feedback || ""} empty="No critic feedback yet." />
               )}
 
               {tab === "prompts" && (

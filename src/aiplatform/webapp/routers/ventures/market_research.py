@@ -1,11 +1,13 @@
 """
 Market Research venture router.
 
-  POST /api/ventures/market-research/sessions         — create + queue a research session
-  POST /api/ventures/market-research/sessions/{id}/upload — upload RAG documents
-  GET  /api/ventures/market-research/sessions         — list sessions
-  GET  /api/ventures/market-research/sessions/{id}    — get session detail
-  GET  /api/ventures/market-research/available-llms   — which LLMs are configured
+  POST /api/ventures/market-research/sessions                       — create + queue a research session
+  POST /api/ventures/market-research/sessions/{id}/upload           — upload RAG documents
+  GET  /api/ventures/market-research/sessions                       — list sessions
+  GET  /api/ventures/market-research/sessions/{id}                  — get session detail
+  GET  /api/ventures/market-research/sessions/{id}/sections/{sec}   — get single section detail (V3)
+  GET  /api/ventures/market-research/available-llms                 — which LLMs are configured
+  GET  /api/ventures/market-research/section-library                — default section library
 """
 
 import uuid
@@ -26,11 +28,28 @@ router = APIRouter()
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
 
+class SectionConfigEntry(BaseModel):
+    id: str
+    name: str
+    enabled: bool = True
+    prompt: str
+    locked: bool = False
+    required_items: list[str] = []
+    expected_outputs: list[str] = []
+
+
+class SectionConfig(BaseModel):
+    version: int = 3
+    system_prompt: str | None = None   # None → use default CROSS_MODULE_SYSTEM_PROMPT
+    sections: list[SectionConfigEntry]
+
+
 class CreateResearchRequest(BaseModel):
     topic: str
     selected_llms: list[str] | None = None   # None → all available
     critic_llm: str = "grok"
     client_email: str | None = None
+    section_config: SectionConfig | None = None  # None → V2 pipeline (backwards compat)
 
 
 class ResearchSummary(BaseModel):
@@ -45,6 +64,7 @@ class ResearchSummary(BaseModel):
 
 
 class ResearchDetail(ResearchSummary):
+    section_config: dict | None
     optimized_prompts: dict | None
     research_results: dict | None
     merged_report: str | None
@@ -76,6 +96,7 @@ def _to_detail(r: MarketResearch) -> ResearchDetail:
         critic_llm=r.critic_llm,
         drive_link=r.drive_link,
         created_at=r.created_at.isoformat(),
+        section_config=r.section_config,
         optimized_prompts=r.optimized_prompts,
         research_results=r.research_results,
         merged_report=r.merged_report,
@@ -111,11 +132,20 @@ def create_session(
             detail=f"LLMs not configured (missing API keys): {invalid}",
         )
 
+    # Build section_config for V3 — apply default system prompt if not provided
+    sc = None
+    if req.section_config is not None:
+        from ventures.market_research.config import CROSS_MODULE_SYSTEM_PROMPT
+        sc = req.section_config.model_dump()
+        if not sc.get("system_prompt"):
+            sc["system_prompt"] = CROSS_MODULE_SYSTEM_PROMPT
+
     record = MarketResearch(
         topic=req.topic,
         selected_llms=selected,
         critic_llm=req.critic_llm,
         client_email=req.client_email,
+        section_config=sc,
         status="pending",
     )
     db.add(record)
@@ -185,6 +215,60 @@ def get_session(
         raise HTTPException(status_code=404, detail="Session not found")
 
     return _to_detail(record)
+
+
+@router.get("/section-library")
+def get_section_library(_: str = Depends(require_auth)) -> dict:
+    """Return the default V3 section library so the frontend can populate the section selector."""
+    from ventures.market_research.config import SECTION_LIBRARY, CROSS_MODULE_SYSTEM_PROMPT
+    return {
+        "sections": SECTION_LIBRARY,
+        "default_system_prompt": CROSS_MODULE_SYSTEM_PROMPT,
+    }
+
+
+@router.get("/sessions/{session_id}/sections/{section_id}")
+def get_section_detail(
+    session_id: str,
+    section_id: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_auth),
+) -> dict:
+    """Return the full detail for a single V3 section (draft, critic rounds, citations, status)."""
+    try:
+        record_id = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+
+    record = db.get(MarketResearch, record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if not record.section_config:
+        raise HTTPException(status_code=400, detail="Session is not a V3 section-based session")
+
+    results = record.research_results or {}
+    sections = results.get("sections", {})
+    section_data = sections.get(section_id)
+    if section_data is None:
+        raise HTTPException(status_code=404, detail=f"Section '{section_id}' not found or not yet started")
+
+    # Find section config entry for name/required_items
+    sc_sections = (record.section_config or {}).get("sections", [])
+    sc_entry = next((s for s in sc_sections if s["id"] == section_id), {})
+
+    return {
+        "section_id": section_id,
+        "name": section_data.get("name", sc_entry.get("name", section_id)),
+        "status": section_data.get("status", "pending"),
+        "draft": section_data.get("draft", ""),
+        "citations": section_data.get("citations", []),
+        "summary": section_data.get("summary", ""),
+        "critic_round_1": section_data.get("critic_round_1"),
+        "critic_round_2": section_data.get("critic_round_2"),
+        "required_items": sc_entry.get("required_items", []),
+        "expected_outputs": sc_entry.get("expected_outputs", []),
+    }
 
 
 class RerunRequest(BaseModel):

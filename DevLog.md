@@ -163,3 +163,4 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-21 13:36 |  | a188f82 | Add Celery Beat watchdog task — auto-retries market research sessions stuck in-progress for >30 minutes |
 | 2026-04-21 15:35 |  | bf52fa1 | Fix report truncation — replace single-LLM stitch call with sequential Python assembly; exec summary is a separate focused call |
 | 2026-04-22 | | (pending) | Market Research V3 — section-based pipeline with fixed section library, per-section 2-round critic loop, citation enforcement, cross-module reference context, and section-level status UI |
+| 2026-04-22 20:03 |  | 99877cf | Market Research V3: section-based pipeline with fixed library, 2-round critic loop, citations |

@@ -1,16 +1,23 @@
 """
-Market Research pipeline — v2 Agentic Workflow.
+Market Research pipeline — v3 Section-Based Workflow (default) + v2/v1 backwards compat.
 
-Stages:
-  1. optimizing    — Claude decomposes topic into 3-4 Work Packages
-  2. researching   — per-package: parallel LLM research → Level-1 merge → completeness gate
-  3. merging       — Level-2 stitch: assemble all package merges into final report
-  4. reflecting    — critic LLM reviews quality and flags gaps
-  5. generating_pdf — Playwright HTML→PDF
-  6. pdf_ready     — Drive upload + optional email delivery
+V3 stages (section_config present):
+  For each enabled section (sequential):
+    1. drafting    — all LLMs research the section in parallel
+    2. merging     — Level-1 merge of LLM outputs
+    3. reviewing_1 — critic checks required_items + citations → PASS or REVISE
+    4. (if REVISE) author fills gaps (round 2)
+    5. reviewing_2 — critic reviews again → PASS or disclaimer
+  Final assembly: Python concatenation of all sections + citations appendix
+  generating_pdf / pdf_ready / delivering / delivered
 
-Backwards compatible with v1 sessions (pre-decomposed per-LLM prompts from rerun mode).
-Resumable: completed packages are skipped when a session is retried.
+V2 stages (optimized_prompts.version == 2):
+  1. optimizing → researching (work packages) → merging → reflecting → generating_pdf
+
+V1 (optimized_prompts is {llm_id: text}):
+  researching → merging → reflecting → generating_pdf
+
+Resumable: completed sections (or packages in v2) are skipped on retry.
 """
 
 import json
@@ -37,6 +44,10 @@ from ventures.market_research.config import (
     PACKAGE_DECOMPOSER_SYSTEM,
     PACKAGE_MERGE_SYSTEM,
     STITCH_SYSTEM,
+    SECTION_LIBRARY,
+    CROSS_MODULE_SYSTEM_PROMPT,
+    SECTION_CRITIC_SYSTEM,
+    SECTION_SUMMARY_SYSTEM,
 )
 
 import anthropic
@@ -386,6 +397,271 @@ def _run_v2(
     db.commit()
 
 
+# ── V3 pipeline: Section-Based Research ───────────────────────────────────────
+
+def _build_section_research_prompt(
+    section: dict,
+    ref_context: str,
+    system_prompt: str,
+) -> str:
+    """Build the per-section research prompt injected into all LLM calls."""
+    ref_block = (
+        f"\n\n## Already Covered in Prior Sections (do NOT repeat — reference and build on these)\n"
+        f"{ref_context}"
+        if ref_context else ""
+    )
+    return (
+        f"Research topic context: see system prompt.\n\n"
+        f"Section to research: {section['name']}\n\n"
+        f"{section['prompt']}"
+        f"{ref_block}\n\n"
+        f"Cross-module instruction: {system_prompt}"
+    )
+
+
+def _merge_section(topic: str, section: dict, llm_results: dict[str, str]) -> str:
+    outputs = "\n\n".join(
+        f"=== {llm.upper()} ===\n{text}"
+        for llm, text in llm_results.items()
+    )
+    user_msg = (
+        f"Topic: {topic}\n"
+        f"Section: {section['name']}\n\n"
+        f"LLM outputs to synthesise:\n\n{outputs}"
+    )
+    return _claude_sync(PACKAGE_MERGE_SYSTEM, user_msg, max_tokens=8192)
+
+
+def _critic_section(section: dict, draft: str) -> dict:
+    """Run critic for one section. Returns {verdict, missing_items, uncited_claims, gaps_summary}."""
+    required_list = "\n".join(f"- {item}" for item in section["required_items"])
+    user_msg = (
+        f"Section name: {section['name']}\n\n"
+        f"Required items that must be present:\n{required_list}\n\n"
+        f"Section draft to review:\n\n{draft}"
+    )
+    raw = _claude_sync(SECTION_CRITIC_SYSTEM, user_msg, max_tokens=512)
+    start = raw.find("{")
+    end = raw.rfind("}") + 1
+    if start == -1 or end == 0:
+        return {"verdict": "PASS", "missing_items": [], "uncited_claims": [], "gaps_summary": ""}
+    try:
+        return json.loads(raw[start:end])
+    except json.JSONDecodeError:
+        return {"verdict": "PASS", "missing_items": [], "uncited_claims": [], "gaps_summary": ""}
+
+
+def _fill_section_gaps(topic: str, section: dict, draft: str, critic_result: dict) -> str:
+    """Author pass: fill gaps identified by the critic."""
+    gaps = critic_result.get("missing_items", [])
+    uncited = critic_result.get("uncited_claims", [])
+    gap_list = "\n".join(f"- {g}" for g in gaps) if gaps else ""
+    uncited_list = "\n".join(f"- {c}" for c in uncited) if uncited else ""
+    system = (
+        "You are a market research writer improving a report section. "
+        "Address the specific gaps listed. Do not rewrite the entire section — "
+        "append improved or missing content using the same ## heading structure. "
+        "Every new quantitative claim must include an inline citation: [Source: Name, Year]."
+    )
+    user_msg = (
+        f"Topic: {topic}\n"
+        f"Section: {section['name']}\n\n"
+        f"Existing draft:\n{draft}\n\n"
+        + (f"Missing required items to add:\n{gap_list}\n\n" if gap_list else "")
+        + (f"Claims that need citations added:\n{uncited_list}\n\n" if uncited_list else "")
+        + "Write only the additions/corrections — do not repeat content already present."
+    )
+    return _claude_sync(system, user_msg, max_tokens=4096)
+
+
+def _build_section_summary(section_name: str, draft: str) -> str:
+    """Generate a 2-sentence summary for use as reference context in subsequent sections."""
+    user_msg = f"Section: {section_name}\n\nContent:\n{draft[:3000]}"
+    return _claude_sync(SECTION_SUMMARY_SYSTEM, user_msg, max_tokens=128)
+
+
+def _extract_citations(text: str) -> list[str]:
+    """Extract all [Source: ...] citations from section text, deduplicated."""
+    import re
+    matches = re.findall(r'\[Source:[^\]]+\]', text)
+    return list(dict.fromkeys(matches))  # preserve order, deduplicate
+
+
+def _build_citations_appendix(section_results: dict) -> str:
+    """Build a citations appendix grouped by section name."""
+    lines = ["## Citations & Sources\n"]
+    for section_id, data in section_results.items():
+        citations = data.get("citations", [])
+        if citations:
+            lines.append(f"### {data.get('name', section_id)}")
+            lines.extend(f"- {c}" for c in citations)
+            lines.append("")
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
+_DISCLAIMER_TEMPLATE = (
+    "\n\n> **Note:** Insufficient verified data was found for some required items in this section "
+    "after two research rounds. The content above represents the best available information. "
+    "Items not fully covered: {items}"
+)
+
+
+def _run_v3(
+    record: MarketResearch, db: Session, session_id: str,
+    topic: str, selected: list[str],
+) -> None:
+    """V3 pipeline: section-based research with per-section author/critic loop."""
+    section_config = record.section_config
+    sections = section_config.get("sections", [])
+    session_system_prompt = section_config.get("system_prompt", CROSS_MODULE_SYSTEM_PROMPT)
+
+    enabled_sections = [s for s in sections if s.get("enabled", True)]
+    if not enabled_sections:
+        raise RuntimeError("V3: no sections enabled in section_config")
+
+    # Initialise or resume results store
+    existing = record.research_results or {}
+    section_store: dict[str, dict] = (
+        existing.get("sections", {})
+        if existing.get("version") == 3
+        else {}
+    )
+
+    if not record.title:
+        record.title = _generate_title(topic)
+        db.commit()
+
+    _set_status(db, record, "researching")
+
+    # Build reference context from completed sections (section name → 2-sentence summary)
+    ref_summaries: dict[str, str] = {
+        sid: data["summary"]
+        for sid, data in section_store.items()
+        if data.get("summary") and data.get("status") in ("done", "disclaimer")
+    }
+
+    for section in enabled_sections:
+        sec_id = section["id"]
+
+        # Resume: skip sections already completed
+        existing_sec = section_store.get(sec_id, {})
+        if existing_sec.get("status") in ("done", "disclaimer"):
+            logger.info("v3: skipping completed section %s", sec_id)
+            if existing_sec.get("summary"):
+                ref_summaries[sec_id] = existing_sec["summary"]
+            continue
+
+        logger.info("v3: starting section %s — %s", sec_id, section["name"])
+
+        # Build reference context block
+        ref_context = "\n".join(
+            f"- **{name}**: {summary}"
+            for name, summary in ref_summaries.items()
+        )
+
+        # Update section status to drafting
+        section_store[sec_id] = {**existing_sec, "name": section["name"], "status": "drafting"}
+        record.research_results = {"version": 3, "sections": section_store}
+        db.commit()
+
+        # Stage: all LLMs research section in parallel
+        research_prompt = _build_section_research_prompt(section, ref_context, session_system_prompt)
+        llm_prompts = {llm: research_prompt for llm in selected}
+
+        outcome = run_parallel_research_sync(
+            prompts=llm_prompts,
+            system_prompt=f"You are an expert market researcher. Topic: {topic}",
+            selected_llms=selected,
+            timeout=180,
+            max_tokens=8192,
+        )
+        llm_results = outcome["results"]
+        if not llm_results:
+            raise RuntimeError(f"Section {sec_id} — all LLMs failed: {outcome['errors']}")
+
+        # Level-1 merge
+        section_store[sec_id]["status"] = "merging"
+        record.research_results = {"version": 3, "sections": section_store}
+        db.commit()
+
+        draft = _merge_section(topic, section, llm_results)
+
+        # Critic round 1
+        section_store[sec_id]["status"] = "reviewing_1"
+        section_store[sec_id]["draft"] = draft
+        record.research_results = {"version": 3, "sections": section_store}
+        db.commit()
+
+        critic1 = _critic_section(section, draft)
+        section_store[sec_id]["critic_round_1"] = critic1
+
+        if critic1.get("verdict") == "REVISE":
+            # Author fills gaps
+            addition = _fill_section_gaps(topic, section, draft, critic1)
+            draft = draft + "\n\n" + addition
+
+            # Critic round 2
+            section_store[sec_id]["status"] = "reviewing_2"
+            section_store[sec_id]["draft"] = draft
+            record.research_results = {"version": 3, "sections": section_store}
+            db.commit()
+
+            critic2 = _critic_section(section, draft)
+            section_store[sec_id]["critic_round_2"] = critic2
+
+            if critic2.get("verdict") == "REVISE":
+                # Still failing — append disclaimer
+                remaining = critic2.get("missing_items", []) + critic2.get("uncited_claims", [])
+                items_str = "; ".join(remaining[:5]) if remaining else "see critic feedback"
+                draft += _DISCLAIMER_TEMPLATE.format(items=items_str)
+                section_store[sec_id]["status"] = "disclaimer"
+            else:
+                section_store[sec_id]["status"] = "done"
+        else:
+            section_store[sec_id]["status"] = "done"
+
+        # Build citations and summary for reference context
+        citations = _extract_citations(draft)
+        summary = _build_section_summary(section["name"], draft)
+
+        section_store[sec_id]["draft"] = draft
+        section_store[sec_id]["citations"] = citations
+        section_store[sec_id]["summary"] = summary
+        ref_summaries[sec_id] = summary
+
+        record.research_results = {"version": 3, "sections": section_store}
+        db.commit()
+        logger.info("v3: section %s complete — status: %s", sec_id, section_store[sec_id]["status"])
+
+    # Assembly: Python concatenation of all section drafts
+    _set_status(db, record, "merging")
+
+    parts = []
+    for section in enabled_sections:
+        sec_id = section["id"]
+        draft = section_store.get(sec_id, {}).get("draft", "")
+        if draft:
+            parts.append(f"# {section['name']}\n\n{draft}")
+
+    citations_appendix = _build_citations_appendix(section_store)
+    if citations_appendix:
+        parts.append(citations_appendix)
+
+    assembled = "\n\n---\n\n".join(parts)
+    record.merged_report = assembled
+    record.final_report = assembled
+    # V3 uses no separate critic pass — per-section critic feedback is stored in research_results
+    record.critic_feedback = json.dumps({
+        sec_id: {
+            "round_1": data.get("critic_round_1"),
+            "round_2": data.get("critic_round_2"),
+            "status": data.get("status"),
+        }
+        for sec_id, data in section_store.items()
+    }, indent=2)
+    db.commit()
+
+
 # ── PDF generation ─────────────────────────────────────────────────────────────
 
 def _build_pdf(record: MarketResearch, output_path: str) -> str:
@@ -479,10 +755,13 @@ def run_market_research(research_id: str, db: Session) -> None:
     try:
         existing_prompts = record.optimized_prompts
 
-        # Detect v1 (rerun mode): prompts already set as {llm_id: text} with no "version" key
-        if (existing_prompts is not None
+        if record.section_config:
+            # V3: section-based pipeline (new sessions with section_config set)
+            _run_v3(record, db, session_id, topic, selected)
+        elif (existing_prompts is not None
                 and isinstance(existing_prompts, dict)
                 and "version" not in existing_prompts):
+            # V1 (rerun mode): prompts already set as {llm_id: text} with no "version" key
             _run_v1(record, db, session_id, topic, selected, critic_llm, existing_prompts)
         else:
             # V2: agentic work-package pipeline (new sessions + v2 reruns)

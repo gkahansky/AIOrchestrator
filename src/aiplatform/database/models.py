@@ -609,8 +609,9 @@ class MarketResearch(Base):
     critic_llm    = Column(String(50), nullable=False, default="grok")
     rag_doc_ids   = Column(JSONB, nullable=True)
 
-    optimized_prompts = Column(JSONB, nullable=True)   # {llm_id: prompt}
-    research_results  = Column(JSONB, nullable=True)   # {llm_id: result_text}
+    section_config    = Column(JSONB, nullable=True)   # v3: {version:3, system_prompt, sections:[{id,name,enabled,prompt,locked}]}
+    optimized_prompts = Column(JSONB, nullable=True)   # v2: {version:2, packages:[...]} / v1: {llm_id: prompt}
+    research_results  = Column(JSONB, nullable=True)   # v3: {version:3, sections:{id:{status,draft,...}}} / v2/v1: legacy
     merged_report     = Column(Text, nullable=True)
     critic_feedback   = Column(Text, nullable=True)
     final_report      = Column(Text, nullable=True)

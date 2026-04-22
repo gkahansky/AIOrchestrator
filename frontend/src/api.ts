@@ -510,13 +510,89 @@ export interface V2ResearchResults {
   total: number
 }
 
+// ── V3 Section-Based types ────────────────────────────────────────────────────
+
+export type V3SectionStatus =
+  | 'pending'
+  | 'drafting'
+  | 'merging'
+  | 'reviewing_1'
+  | 'reviewing_2'
+  | 'done'
+  | 'disclaimer'
+
+export interface V3SectionResult {
+  name: string
+  status: V3SectionStatus
+  draft: string
+  citations: string[]
+  summary: string
+  critic_round_1?: {
+    verdict: 'PASS' | 'REVISE'
+    missing_items: string[]
+    uncited_claims: string[]
+    gaps_summary: string
+  } | null
+  critic_round_2?: {
+    verdict: 'PASS' | 'REVISE'
+    missing_items: string[]
+    uncited_claims: string[]
+    gaps_summary: string
+  } | null
+}
+
+export interface V3ResearchResults {
+  version: 3
+  sections: Record<string, V3SectionResult>
+}
+
+export interface SectionLibraryEntry {
+  id: string
+  name: string
+  required_items: string[]
+  expected_outputs: string[]
+  default_prompt: string
+  default_enabled: boolean
+  locked: boolean
+}
+
+export interface SectionConfigEntry {
+  id: string
+  name: string
+  enabled: boolean
+  prompt: string
+  locked: boolean
+  required_items: string[]
+  expected_outputs: string[]
+}
+
+export interface SectionConfig {
+  version: 3
+  system_prompt: string
+  sections: SectionConfigEntry[]
+}
+
 export interface MarketResearchDetail extends MarketResearchSession {
+  section_config: SectionConfig | null
   optimized_prompts: Record<string, string> | V2OptimizedPrompts | null
-  research_results: Record<string, string> | V2ResearchResults | null
+  research_results: Record<string, string> | V2ResearchResults | V3ResearchResults | null
   merged_report: string | null
   critic_feedback: string | null
   final_report: string | null
   error: string | null
+}
+
+export interface SectionDetail {
+  section_id: string
+  name: string
+  status: V3SectionStatus
+  draft: string
+  citations: string[]
+  summary: string
+  critic_round_1: V3SectionResult['critic_round_1']
+  critic_round_2: V3SectionResult['critic_round_2']
+  required_items: string[]
+  expected_outputs: string[]
 }
 
 export async function fetchAvailableLlms(): Promise<{ available: string[] }> {
@@ -524,11 +600,25 @@ export async function fetchAvailableLlms(): Promise<{ available: string[] }> {
   return handleResponse<{ available: string[] }>(res)
 }
 
+export async function fetchSectionLibrary(): Promise<{ sections: SectionLibraryEntry[]; default_system_prompt: string }> {
+  const res = await fetch(`${BASE}/api/ventures/market-research/section-library`, { headers: getHeaders() })
+  return handleResponse(res)
+}
+
+export async function fetchSectionDetail(sessionId: string, sectionId: string): Promise<SectionDetail> {
+  const res = await fetch(
+    `${BASE}/api/ventures/market-research/sessions/${sessionId}/sections/${sectionId}`,
+    { headers: getHeaders() },
+  )
+  return handleResponse<SectionDetail>(res)
+}
+
 export async function createMarketResearchSession(body: {
   topic: string
   selected_llms?: string[]
   critic_llm?: string
   client_email?: string
+  section_config?: SectionConfig | null
 }): Promise<MarketResearchSession> {
   const res = await fetch(`${BASE}/api/ventures/market-research/sessions`, {
     method: "POST",

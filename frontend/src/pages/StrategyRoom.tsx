@@ -12,9 +12,13 @@ import {
   triggerAdvisor, chatWithAdvisors,
   fetchAvailableLlms, createMarketResearchSession, uploadResearchDocs,
   fetchMarketResearchSessions, fetchMarketResearchSession, rerunResearchSession,
-  retryResearchSession,
+  retryResearchSession, fetchSectionLibrary, fetchSectionDetail,
 } from "../api"
-import type { MarketResearchDetail, V2OptimizedPrompts } from "../api"
+import type {
+  MarketResearchDetail, V2OptimizedPrompts,
+  SectionLibraryEntry, SectionConfigEntry, SectionConfig,
+  V3ResearchResults, V3SectionStatus, SectionDetail,
+} from "../api"
 import type {
   AdvisorConfig,
   AdvisoryProposal,
@@ -1592,6 +1596,7 @@ const LLM_META: Record<string, { label: string; color: string; bg: string }> = {
 }
 
 const MR_STATUS_LABELS: Record<string, string> = {
+  // session-level
   pending:        "Pending",
   optimizing:     "Optimizing prompts…",
   researching:    "Researching…",
@@ -1602,6 +1607,12 @@ const MR_STATUS_LABELS: Record<string, string> = {
   delivering:     "Delivering…",
   delivered:      "Delivered",
   failed:         "Failed",
+  // V3 section-level
+  drafting:       "Drafting…",
+  reviewing_1:    "Critic round 1…",
+  reviewing_2:    "Critic round 2…",
+  done:           "Done",
+  disclaimer:     "Disclaimer added",
 }
 
 function MrStatusBadge({ status }: { status: string }) {
@@ -1653,6 +1664,288 @@ function MdReport({ content, empty }: { content: string; empty: string }) {
   )
 }
 
+// ── V3 Section status badge (reuses MR_STATUS_LABELS) ─────────────────────────
+
+const SECTION_STATUS_COLOR: Record<string, string> = {
+  pending:     "bg-gray-100 text-gray-500",
+  drafting:    "bg-blue-100 text-blue-700 animate-pulse",
+  merging:     "bg-blue-100 text-blue-700 animate-pulse",
+  reviewing_1: "bg-yellow-100 text-yellow-700 animate-pulse",
+  reviewing_2: "bg-orange-100 text-orange-700 animate-pulse",
+  done:        "bg-green-100 text-green-700",
+  disclaimer:  "bg-red-100 text-red-700",
+}
+
+function SectionStatusBadge({ status }: { status: string }) {
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${SECTION_STATUS_COLOR[status] ?? "bg-gray-100 text-gray-500"}`}>
+      {MR_STATUS_LABELS[status] ?? status}
+    </span>
+  )
+}
+
+// ── SectionSelector — shown in the creation form ───────────────────────────────
+
+function SectionSelector({
+  library,
+  defaultSystemPrompt,
+  value,
+  onChange,
+}: {
+  library: SectionLibraryEntry[]
+  defaultSystemPrompt: string
+  value: SectionConfig
+  onChange: (cfg: SectionConfig) => void
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [newSection, setNewSection] = useState({ name: "", prompt: "" })
+
+  const updateSection = (id: string, patch: Partial<SectionConfigEntry>) => {
+    onChange({
+      ...value,
+      sections: value.sections.map(s => s.id === id ? { ...s, ...patch } : s),
+    })
+  }
+
+  const addCustomSection = () => {
+    if (!newSection.name.trim() || !newSection.prompt.trim()) return
+    const id = `custom_${Date.now()}`
+    // Insert before the locked final_synthesis section
+    const lockedIdx = value.sections.findIndex(s => s.locked)
+    const idx = lockedIdx >= 0 ? lockedIdx : value.sections.length
+    const newSections = [...value.sections]
+    newSections.splice(idx, 0, {
+      id,
+      name: newSection.name,
+      enabled: true,
+      prompt: newSection.prompt,
+      locked: false,
+      required_items: [],
+      expected_outputs: [],
+    })
+    onChange({ ...value, sections: newSections })
+    setNewSection({ name: "", prompt: "" })
+    setShowAddForm(false)
+  }
+
+  const enabledCount = value.sections.filter(s => s.enabled).length
+
+  return (
+    <div className="space-y-3">
+      {/* System prompt */}
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Cross-Module System Prompt</label>
+        <textarea
+          value={value.system_prompt}
+          onChange={e => onChange({ ...value, system_prompt: e.target.value })}
+          rows={2}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+        />
+      </div>
+
+      {/* Section list */}
+      <div className="space-y-1.5">
+        {value.sections.map(section => (
+          <div key={section.id} className={`border rounded-xl overflow-hidden transition-all ${section.enabled ? "border-gray-200" : "border-gray-100 opacity-60"}`}>
+            <div className="flex items-center gap-3 px-3 py-2.5">
+              {/* Checkbox — disabled for locked sections */}
+              <button
+                disabled={section.locked}
+                onClick={() => !section.locked && updateSection(section.id, { enabled: !section.enabled })}
+                className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 ${
+                  section.enabled ? "border-primary bg-primary" : "border-gray-300"
+                } ${section.locked ? "cursor-not-allowed" : "cursor-pointer"}`}
+              >
+                {section.enabled && <span className="material-symbols-outlined text-white text-xs">check</span>}
+              </button>
+
+              <span className="flex-1 text-sm font-medium text-gray-800">{section.name}</span>
+
+              {section.locked && (
+                <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">always included</span>
+              )}
+
+              {/* Edit prompt toggle */}
+              {section.enabled && (
+                <button
+                  onClick={() => setExpandedId(expandedId === section.id ? null : section.id)}
+                  className="text-xs text-primary hover:underline flex items-center gap-0.5"
+                >
+                  <span className="material-symbols-outlined text-sm">
+                    {expandedId === section.id ? "expand_less" : "edit"}
+                  </span>
+                  {expandedId === section.id ? "close" : "edit"}
+                </button>
+              )}
+            </div>
+
+            {/* Expanded prompt editor */}
+            {expandedId === section.id && section.enabled && (
+              <div className="px-3 pb-3 pt-1 border-t border-gray-100 bg-gray-50">
+                <label className="block text-xs text-gray-500 mb-1">Research Prompt</label>
+                <textarea
+                  value={section.prompt}
+                  onChange={e => updateSection(section.id, { prompt: e.target.value })}
+                  rows={6}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
+                />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Add custom section */}
+      {!showAddForm ? (
+        <button
+          onClick={() => setShowAddForm(true)}
+          className="w-full py-2 border-2 border-dashed border-gray-300 rounded-xl text-xs text-gray-500 hover:border-primary/50 hover:text-primary transition-colors flex items-center justify-center gap-1"
+        >
+          <span className="material-symbols-outlined text-sm">add</span>
+          Add section
+        </button>
+      ) : (
+        <div className="border border-primary/30 rounded-xl p-3 space-y-2 bg-primary/5">
+          <input
+            type="text"
+            value={newSection.name}
+            onChange={e => setNewSection(prev => ({ ...prev, name: e.target.value }))}
+            placeholder="Section name"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          <textarea
+            value={newSection.prompt}
+            onChange={e => setNewSection(prev => ({ ...prev, prompt: e.target.value }))}
+            placeholder="Research prompt for this section…"
+            rows={4}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
+          />
+          <div className="flex justify-end gap-2">
+            <button onClick={() => { setShowAddForm(false); setNewSection({ name: "", prompt: "" }) }}
+              className="px-3 py-1.5 text-xs rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100">
+              Cancel
+            </button>
+            <button onClick={addCustomSection} disabled={!newSection.name.trim() || !newSection.prompt.trim()}
+              className="px-3 py-1.5 text-xs rounded-lg bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-40">
+              Add Section
+            </button>
+          </div>
+        </div>
+      )}
+
+      <p className="text-xs text-gray-400 text-right">{enabledCount} of {value.sections.length} sections selected</p>
+    </div>
+  )
+}
+
+// ── V3 Section detail panel ────────────────────────────────────────────────────
+
+function SectionDetailPanel({
+  sessionId,
+  sectionId,
+  sectionName,
+  onClose,
+}: {
+  sessionId: string
+  sectionId: string
+  sectionName: string
+  onClose: () => void
+}) {
+  const { data, isLoading } = useQuery<SectionDetail>({
+    queryKey: ["section-detail", sessionId, sectionId],
+    queryFn: () => fetchSectionDetail(sessionId, sectionId),
+    refetchInterval: 4000,
+  })
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div className="flex items-center gap-3 px-6 pt-5 pb-4 border-b shrink-0">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">Section Detail</p>
+            <h3 className="font-semibold text-gray-900 text-sm">{sectionName}</h3>
+            {data && <SectionStatusBadge status={data.status} />}
+          </div>
+          <button onClick={onClose}
+            className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500">
+            <span className="material-symbols-outlined text-xl">close</span>
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-5 text-sm text-gray-700">
+          {isLoading && <div className="space-y-3 animate-pulse"><div className="h-4 bg-gray-100 rounded w-3/4"/><div className="h-4 bg-gray-100 rounded"/></div>}
+          {data && (
+            <>
+              {data.draft && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Draft</p>
+                  <MdReport content={data.draft} empty="No draft yet." />
+                </div>
+              )}
+
+              {data.critic_round_1 && (
+                <details className="border border-yellow-200 rounded-xl overflow-hidden">
+                  <summary className="cursor-pointer px-4 py-2.5 bg-yellow-50 text-xs font-semibold text-yellow-700 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-sm">rate_review</span>
+                    Critic Round 1 — {data.critic_round_1.verdict}
+                  </summary>
+                  <div className="px-4 py-3 space-y-2 text-xs text-gray-700">
+                    {data.critic_round_1.missing_items?.length > 0 && (
+                      <div><p className="font-medium text-gray-600 mb-1">Missing items:</p>
+                        <ul className="list-disc ml-4 space-y-0.5">{data.critic_round_1.missing_items.map((m, i) => <li key={i}>{m}</li>)}</ul>
+                      </div>
+                    )}
+                    {data.critic_round_1.uncited_claims?.length > 0 && (
+                      <div><p className="font-medium text-gray-600 mb-1">Uncited claims:</p>
+                        <ul className="list-disc ml-4 space-y-0.5">{data.critic_round_1.uncited_claims.map((c, i) => <li key={i} className="italic">{c}</li>)}</ul>
+                      </div>
+                    )}
+                    {data.critic_round_1.gaps_summary && <p className="text-gray-500">{data.critic_round_1.gaps_summary}</p>}
+                  </div>
+                </details>
+              )}
+
+              {data.critic_round_2 && (
+                <details className="border border-orange-200 rounded-xl overflow-hidden">
+                  <summary className="cursor-pointer px-4 py-2.5 bg-orange-50 text-xs font-semibold text-orange-700 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-sm">rate_review</span>
+                    Critic Round 2 — {data.critic_round_2.verdict}
+                  </summary>
+                  <div className="px-4 py-3 space-y-2 text-xs text-gray-700">
+                    {data.critic_round_2.missing_items?.length > 0 && (
+                      <div><p className="font-medium text-gray-600 mb-1">Missing items:</p>
+                        <ul className="list-disc ml-4 space-y-0.5">{data.critic_round_2.missing_items.map((m, i) => <li key={i}>{m}</li>)}</ul>
+                      </div>
+                    )}
+                    {data.critic_round_2.uncited_claims?.length > 0 && (
+                      <div><p className="font-medium text-gray-600 mb-1">Uncited claims:</p>
+                        <ul className="list-disc ml-4 space-y-0.5">{data.critic_round_2.uncited_claims.map((c, i) => <li key={i} className="italic">{c}</li>)}</ul>
+                      </div>
+                    )}
+                    {data.critic_round_2.gaps_summary && <p className="text-gray-500">{data.critic_round_2.gaps_summary}</p>}
+                  </div>
+                </details>
+              )}
+
+              {data.citations?.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Citations ({data.citations.length})</p>
+                  <ul className="space-y-1">
+                    {data.citations.map((c, i) => (
+                      <li key={i} className="text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded">{c}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SessionDetailDrawer({
   session,
   isLoading,
@@ -1666,22 +1959,34 @@ function SessionDetailDrawer({
   onRerun: (topic: string, prompts: Record<string, string>, selectedLlms: string[], criticLlm: string) => void
   onRetry: () => void
 }) {
-  const [tab, setTab] = useState<"report" | "critic" | "prompts">("report")
+  const [tab, setTab] = useState<"report" | "sections" | "citations" | "critic" | "prompts">("report")
   const [rerunMode, setRerunMode] = useState(false)
   const [editedPrompts, setEditedPrompts] = useState<Record<string, string>>({})
   const [retrying, setRetrying] = useState(false)
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
 
-  const isV2 = (session?.optimized_prompts as V2OptimizedPrompts | null)?.version === 2
+  const isV3 = !!session?.section_config
+  const isV2 = !isV3 && (session?.optimized_prompts as V2OptimizedPrompts | null)?.version === 2
 
   useEffect(() => {
-    if (session?.optimized_prompts && !isV2) {
+    if (session?.optimized_prompts && !isV2 && !isV3) {
       setEditedPrompts({ ...(session.optimized_prompts as Record<string, string>) })
     }
-  }, [session?.optimized_prompts, isV2])
+  }, [session?.optimized_prompts, isV2, isV3])
+
+  // Default to sections tab for V3 sessions
+  useEffect(() => {
+    if (isV3 && tab === "report") setTab("sections")
+  }, [isV3])
 
   const isDone = session ? ["pdf_ready", "delivered", "failed"].includes(session.status) : false
   const _RETRYABLE = ["failed", "pending", "optimizing", "researching", "merging", "reflecting", "generating_pdf"]
   const canRetry = session ? _RETRYABLE.includes(session.status) : false
+
+  // V3 section data
+  const v3Results = isV3 ? (session?.research_results as V3ResearchResults | null) : null
+  const v3Sections = v3Results?.sections ?? {}
+  const sectionConfigEntries = session?.section_config?.sections ?? []
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -1717,13 +2022,20 @@ function SessionDetailDrawer({
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b px-6 gap-4 shrink-0">
-          {(["report", "critic", "prompts"] as const).map(t => (
-            <button key={t} onClick={() => { setTab(t); setRerunMode(false) }}
-              className={`py-2.5 text-sm font-medium border-b-2 transition-colors ${
+        <div className="flex border-b px-6 gap-4 shrink-0 overflow-x-auto">
+          {(isV3
+            ? ["sections", "report", "citations", "critic"] as const
+            : ["report", "critic", "prompts"] as const
+          ).map(t => (
+            <button key={t} onClick={() => { setTab(t as typeof tab); setRerunMode(false) }}
+              className={`py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                 tab === t ? "border-primary text-primary" : "border-transparent text-gray-500 hover:text-gray-800"
               }`}>
-              {t === "report" ? "Report" : t === "critic" ? "Critic Feedback" : "Optimized Prompts"}
+              {t === "report" ? "Full Report"
+               : t === "sections" ? "Sections"
+               : t === "citations" ? "Citations"
+               : t === "critic" ? "Critic Feedback"
+               : "Optimized Prompts"}
             </button>
           ))}
         </div>
@@ -1744,6 +2056,58 @@ function SessionDetailDrawer({
 
               {tab === "critic" && (
                 <MdReport content={session.critic_feedback || ""} empty="No critic feedback yet." />
+              )}
+
+              {/* V3: Sections tab */}
+              {tab === "sections" && isV3 && (
+                <div className="space-y-2">
+                  {sectionConfigEntries.filter(s => s.enabled).map((sc, i) => {
+                    const secData = v3Sections[sc.id]
+                    const status: V3SectionStatus = secData?.status ?? "pending"
+                    const wordCount = secData?.draft ? secData.draft.split(/\s+/).length : 0
+                    return (
+                      <button
+                        key={sc.id}
+                        onClick={() => setActiveSectionId(sc.id)}
+                        className="w-full flex items-center gap-3 border border-gray-200 rounded-xl px-4 py-3 hover:border-primary/40 hover:bg-primary/5 transition-all text-left"
+                      >
+                        <span className="text-xs text-gray-400 font-mono w-5 shrink-0">{i + 1}</span>
+                        <span className="flex-1 text-sm font-medium text-gray-800">{sc.name}</span>
+                        {wordCount > 0 && (
+                          <span className="text-xs text-gray-400 shrink-0">{wordCount.toLocaleString()} words</span>
+                        )}
+                        <SectionStatusBadge status={status} />
+                        <span className="material-symbols-outlined text-gray-400 text-sm shrink-0">chevron_right</span>
+                      </button>
+                    )
+                  })}
+                  {sectionConfigEntries.filter(s => s.enabled).length === 0 && (
+                    <p className="text-gray-400 text-sm text-center py-8">No sections enabled.</p>
+                  )}
+                </div>
+              )}
+
+              {/* V3: Citations tab */}
+              {tab === "citations" && isV3 && (
+                <div className="space-y-5">
+                  {sectionConfigEntries.filter(s => s.enabled).map(sc => {
+                    const citations = v3Sections[sc.id]?.citations ?? []
+                    if (!citations.length) return null
+                    return (
+                      <div key={sc.id}>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{sc.name}</p>
+                        <ul className="space-y-1">
+                          {citations.map((c, i) => (
+                            <li key={i} className="text-xs text-gray-600 bg-gray-50 px-3 py-1.5 rounded-lg">{c}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )
+                  })}
+                  {!Object.values(v3Sections).some(s => s.citations?.length > 0) && (
+                    <p className="text-gray-400 text-sm text-center py-8">No citations collected yet.</p>
+                  )}
+                </div>
               )}
 
               {tab === "prompts" && (
@@ -1829,6 +2193,16 @@ function SessionDetailDrawer({
           </div>
         )}
 
+        {/* V3: Section detail panel (rendered as overlay on top of drawer) */}
+        {activeSectionId && session && (
+          <SectionDetailPanel
+            sessionId={session.id}
+            sectionId={activeSectionId}
+            sectionName={sectionConfigEntries.find(s => s.id === activeSectionId)?.name ?? activeSectionId}
+            onClose={() => setActiveSectionId(null)}
+          />
+        )}
+
         {!canRetry && tab === "prompts" && session?.optimized_prompts && !isV2 && isDone && (
           <div className="shrink-0 px-6 py-4 border-t bg-gray-50 rounded-b-2xl flex items-center justify-between gap-3">
             {rerunMode ? (
@@ -1875,10 +2249,13 @@ function MarketResearchTab() {
   const [files, setFiles] = useState<File[]>([])
   const [detailId, setDetailId] = useState<string | null>(null)
   const [pollingId, setPollingId] = useState<string | null>(null)
+  const [showSections, setShowSections] = useState(false)
+  const [sectionConfig, setSectionConfig] = useState<SectionConfig | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
 
   const { data: llmsData } = useQuery({ queryKey: ["market-research-llms"], queryFn: fetchAvailableLlms })
+  const { data: sectionLibraryData } = useQuery({ queryKey: ["section-library"], queryFn: fetchSectionLibrary })
   const { data: sessions = [] } = useQuery({ queryKey: ["market-research-sessions"], queryFn: fetchMarketResearchSessions, refetchInterval: pollingId ? 3000 : false })
   const { data: detail, isLoading: isLoadingDetail } = useQuery({
     queryKey: ["market-research-session", detailId],
@@ -1897,6 +2274,25 @@ function MarketResearchTab() {
     }
   }, [availableLlms])
 
+  // Initialise section config from library when it first loads
+  useEffect(() => {
+    if (sectionLibraryData && !sectionConfig) {
+      setSectionConfig({
+        version: 3,
+        system_prompt: sectionLibraryData.default_system_prompt,
+        sections: sectionLibraryData.sections.map(s => ({
+          id: s.id,
+          name: s.name,
+          enabled: s.default_enabled,
+          prompt: s.default_prompt,
+          locked: s.locked,
+          required_items: s.required_items,
+          expected_outputs: s.expected_outputs,
+        })),
+      })
+    }
+  }, [sectionLibraryData])
+
   const createMutation = useMutation({
     mutationFn: async () => {
       const sess = await createMarketResearchSession({
@@ -1904,6 +2300,7 @@ function MarketResearchTab() {
         selected_llms: selectedLlms,
         critic_llm: criticLlm,
         client_email: email || undefined,
+        section_config: showSections ? sectionConfig : null,
       })
       if (files.length > 0) {
         await uploadResearchDocs(sess.id, files)
@@ -1994,6 +2391,39 @@ function MarketResearchTab() {
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* Section selector toggle */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-sm font-medium text-gray-700">Research Sections</label>
+            <button
+              onClick={() => setShowSections(v => !v)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-all font-medium ${
+                showSections
+                  ? "bg-primary/10 text-primary border-primary/30"
+                  : "bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-400"
+              }`}
+            >
+              <span className="material-symbols-outlined text-sm">
+                {showSections ? "expand_less" : "tune"}
+              </span>
+              {showSections ? "Hide sections" : "Customise sections (V3)"}
+            </button>
+          </div>
+          {!showSections && (
+            <p className="text-xs text-gray-400">Using V2 pipeline (dynamic decomposition). Enable section customisation for V3 structured research.</p>
+          )}
+          {showSections && sectionConfig && (
+            <div className="border border-primary/20 rounded-xl p-4 bg-primary/5">
+              <SectionSelector
+                library={sectionLibraryData?.sections ?? []}
+                defaultSystemPrompt={sectionLibraryData?.default_system_prompt ?? ""}
+                value={sectionConfig}
+                onChange={setSectionConfig}
+              />
             </div>
           )}
         </div>

@@ -156,4 +156,11 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-20 19:00 |  | dee9334 | Fix Gemini Imagen safety filter â€” revert to BLOCK_LOW_AND_ABOVE |
 | 2026-04-21 10:26 |  | da44d34 | Market Research: render report as styled markdown with proper tables |
 | 2026-04-21 11:59 |  | 321c3d5 | Market Research: agentic work-package pipeline (v2) |
-| 2026-04-21 12:02 |  | f505b36 | docs: update project docs â€” Market Research v2 agentic pipeline |
+| 2026-04-21 12:02 |  | f505b36 | docs: update project docs — Market Research v2 agentic pipeline |
+| 2026-04-21 12:07 |  | f369ddb | Commit uncommitted scripts, feature designs, and venture docs |
+| 2026-04-21 12:26 |  | 148ed9f | Fix market research timeout (180s per package) and replace deprecated Gemini model with gemini-2.0-flash-001 |
+| 2026-04-21 13:25 |  | d2fad0d | Broaden retry eligibility to all in-progress statuses — stuck sessions in any pipeline stage can now be retried |
+| 2026-04-21 13:36 |  | a188f82 | Add Celery Beat watchdog task — auto-retries market research sessions stuck in-progress for >30 minutes |
+| 2026-04-21 15:35 |  | bf52fa1 | Fix report truncation — replace single-LLM stitch call with sequential Python assembly; exec summary is a separate focused call |
+| 2026-04-22 | | (pending) | Market Research V3 — section-based pipeline with fixed section library, per-section 2-round critic loop, citation enforcement, cross-module reference context, and section-level status UI |
+| 2026-04-22 20:03 |  | 99877cf | Market Research V3: section-based pipeline with fixed library, 2-round critic loop, citations |

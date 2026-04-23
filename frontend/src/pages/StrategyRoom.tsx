@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react"
+import { useNavigate, useMatch } from "react-router-dom"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
@@ -2258,15 +2259,16 @@ function SessionDetailDrawer({
   )
 }
 
-function MarketResearchTab() {
+function MarketResearchTab({ initialSessionId }: { initialSessionId?: string | null }) {
+  const navigate = useNavigate()
   const [topic, setTopic] = useState("")
   const [selectedLlms, setSelectedLlms] = useState<string[]>([])
   const [criticLlm, setCriticLlm] = useState("grok")
   const [email, setEmail] = useState("")
   const [files, setFiles] = useState<File[]>([])
-  const [detailId, setDetailId] = useState<string | null>(null)
+  const [detailId, setDetailId] = useState<string | null>(initialSessionId ?? null)
   const [pollingId, setPollingId] = useState<string | null>(null)
-  const [showSections, setShowSections] = useState(false)
+  const [showSections, setShowSections] = useState(true)
   const [sectionConfig, setSectionConfig] = useState<SectionConfig | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
@@ -2290,6 +2292,18 @@ function MarketResearchTab() {
       else if (availableLlms.length > 0) setCriticLlm(availableLlms[availableLlms.length - 1])
     }
   }, [availableLlms])
+
+  // Sync URL-driven session ID (back/forward nav, direct link)
+  useEffect(() => { setDetailId(initialSessionId ?? null) }, [initialSessionId])
+
+  const openSession = (id: string) => {
+    setDetailId(id)
+    navigate(`/strategy-room/market-research/${id}`)
+  }
+  const closeSession = () => {
+    setDetailId(null)
+    navigate("/strategy-room/market-research")
+  }
 
   // Initialise section config from library when it first loads
   useEffect(() => {
@@ -2499,7 +2513,7 @@ function MarketResearchTab() {
             {sessions.map(sess => (
               <div key={sess.id}
                 className="bg-white border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-4 hover:border-gray-300 transition-colors cursor-pointer"
-                onClick={() => { setDetailId(sess.id) }}>
+                onClick={() => openSession(sess.id)}>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-gray-900 text-sm truncate">{sess.title || sess.topic}</p>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -2534,7 +2548,7 @@ function MarketResearchTab() {
         <SessionDetailDrawer
           session={detail ?? null}
           isLoading={isLoadingDetail}
-          onClose={() => setDetailId(null)}
+          onClose={closeSession}
           onRerun={(_topic, prompts, llms, critic) => {
             rerunResearchSession(detailId!, prompts, llms, critic).then(sess => {
               queryClient.invalidateQueries({ queryKey: ["market-research-sessions"] })
@@ -2554,7 +2568,14 @@ function MarketResearchTab() {
 }
 
 export default function StrategyRoom() {
-  const [activeTab, setActiveTab] = useState<"agents" | "roadmap" | "market-research">("agents")
+  const navigate = useNavigate()
+  const tabMatch = useMatch("/strategy-room/:tab")
+  const sessionMatch = useMatch("/strategy-room/market-research/:sessionId")
+
+  const rawTab = sessionMatch ? "market-research" : (tabMatch?.params.tab ?? "agents")
+  const activeTab = (["agents", "roadmap", "market-research"].includes(rawTab)
+    ? rawTab : "agents") as "agents" | "roadmap" | "market-research"
+  const initialSessionId = sessionMatch?.params.sessionId ?? null
 
   const tabs: { key: "agents" | "roadmap" | "market-research"; label: string; icon: string }[] = [
     { key: "agents",          label: "Agents",          icon: "psychology" },
@@ -2576,7 +2597,7 @@ export default function StrategyRoom() {
               {tabs.map(tab => (
                 <button
                   key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
+                  onClick={() => navigate(`/strategy-room/${tab.key}`)}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     activeTab === tab.key
                       ? "bg-primary-fixed text-primary"
@@ -2596,7 +2617,7 @@ export default function StrategyRoom() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-8">
         {activeTab === "agents" && <AgentsTab />}
         {activeTab === "roadmap" && <RoadmapTab />}
-        {activeTab === "market-research" && <MarketResearchTab />}
+        {activeTab === "market-research" && <MarketResearchTab initialSessionId={initialSessionId} />}
       </main>
     </div>
   )

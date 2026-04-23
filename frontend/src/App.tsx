@@ -56,6 +56,8 @@ export default function App() {
             <Route path="ventures/etsy" element={<EtsyVenture />} />
             <Route path="finance" element={<Finance />} />
             <Route path="strategy-room" element={<StrategyRoom />} />
+            <Route path="strategy-room/:tab" element={<StrategyRoom />} />
+            <Route path="strategy-room/market-research/:sessionId" element={<StrategyRoom />} />
             <Route path="marketing" element={<Marketing />} />
             <Route path="campaigns" element={<CampaignManager />} />
             <Route path="settings" element={<Settings />} />

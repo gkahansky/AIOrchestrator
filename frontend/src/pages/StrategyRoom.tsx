@@ -1664,22 +1664,29 @@ function MdReport({ content, empty }: { content: string; empty: string }) {
   )
 }
 
-// ── V3 Section status badge (reuses MR_STATUS_LABELS) ─────────────────────────
+// ── V3 Section status icon ─────────────────────────────────────────────────────
 
-const SECTION_STATUS_COLOR: Record<string, string> = {
-  pending:     "bg-gray-100 text-gray-500",
-  drafting:    "bg-blue-100 text-blue-700 animate-pulse",
-  merging:     "bg-blue-100 text-blue-700 animate-pulse",
-  reviewing_1: "bg-yellow-100 text-yellow-700 animate-pulse",
-  reviewing_2: "bg-orange-100 text-orange-700 animate-pulse",
-  done:        "bg-green-100 text-green-700",
-  disclaimer:  "bg-red-100 text-red-700",
+const ACTIVE_SECTION_STATUSES = ["drafting", "merging", "reviewing_1", "reviewing_2"]
+
+function SectionStatusIcon({ status, size = "xl" }: { status: string; size?: "lg" | "xl" }) {
+  const cls = `material-symbols-outlined text-${size} shrink-0`
+  if (status === "done")
+    return <span className={`${cls} text-green-500`} title="Complete">check_circle</span>
+  if (status === "disclaimer")
+    return <span className={`${cls} text-orange-400`} title="Disclaimer added">warning</span>
+  if (status === "failed")
+    return <span className={`${cls} text-red-400`} title="Failed">cancel</span>
+  if (ACTIVE_SECTION_STATUSES.includes(status))
+    return <span className={`${cls} text-blue-500 animate-spin`} title={MR_STATUS_LABELS[status] ?? status}>autorenew</span>
+  // pending / not started
+  return <span className={`${cls} text-gray-300`} title="Not started">radio_button_unchecked</span>
 }
 
 function SectionStatusBadge({ status }: { status: string }) {
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${SECTION_STATUS_COLOR[status] ?? "bg-gray-100 text-gray-500"}`}>
-      {MR_STATUS_LABELS[status] ?? status}
+    <span className="inline-flex items-center gap-1.5">
+      <SectionStatusIcon status={status} size="lg" />
+      <span className="text-xs text-gray-500">{MR_STATUS_LABELS[status] ?? status}</span>
     </span>
   )
 }
@@ -1978,8 +1985,16 @@ function SessionDetailDrawer({
   }, [isV3])
 
   const isDone = session ? ["pdf_ready", "delivered", "failed"].includes(session.status) : false
-  const _RETRYABLE = ["failed", "pending", "optimizing", "researching", "merging", "reflecting", "generating_pdf"]
-  const canRetry = session ? _RETRYABLE.includes(session.status) : false
+
+  // Only show the "stuck" retry banner after a reasonable time has elapsed.
+  // failed → always; pending → 5 min; active processing → 45 min (V3 with 9 sections is slow).
+  const minutesSince = (iso: string) => (Date.now() - new Date(iso).getTime()) / 60_000
+  const canRetry = session ? (
+    session.status === "failed" ||
+    (session.status === "pending" && minutesSince(session.created_at) > 5) ||
+    (["optimizing","researching","merging","reflecting","generating_pdf"].includes(session.status) &&
+      minutesSince(session.created_at) > 45)
+  ) : false
 
   // V3 section data
   const v3Results = isV3 ? (session?.research_results as V3ResearchResults | null) : null
@@ -2059,7 +2074,7 @@ function SessionDetailDrawer({
               {/* V3: Sections tab */}
               {tab === "sections" && isV3 && (
                 <div className="space-y-2">
-                  {sectionConfigEntries.filter(s => s.enabled).map((sc, i) => {
+                  {sectionConfigEntries.filter(s => s.enabled).map((sc) => {
                     const secData = v3Sections[sc.id]
                     const status: V3SectionStatus = secData?.status ?? "pending"
                     const wordCount = secData?.draft ? secData.draft.split(/\s+/).length : 0
@@ -2069,12 +2084,16 @@ function SessionDetailDrawer({
                         onClick={() => setActiveSectionId(sc.id)}
                         className="w-full flex items-center gap-3 border border-gray-200 rounded-xl px-4 py-3 hover:border-primary/40 hover:bg-primary/5 transition-all text-left"
                       >
-                        <span className="text-xs text-gray-400 font-mono w-5 shrink-0">{i + 1}</span>
-                        <span className="flex-1 text-sm font-medium text-gray-800">{sc.name}</span>
+                        <SectionStatusIcon status={status} size="xl" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium text-gray-800">{sc.name}</span>
+                          {ACTIVE_SECTION_STATUSES.includes(status) && (
+                            <p className="text-xs text-blue-500 mt-0.5">{MR_STATUS_LABELS[status] ?? status}</p>
+                          )}
+                        </div>
                         {wordCount > 0 && (
                           <span className="text-xs text-gray-400 shrink-0">{wordCount.toLocaleString()} words</span>
                         )}
-                        <SectionStatusBadge status={status} />
                         <span className="material-symbols-outlined text-gray-400 text-sm shrink-0">chevron_right</span>
                       </button>
                     )
@@ -2174,8 +2193,8 @@ function SessionDetailDrawer({
               {session?.status === "failed"
                 ? "This session failed — retry to run it again."
                 : session?.status === "pending"
-                  ? "This session is stuck pending — retry to re-queue it."
-                  : `Session appears stuck in "${session?.status}" — retry to resume from last checkpoint.`
+                  ? "This session has been pending for a while — retry to re-queue it."
+                  : `This session has been ${session?.status} for over 45 minutes — retry to resume from last checkpoint.`
               }
             </p>
             <button

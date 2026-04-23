@@ -1687,8 +1687,6 @@ function SectionStatusBadge({ status }: { status: string }) {
 // ── SectionSelector — shown in the creation form ───────────────────────────────
 
 function SectionSelector({
-  library,
-  defaultSystemPrompt,
   value,
   onChange,
 }: {

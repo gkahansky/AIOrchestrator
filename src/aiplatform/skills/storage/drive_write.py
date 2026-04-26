@@ -18,13 +18,33 @@ Output:
 """
 
 import mimetypes
-import os
+import time
 from pathlib import Path
 from typing import Optional
 
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
 from aiplatform.skills.storage._drive_auth import get_drive_service
+
+# Google Drive transiently returns 500/503 — retry up to 3 times with backoff.
+_RETRYABLE_STATUS = {500, 502, 503, 504}
+_MAX_RETRIES = 3
+
+
+def _execute_with_retry(request):
+    """Execute a Drive API request, retrying on transient 5xx errors."""
+    delay = 2.0
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            return request.execute()
+        except HttpError as exc:
+            if exc.status_code in _RETRYABLE_STATUS and attempt < _MAX_RETRIES:
+                print(f"  drive_write: Drive API {exc.status_code} — retrying in {delay:.0f}s (attempt {attempt + 1}/{_MAX_RETRIES})")
+                time.sleep(delay)
+                delay *= 2
+            else:
+                raise
 
 
 def drive_write(
@@ -50,22 +70,22 @@ def drive_write(
     }
     media = MediaFileUpload(str(local_path), mimetype=resolved_mime, resumable=True)
 
-    file = (
-        service.files()
-        .create(
+    file = _execute_with_retry(
+        service.files().create(
             body=file_metadata,
             media_body=media,
             fields="id,name,webViewLink,size",
         )
-        .execute()
     )
 
     if share_anyone_with_link:
-        service.permissions().create(
-            fileId=file["id"],
-            body={"type": "anyone", "role": "reader"},
-            fields="id",
-        ).execute()
+        _execute_with_retry(
+            service.permissions().create(
+                fileId=file["id"],
+                body={"type": "anyone", "role": "reader"},
+                fields="id",
+            )
+        )
 
     return {
         "file_id": file["id"],

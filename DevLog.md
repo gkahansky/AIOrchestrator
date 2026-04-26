@@ -164,3 +164,11 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-21 15:35 |  | bf52fa1 | Fix report truncation — replace single-LLM stitch call with sequential Python assembly; exec summary is a separate focused call |
 | 2026-04-22 | | (pending) | Market Research V3 — section-based pipeline with fixed section library, per-section 2-round critic loop, citation enforcement, cross-module reference context, and section-level status UI |
 | 2026-04-22 20:03 |  | 99877cf | Market Research V3: section-based pipeline with fixed library, 2-round critic loop, citations |
+| 2026-04-23 09:43 |  | 0cfa881 | fix: remove unused SectionSelector props from destructuring to fix TS build error |
+| 2026-04-23 10:58 |  | ccaaa30 | feat: section progress icons + time-gated stuck banner in market research drawer |
+| 2026-04-23 11:03 |  | f60b451 | feat: URL-based navigation for Strategy Room tabs and market research sessions |
+| 2026-04-26 15:58 |  | 3a9d3ec | Sprint 3e: Service B â€” Content Repurposing Pack foundation |
+| 2026-04-26 16:23 |  | 6abe3bd | Sprint 3e: Content Studio UI â€” service type selector + video file support |
+| 2026-04-26 16:38 |  | 9d912ef | docs: update project docs post Sprint 3e |
+| 2026-04-26 17:30 |  | b0d1075 | Fix brand voice cache: persist to Redis (90-day TTL) with local file fallback for dev |
+| 2026-04-26 17:30 |  | b0d1075 | Fix brand voice cache — primary storage moved to Redis key `content_studio:brand_voice:{slug}` (TTL 90d); falls back to local ./output/ file if REDIS_URL unset. Fixes data loss on Railway container restart. |

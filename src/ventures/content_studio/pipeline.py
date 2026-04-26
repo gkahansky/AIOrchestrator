@@ -1,17 +1,27 @@
 """
-Content Studio pipeline — podcast show notes + marketing content delivery.
+Content Studio pipeline — Service A (Podcast Show Notes) + Service B (Content Repurposing Pack).
 
-Phases:
+Service A phases (service_type = "show_notes"):
     1 — Transcription           (OpenAI Whisper)
-    2 — Content Generation      (Claude API, tier-aware)
+    2 — Content Generation      (Claude API, tier-aware show notes / social / SEO)
     3 — Packaging               (Google Doc creation)
+    3b — Add-ons (optional)     (brand voice, promo copy, social calendar, ...)
     4 — Human Review ★          (email notification + approval gate)
-    5 — Delivery                (send Google Doc link to client)
+    5 — Delivery
+
+Service B phases (service_type = "repurposing_pack"):
+    1 — Input Processing        (video → FFmpeg audio extraction if needed, then Whisper)
+    2 — Core Generation         (show notes + timestamps via Claude)
+    2b — Extended Outputs       (blog post, per-platform captions, newsletter via skills)
+    3 — Packaging               (Google Doc creation)
+    4 — Human Review ★★         (ALWAYS on — never auto-approved)
+    5 — Delivery
 
 Order status state machine:
     pending → transcribing → transcribed → generating → generated →
     packaging → packaged → review_pending → approved →
     delivering → delivered
+              └→ addons_pending → [addon pipeline] → addons_complete → packaged
               └→ revision_requested → re_delivering → delivered
               └→ failed
 """
@@ -26,6 +36,9 @@ import anthropic
 from aiplatform.skills.media.transcribe_audio import transcribe_audio
 from aiplatform.skills.media.generate_brand_voice import generate_brand_voice
 from aiplatform.skills.media.generate_promo_copy import generate_promo_copy
+from aiplatform.skills.media.generate_blog_post import generate_blog_post
+from aiplatform.skills.media.generate_caption_pack import generate_caption_pack
+from aiplatform.skills.media.generate_newsletter_draft import generate_newsletter_draft
 from aiplatform.skills.storage.create_gdoc import create_gdoc
 from aiplatform.skills.storage.drive_organise import create_folder
 from aiplatform.skills.storage.drive_write import drive_write
@@ -34,7 +47,16 @@ from aiplatform.skills.finance.log_cost import log_cost
 from aiplatform.skills.finance.log_revenue import log_revenue
 from ventures.content_studio import config
 from ventures.content_studio.content_pdf import generate_full_pdf, generate_sample_pdf
-from ventures.content_studio.prompts import SYSTEM_PROMPT, build_content_prompt, parse_content_response
+from ventures.content_studio.prompts import (
+    SYSTEM_PROMPT,
+    REPURPOSING_SYSTEM_PROMPT,
+    build_content_prompt,
+    build_repurposing_prompt,
+    parse_content_response,
+    parse_repurposing_response,
+)
+
+_VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
 
 
 def run_order(order: dict, output_dir: str | None = None) -> dict:
@@ -73,6 +95,18 @@ def run_order(order: dict, output_dir: str | None = None) -> dict:
         else:
             content = order.get("content") or _load_json(work_dir / "content.json")
 
+        # ── Phase 2b: Extended Outputs (Service B only) ────────────────────────
+        if (
+            order.get("service_type") == "repurposing_pack"
+            and order["status"] in ("generated", "generating_extended")
+        ):
+            order["status"] = "generating_extended"
+            _save_order(order, work_dir)
+            content = _run_phase2b_repurposing_extended(order, content, work_dir)
+            order["status"] = "generated"
+            order["content"] = content
+            _save_order(order, work_dir)
+
         # ── Phase 3: Packaging ─────────────────────────────────────────────────
         if order["status"] in ("generated", "packaging"):
             order["status"] = "packaging"
@@ -99,9 +133,15 @@ def run_order(order: dict, output_dir: str | None = None) -> dict:
             order["status"] = "review_pending"
             _save_order(order, work_dir)
             _run_phase4_review(order, gdoc)
-            # Pipeline pauses here — approval sets status to "approved" externally
-            # or AUTO_APPROVE bypasses the gate
-            if config.AUTO_APPROVE or order.get("auto_approve"):
+            # Service B review is ALWAYS required — it is the product's differentiator.
+            # Service A auto-approve is controlled by config + per-order flag.
+            service_b = order.get("service_type") == "repurposing_pack"
+            can_auto_approve = (
+                not service_b
+                and not config.REPURPOSING_PACK_HUMAN_REVIEW_ALWAYS
+                and (config.AUTO_APPROVE or order.get("auto_approve"))
+            )
+            if can_auto_approve:
                 order["status"] = "approved"
                 _save_order(order, work_dir)
             else:
@@ -201,6 +241,20 @@ def _run_phase1_transcribe(order: dict, work_dir: Path) -> dict:
             return demo_result
         raise ValueError("Order must have either 'audio_path' or 'audio_url'")
 
+    # ── Video → audio extraction (Service B) ─────────────────────────────────
+    file_suffix = Path(audio_path).suffix.lower()
+    if file_suffix in _VIDEO_EXTS:
+        print(f"  Phase 1: Video detected ({file_suffix}) — extracting audio via FFmpeg...")
+        from aiplatform.skills.media.extract_audio_from_video import extract_audio_from_video
+        mp3_path = str(work_dir / "audio.mp3")
+        extraction = extract_audio_from_video(audio_path, output_path=mp3_path)
+        audio_path = extraction["audio_path"]
+        order["audio_path"] = audio_path
+        order["input_type"] = "video"
+        print(f"    ✓ Audio extracted: {Path(audio_path).name}")
+    else:
+        order.setdefault("input_type", "audio")
+
     print(f"  Phase 1: Transcribing {Path(audio_path).name}...")
 
     result = transcribe_audio(audio_path)
@@ -219,8 +273,14 @@ def _run_phase1_transcribe(order: dict, work_dir: Path) -> dict:
 
 
 def _run_phase2_generate(order: dict, transcript_data: dict, work_dir: Path = None) -> dict:
+    service_type = order.get("service_type", "show_notes")
     tier = order["tier"]
-    print(f"  Phase 2: Generating {tier} content package...")
+
+    if service_type == "repurposing_pack":
+        return _run_phase2_repurposing(order, transcript_data, work_dir)
+
+    # ── Service A: Podcast Show Notes ────────────────────────────────────────
+    print(f"  Phase 2: Generating {tier} show notes package...")
 
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     user_message = build_content_prompt(order, transcript_data)
@@ -238,7 +298,6 @@ def _run_phase2_generate(order: dict, transcript_data: dict, work_dir: Path = No
     raw_text = response.content[0].text
     content = parse_content_response(raw_text, tier)
 
-    # Claude Sonnet 4.6 pricing: $3/M input, $15/M output tokens
     cost_usd = round(
         response.usage.input_tokens * 0.000003 + response.usage.output_tokens * 0.000015,
         4,
@@ -254,6 +313,146 @@ def _run_phase2_generate(order: dict, transcript_data: dict, work_dir: Path = No
         _save_json(content, work_dir / "content.json")
     print(f"    ✓ {len([v for v in content.values() if v])} sections generated — cost ${cost_usd:.4f}")
     return content
+
+
+def _run_phase2_repurposing(order: dict, transcript_data: dict, work_dir: Path | None) -> dict:
+    """Service B Phase 2: core generation (show notes + timestamps)."""
+    tier = order.get("tier", "starter")
+    print(f"  Phase 2: Generating repurposing pack core content ({tier})...")
+
+    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    user_message = build_repurposing_prompt(order, transcript_data)
+
+    response = client.messages.create(
+        model=config.CLAUDE_MODEL,
+        max_tokens=config.CLAUDE_MAX_TOKENS,
+        system=REPURPOSING_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_message}],
+    )
+
+    content = parse_repurposing_response(response.content[0].text)
+    # Expose transcript in content dict for downstream packaging
+    content["transcript"] = transcript_data.get("transcript", "")
+
+    cost_usd = round(
+        response.usage.input_tokens * 0.000003 + response.usage.output_tokens * 0.000015,
+        4,
+    )
+    log_cost(
+        tool_id=config.CLAUDE_MODEL,
+        capability="content-generation",
+        cost_usd=cost_usd,
+        metadata={"order_id": order["order_id"], "tier": tier, "service": "repurposing_pack"},
+    )
+
+    if work_dir:
+        _save_json(content, work_dir / "content.json")
+    print(f"    ✓ Core content ready — cost ${cost_usd:.4f}")
+    return content
+
+
+def _run_phase2b_repurposing_extended(order: dict, content: dict, work_dir: Path) -> dict:
+    """
+    Service B Phase 2b: generate blog post, caption pack, and newsletter draft
+    using dedicated platform skills. Results are attached to content dict.
+    """
+    tier = order.get("tier", "starter")
+    tier_cfg = config.REPURPOSING_TIERS.get(tier, config.REPURPOSING_TIERS["starter"])
+    outputs = tier_cfg.get("outputs", [])
+    transcript = content.get("transcript", "")
+
+    context = {
+        "title":      order.get("episode_title", ""),
+        "show_name":  order.get("show_name", ""),
+        "host_name":  order.get("host_name", ""),
+        "guest_name": order.get("guest_name", ""),
+        "niche":      order.get("niche", "general"),
+        "audience":   order.get("audience", "general audience"),
+        "show_notes": content.get("show_notes", ""),
+    }
+
+    brand_voice = _load_brand_voice(order, work_dir)
+
+    total_cost = 0.0
+
+    if "blog_post" in outputs:
+        print(f"  Phase 2b: Generating blog post...")
+        word_range = tier_cfg.get("blog_word_range", (800, 1200))
+        result = generate_blog_post(
+            transcript=transcript,
+            context=context,
+            word_count_range=word_range,
+            brand_voice_injection=brand_voice,
+            max_tokens=4096,
+        )
+        content["blog_post_html"] = result.get("body_html", "")
+        content["blog_post_text"] = result.get("body_text", "")
+        content["blog_post_title"] = result.get("title", "")
+        content["blog_meta_description"] = result.get("meta_description", "")
+        content["blog_seo_tags"] = result.get("seo_tags", [])
+        total_cost += result.get("cost_usd", 0)
+        print(f"    ✓ Blog post ({result.get('word_count', 0)} words) — cost ${result.get('cost_usd', 0):.4f}")
+
+    if "captions" in outputs:
+        print(f"  Phase 2b: Generating caption pack...")
+        platforms = tier_cfg.get("platforms", ["linkedin", "instagram", "twitter"])
+        caption_count = tier_cfg.get("caption_count", 3)
+        result = generate_caption_pack(
+            transcript=transcript,
+            context=context,
+            platforms=platforms,
+            captions_per_platform=caption_count,
+            brand_voice_injection=brand_voice,
+            max_tokens=4096,
+        )
+        content["captions"] = result.get("captions", {})
+        total_cost += result.get("cost_usd", 0)
+        platform_count = len(result.get("captions", {}))
+        print(f"    ✓ Captions for {platform_count} platforms — cost ${result.get('cost_usd', 0):.4f}")
+
+    if "newsletter" in outputs:
+        print(f"  Phase 2b: Generating newsletter draft...")
+        word_range = tier_cfg.get("newsletter_word_range", (300, 500))
+        result = generate_newsletter_draft(
+            transcript=transcript,
+            context=context,
+            word_count_range=word_range,
+            brand_voice_injection=brand_voice,
+            max_tokens=2048,
+        )
+        content["newsletter_subject_a"] = result.get("subject_a", "")
+        content["newsletter_subject_b"] = result.get("subject_b", "")
+        content["newsletter_preview"] = result.get("preview_text", "")
+        content["newsletter_body_text"] = result.get("body_text", "")
+        content["newsletter_body_html"] = result.get("body_html", "")
+        total_cost += result.get("cost_usd", 0)
+        print(f"    ✓ Newsletter draft ({result.get('word_count', 0)} words) — cost ${result.get('cost_usd', 0):.4f}")
+
+    if total_cost > 0:
+        log_cost(
+            tool_id=config.CLAUDE_MODEL,
+            capability="repurposing-extended",
+            cost_usd=total_cost,
+            metadata={"order_id": order["order_id"], "tier": tier},
+        )
+
+    _save_json(content, work_dir / "content.json")
+    return content
+
+
+def _load_brand_voice(order: dict, work_dir: Path) -> str:
+    """Load cached brand voice injection string for a show, if available."""
+    if not config.BRAND_VOICE_CACHE_ENABLED:
+        return ""
+    show_slug = order.get("show_name", "unknown").lower().replace(" ", "-")[:40]
+    cache_path = work_dir.parent / f"{show_slug}-brand-voice.json"
+    if cache_path.exists():
+        try:
+            cached = json.loads(cache_path.read_text(encoding="utf-8"))
+            return cached.get("summary", {}).get("brand_voice_injection", "")
+        except Exception:
+            return ""
+    return ""
 
 
 def _run_phase3_package(order: dict, content: dict, work_dir: Path) -> dict:
@@ -512,6 +711,13 @@ _ADDON_RUNNERS["promo-copy"]  = _run_addon_promo_copy
 # ─── HTML builder ─────────────────────────────────────────────────────────────
 
 def _build_doc_html(order: dict, content: dict) -> str:
+    service_type = order.get("service_type", "show_notes")
+    if service_type == "repurposing_pack":
+        return _build_repurposing_doc_html(order, content)
+    return _build_show_notes_doc_html(order, content)
+
+
+def _build_show_notes_doc_html(order: dict, content: dict) -> str:
     tier = order["tier"]
     show = order.get("show_name", "Podcast")
     episode = order.get("episode_title", "Episode")
@@ -521,14 +727,11 @@ def _build_doc_html(order: dict, content: dict) -> str:
         body = content.get(key, "")
         if not body:
             return ""
-        # Convert plain newlines to <br> inside <p>, preserve paragraphs
         paragraphs = [p.strip() for p in body.split("\n\n") if p.strip()]
         inner = "".join(
             f"<p>{p.replace(chr(10), '<br>')}</p>" for p in paragraphs
         )
         return f"<h2>{title}</h2>{inner}"
-
-    tier_label = f"{tier.title()} Package"
 
     sections_html = ""
     sections_html += section("Show Notes", "show_notes")
@@ -548,7 +751,76 @@ def _build_doc_html(order: dict, content: dict) -> str:
 <head><meta charset="utf-8"><title>{episode}</title></head>
 <body>
 <h1>{episode}</h1>
-<p><em>{show}{f" | Host: {host}" if host else ""} | {tier_label}</em></p>
+<p><em>{show}{f" | Host: {host}" if host else ""} | {tier.title()} Package</em></p>
+<hr>
+{sections_html}
+<hr>
+<p><small>Generated by EchoForge Content Studio &mdash; echoforge.biz</small></p>
+</body>
+</html>"""
+
+
+def _build_repurposing_doc_html(order: dict, content: dict) -> str:
+    """Build the Google Doc HTML for a Service B (Content Repurposing Pack) order."""
+    episode = order.get("episode_title", "Episode")
+    show = order.get("show_name", "")
+    host = order.get("host_name", "")
+    tier = order.get("tier", "starter").title()
+    input_type = order.get("input_type", "audio").title()
+
+    def section(title: str, body: str) -> str:
+        if not body:
+            return ""
+        paragraphs = [p.strip() for p in body.split("\n\n") if p.strip()]
+        inner = "".join(f"<p>{p.replace(chr(10), '<br>')}</p>" for p in paragraphs)
+        return f"<h2>{title}</h2>{inner}"
+
+    sections_html = ""
+    sections_html += section("Show Notes / Content Summary", content.get("show_notes", ""))
+    sections_html += section("Timestamps", content.get("timestamps", ""))
+    sections_html += section("Full Transcript", content.get("transcript", ""))
+
+    # Blog post
+    if content.get("blog_post_html"):
+        sections_html += (
+            f"<h2>Blog Post — {content.get('blog_post_title', 'Article')}</h2>"
+            f"<p><em>Meta: {content.get('blog_meta_description', '')}</em></p>"
+            + content["blog_post_html"]
+        )
+
+    # Social captions
+    captions = content.get("captions", {})
+    if captions:
+        cap_html = "<h2>Social Media Caption Pack</h2>"
+        platform_labels = {
+            "linkedin": "LinkedIn", "instagram": "Instagram",
+            "twitter": "Twitter/X", "tiktok": "TikTok", "youtube": "YouTube",
+        }
+        for platform, variants in captions.items():
+            label = platform_labels.get(platform, platform.title())
+            cap_html += f"<h3>{label}</h3>"
+            for i, variant in enumerate(variants, 1):
+                paragraphs = [p.strip() for p in variant.split("\n\n") if p.strip()]
+                inner = "".join(f"<p>{p.replace(chr(10), '<br>')}</p>" for p in paragraphs)
+                cap_html += f"<p><strong>Variant {i}:</strong></p>{inner}"
+        sections_html += cap_html
+
+    # Newsletter
+    if content.get("newsletter_body_html"):
+        sections_html += (
+            "<h2>Newsletter Draft</h2>"
+            f"<p><strong>Subject A:</strong> {content.get('newsletter_subject_a', '')}</p>"
+            f"<p><strong>Subject B:</strong> {content.get('newsletter_subject_b', '')}</p>"
+            f"<p><em>Preview: {content.get('newsletter_preview', '')}</em></p>"
+            + content["newsletter_body_html"]
+        )
+
+    return f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>{episode} — Content Repurposing Pack</title></head>
+<body>
+<h1>{episode}</h1>
+<p><em>{show}{f" | {host}" if host else ""} | {tier} Repurposing Pack | Input: {input_type}</em></p>
 <hr>
 {sections_html}
 <hr>
@@ -613,7 +885,42 @@ def _review_email_html(order: dict, gdoc: dict) -> str:
 
 
 def _delivery_email_html(order: dict, gdoc: dict) -> str:
-    tier_desc = config.TIERS.get(order.get("tier", ""), {}).get("description", "")
+    service_type = order.get("service_type", "show_notes")
+    tier = order.get("tier", "")
+
+    if service_type == "repurposing_pack":
+        tier_cfg = config.REPURPOSING_TIERS.get(tier, {})
+        tier_desc = tier_cfg.get("description", "Content Repurposing Pack")
+        outputs = tier_cfg.get("outputs", [])
+        output_lines = ""
+        output_map = {
+            "transcript":        "Full transcript",
+            "show_notes":        "Show notes / content summary",
+            "timestamps":        "Timestamps / chapter markers",
+            "captions":          "Social media caption pack",
+            "blog_post":         "SEO blog post",
+            "newsletter":        "Newsletter draft (with subject line A/B)",
+            "linkedin_longform": "LinkedIn long-form post",
+            "youtube_description": "YouTube description",
+        }
+        for key in outputs:
+            label = output_map.get(key, key)
+            output_lines += f"<li>{label}</li>"
+
+        return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head><body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:16px">
+<p>Hi,</p>
+<p>Your <b>Content Repurposing Pack</b> for <b>{order.get('episode_title')}</b> is ready!</p>
+<p><b>What's included ({tier.title()} tier):</b></p>
+<ul>{output_lines}</ul>
+<p><a href="{gdoc['web_view_link']}" style="font-size:16px;font-weight:bold;color:#1a56db;">Access your Google Doc &rarr;</a></p>
+<p>This document has been human-reviewed before delivery. If you'd like any edits,
+please reply to this email.</p>
+<p>Thanks,<br>EchoForge Content Studio<br>echoforge.biz</p>
+</body></html>"""
+
+    # Service A: Podcast Show Notes
+    tier_desc = config.TIERS.get(tier, {}).get("description", "")
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head><body style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:16px">
 <p>Hi,</p>

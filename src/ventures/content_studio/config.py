@@ -30,7 +30,7 @@ DRIVE_PODCAST_DELIVERED_ID = os.getenv("DRIVE_PODCAST_DELIVERED_ID")
 #   02-review/         ← DRIVE_PODCAST_REVIEW_ID  (future: auto-review tracking)
 #   03-delivered/      ← DRIVE_PODCAST_DELIVERED_ID  (future: archived deliveries)
 
-# ─── Service tiers ────────────────────────────────────────────────────────────
+# ─── Service A tiers (Podcast Show Notes) ────────────────────────────────────
 TIERS = {
     "starter": {
         "price_usd": 49,
@@ -58,6 +58,54 @@ TIERS = {
         "description": "Standard + newsletter excerpt + SEO metadata",
     },
 }
+
+# ─── Service B tiers (Content Repurposing Pack) ───────────────────────────────
+# Price in GBP — displayed as £ in UI and emails.
+REPURPOSING_TIERS = {
+    "starter": {
+        "price_gbp": 49,
+        "delivery_hours": 24,
+        "max_duration_min": 60,
+        "caption_count": 3,
+        "platforms": ["linkedin", "instagram", "twitter"],
+        "outputs": ["transcript", "show_notes", "captions"],
+        "description": "Transcript + show notes + 3 captions per platform",
+    },
+    "standard": {
+        "price_gbp": 99,
+        "delivery_hours": 24,
+        "max_duration_min": 90,
+        "caption_count": 5,
+        "platforms": ["linkedin", "instagram", "twitter", "tiktok", "youtube"],
+        "outputs": ["transcript", "show_notes", "captions", "blog_post", "newsletter"],
+        "description": "Starter + blog post (800–1,200 words) + full newsletter draft",
+        "blog_word_range": (800, 1200),
+        "newsletter_word_range": (300, 500),
+    },
+    "pro": {
+        "price_gbp": 149,
+        "delivery_hours": 24,
+        "max_duration_min": 120,
+        "caption_count": 5,
+        "platforms": ["linkedin", "instagram", "twitter", "tiktok", "youtube"],
+        "outputs": [
+            "transcript", "show_notes", "captions", "blog_post", "newsletter",
+            "linkedin_longform", "youtube_description",
+        ],
+        "description": "Standard + brand voice injection + LinkedIn long-form + YouTube description",
+        "blog_word_range": (1200, 1800),
+        "newsletter_word_range": (400, 600),
+    },
+}
+
+# ─── Video / Service B settings ───────────────────────────────────────────────
+REPURPOSING_PACK_HUMAN_REVIEW_ALWAYS = (
+    os.getenv("REPURPOSING_PACK_HUMAN_REVIEW_ALWAYS", "true").lower() == "true"
+)
+REPURPOSING_PACK_VIDEO_MAX_MB = int(os.getenv("REPURPOSING_PACK_VIDEO_MAX_MB", "500"))
+FFMPEG_BINARY = os.getenv("FFMPEG_BINARY", "ffmpeg")
+
+CAPTION_PLATFORMS_DEFAULT = ["linkedin", "instagram", "twitter", "tiktok", "youtube"]
 
 # ─── Output directory ─────────────────────────────────────────────────────────
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./output")

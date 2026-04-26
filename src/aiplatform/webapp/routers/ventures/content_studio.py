@@ -25,11 +25,19 @@ from aiplatform.webapp.schemas import (
 router = APIRouter()
 
 _ALLOWED_AUDIO_EXTS = {".mp3", ".mp4", ".m4a", ".wav", ".webm", ".mpeg", ".mpga", ".ogg", ".flac"}
-_MAX_UPLOAD_BYTES   = 200 * 1024 * 1024  # 200 MB
+_ALLOWED_VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
+_ALLOWED_MEDIA_EXTS = _ALLOWED_AUDIO_EXTS | _ALLOWED_VIDEO_EXTS
+
+_MAX_AUDIO_BYTES = 200 * 1024 * 1024   # 200 MB — Service A
+_MAX_VIDEO_BYTES = 500 * 1024 * 1024   # 500 MB — Service B
+
+_SERVICE_A_TIERS = {"starter", "standard", "premium"}
+_SERVICE_B_TIERS = {"starter", "standard", "pro"}
 
 
 @router.post("/orders", response_model=PodcastOrderResponse, status_code=status.HTTP_202_ACCEPTED)
 async def create_podcast_order(
+    service_type:         str              = Form("show_notes"),
     tier:                 str              = Form("standard"),
     client_email:         str              = Form(default=""),
     show_name:            str              = Form(default=""),
@@ -41,34 +49,55 @@ async def create_podcast_order(
     audio:                UploadFile | None = File(default=None),
     _: str = Depends(require_auth),
 ) -> PodcastOrderResponse:
-    """Submit a new podcast show notes order and queue it as a Celery task."""
+    """Submit a new content studio order (Service A: show notes, or Service B: repurposing pack)."""
     from aiplatform.worker import run_podcast_order as celery_task
 
-    if tier not in ("starter", "standard", "premium"):
+    if service_type not in ("show_notes", "repurposing_pack"):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                            detail="tier must be starter, standard, or premium")
+                            detail="service_type must be show_notes or repurposing_pack")
+
+    valid_tiers = _SERVICE_A_TIERS if service_type == "show_notes" else _SERVICE_B_TIERS
+    if tier not in valid_tiers:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"tier must be one of: {', '.join(sorted(valid_tiers))} for service_type={service_type}",
+        )
 
     order_id = order_id or f"podcast-{uuid.uuid4().hex[:8]}"
 
-    # ── Handle audio file upload ──────────────────────────────────────────────
+    # ── Handle file upload ────────────────────────────────────────────────────
     if audio is None or not audio.filename:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="An audio file is required.",
+            detail="A media file is required.",
         )
 
     suffix = Path(audio.filename or "").suffix.lower()
-    if suffix not in _ALLOWED_AUDIO_EXTS:
+    is_video = suffix in _ALLOWED_VIDEO_EXTS
+
+    if suffix not in _ALLOWED_MEDIA_EXTS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Unsupported file type '{suffix}'. Accepted: mp3, mp4, m4a, wav, webm, flac.",
+            detail=(
+                f"Unsupported file type '{suffix}'. "
+                f"Audio: {', '.join(sorted(_ALLOWED_AUDIO_EXTS))}. "
+                f"Video (Service B only): {', '.join(sorted(_ALLOWED_VIDEO_EXTS))}."
+            ),
+        )
+
+    if is_video and service_type != "repurposing_pack":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Video files are only accepted for service_type=repurposing_pack.",
         )
 
     content = await audio.read()
-    if len(content) > _MAX_UPLOAD_BYTES:
+    max_bytes = _MAX_VIDEO_BYTES if is_video else _MAX_AUDIO_BYTES
+    if len(content) > max_bytes:
+        limit_mb = max_bytes // (1024 * 1024)
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="File too large. Maximum 200 MB.",
+            detail=f"File too large. Maximum {limit_mb} MB for this service.",
         )
 
     # Always write to /tmp first
@@ -77,28 +106,30 @@ async def create_podcast_order(
     tmp_path = tmp_dir / f"audio{suffix}"
     tmp_path.write_bytes(content)
 
-    # ── Verify audio length matches selected tier ─────────────
-    try:
-        from mutagen import File as MutagenFile
-        audio_meta = MutagenFile(tmp_path)
-        if audio_meta and audio_meta.info and hasattr(audio_meta.info, "length"):
-            duration_mins = audio_meta.info.length / 60
-            tier_limits = {"starter": 30, "standard": 60, "premium": 90}
-            limit = tier_limits.get(tier, 90)
-            
-            # Allow 5-minute grace period
-            if duration_mins > limit + 5:
-                tmp_path.unlink(missing_ok=True)
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Duration mismatch: Selected tier '{tier}' covers up to {limit} mins. Your file is {int(duration_mins)} mins.",
-                )
-    except ImportError:
-        pass # mutagen not installed, skip check
-    except Exception as e:
-        # Don't fail completely if we couldn't parse the length, let it proceed
-        pass
-
+    # ── Duration check for audio-only Service A ───────────────────────────────
+    if not is_video:
+        try:
+            from mutagen import File as MutagenFile
+            audio_meta = MutagenFile(tmp_path)
+            if audio_meta and audio_meta.info and hasattr(audio_meta.info, "length"):
+                duration_mins = audio_meta.info.length / 60
+                tier_limits = {"starter": 30, "standard": 60, "premium": 90}
+                limit = tier_limits.get(tier, 90)
+                if duration_mins > limit + 5:
+                    tmp_path.unlink(missing_ok=True)
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=(
+                            f"Duration mismatch: Selected tier '{tier}' covers up to {limit} mins. "
+                            f"Your file is {int(duration_mins)} mins."
+                        ),
+                    )
+        except ImportError:
+            pass
+        except HTTPException:
+            raise
+        except Exception:
+            pass
 
     # Upload to Drive — required because web + worker are separate containers.
     drive_folder = os.environ.get("DRIVE_PODCAST_ROOT_ID", "") or os.environ.get("DRIVE_SAMPLES_FOLDER_ID", "")
@@ -115,11 +146,12 @@ async def create_podcast_order(
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Failed to upload audio to Google Drive: {exc}",
+            detail=f"Failed to upload media to Google Drive: {exc}",
         )
 
     order = {
         "order_id":              order_id,
+        "service_type":          service_type,
         "tier":                  tier,
         "client_email":          client_email or None,
         "show_name":             show_name or "",
@@ -130,6 +162,7 @@ async def create_podcast_order(
         "status":                "pending",
         "drive_audio_id":        drive_audio_id,
         "audio_filename_suffix": suffix,
+        "input_type":            "video" if is_video else "audio",
     }
     # Write initial job record immediately — ensures the job is visible in the
     # jobs list even if the worker hasn't picked up the task yet or fails.

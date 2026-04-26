@@ -27,11 +27,34 @@ Order status state machine:
 """
 
 import json
+import logging
 import os
 from datetime import datetime
 from pathlib import Path
 
 import anthropic
+
+try:
+    import redis as redis_lib
+    _redis_available = True
+except ImportError:
+    _redis_available = False
+
+logger = logging.getLogger(__name__)
+
+def _get_redis() -> "redis_lib.Redis | None":
+    """Return a Redis client if REDIS_URL is set and redis package is available."""
+    if not _redis_available:
+        return None
+    url = os.getenv("REDIS_URL")
+    if not url:
+        return None
+    try:
+        return redis_lib.Redis.from_url(url, decode_responses=True, socket_connect_timeout=2)
+    except Exception:
+        return None
+
+_BRAND_VOICE_TTL = 60 * 60 * 24 * 90  # 90 days
 
 from aiplatform.skills.media.transcribe_audio import transcribe_audio
 from aiplatform.skills.media.generate_brand_voice import generate_brand_voice
@@ -441,10 +464,25 @@ def _run_phase2b_repurposing_extended(order: dict, content: dict, work_dir: Path
 
 
 def _load_brand_voice(order: dict, work_dir: Path) -> str:
-    """Load cached brand voice injection string for a show, if available."""
+    """Load cached brand voice injection string for a show, if available.
+    Tries Redis first, falls back to local file for dev environments.
+    """
     if not config.BRAND_VOICE_CACHE_ENABLED:
         return ""
     show_slug = order.get("show_name", "unknown").lower().replace(" ", "-")[:40]
+
+    # Try Redis first
+    r = _get_redis()
+    if r:
+        try:
+            raw = r.get(f"content_studio:brand_voice:{show_slug}")
+            if raw:
+                cached = json.loads(raw)
+                return cached.get("summary", {}).get("brand_voice_injection", "")
+        except Exception as exc:
+            logger.warning("Redis brand voice read failed (falling back to file): %s", exc)
+
+    # Fall back to local file (dev / no Redis)
     cache_path = work_dir.parent / f"{show_slug}-brand-voice.json"
     if cache_path.exists():
         try:
@@ -627,11 +665,9 @@ def _run_addon_brand_voice(order: dict, content: dict, work_dir: Path) -> dict:
     if not transcripts:
         raise ValueError("No transcript available for brand-voice add-on.")
 
-    # Cache path: per-show, not per-episode
-    cache_path = None
-    if config.BRAND_VOICE_CACHE_ENABLED:
-        show_slug = order.get("show_name", "unknown").lower().replace(" ", "-")[:40]
-        cache_path = work_dir.parent / f"{show_slug}-brand-voice.json"
+    # Cache key: per-show, not per-episode
+    show_slug = order.get("show_name", "unknown").lower().replace(" ", "-")[:40]
+    local_cache_path = (work_dir.parent / f"{show_slug}-brand-voice.json") if config.BRAND_VOICE_CACHE_ENABLED else None
 
     result = generate_brand_voice(
         transcripts=transcripts,
@@ -639,8 +675,21 @@ def _run_addon_brand_voice(order: dict, content: dict, work_dir: Path) -> dict:
         niche=order.get("niche", "general"),
         audience=order.get("audience", "general audience"),
         host_name=order.get("host_name", ""),
-        cache_path=cache_path,
+        cache_path=local_cache_path,  # local file fallback for dev
     )
+
+    # Persist to Redis (primary) — survives container restarts and multi-instance deploys
+    if config.BRAND_VOICE_CACHE_ENABLED:
+        r = _get_redis()
+        if r:
+            try:
+                r.set(
+                    f"content_studio:brand_voice:{show_slug}",
+                    json.dumps(result),
+                    ex=_BRAND_VOICE_TTL,
+                )
+            except Exception as exc:
+                logger.warning("Redis brand voice write failed (local file still saved): %s", exc)
 
     # Save the guide as a text file alongside the order
     guide_path = work_dir / f"{order['order_id']}-brand-voice.txt"
@@ -655,14 +704,8 @@ def _run_addon_promo_copy(order: dict, content: dict, work_dir: Path) -> dict:
     Generates platform description, audiogram caption, newsletter teaser, LinkedIn post.
     Injects cached brand voice if available.
     """
-    # Try to load brand voice injection from cache
-    brand_voice_injection = ""
-    if config.BRAND_VOICE_CACHE_ENABLED:
-        show_slug = order.get("show_name", "unknown").lower().replace(" ", "-")[:40]
-        cache_path = work_dir.parent / f"{show_slug}-brand-voice.json"
-        if cache_path.exists():
-            cached = json.loads(cache_path.read_text(encoding="utf-8"))
-            brand_voice_injection = cached.get("summary", {}).get("brand_voice_injection", "")
+    # Try to load brand voice injection from cache (Redis → local file fallback)
+    brand_voice_injection = _load_brand_voice(order, work_dir)
 
     transcript = (
         content.get("transcript")

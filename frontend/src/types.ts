@@ -134,7 +134,8 @@ export interface AccessibilityAuditRequest {
 
 export interface PodcastOrderRequest {
   audio: File
-  tier: "starter" | "standard" | "premium"
+  service_type: "show_notes" | "repurposing_pack"
+  tier: "starter" | "standard" | "premium" | "pro"
   client_email?: string
   show_name?: string
   episode_title?: string

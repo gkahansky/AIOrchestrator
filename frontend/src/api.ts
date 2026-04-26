@@ -252,6 +252,7 @@ export async function createPodcastOrder(data: PodcastOrderRequest): Promise<Ord
   const token = localStorage.getItem("api_token") ?? "test"
   const formData = new FormData()
   formData.append("audio", data.audio)
+  formData.append("service_type", data.service_type)
   formData.append("tier", data.tier)
   if (data.client_email) formData.append("client_email", data.client_email)
   if (data.show_name) formData.append("show_name", data.show_name)

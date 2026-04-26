@@ -19,11 +19,25 @@ A reusable, multi-agent AI platform powering independent business ventures under
 The core principle is that agents, skills, memory, and integrations live in a shared infrastructure layer. Each venture is a lightweight configuration and pipeline on top of that shared layer.
 
 - **Venture A:** MiroPrintStudio — Etsy digital image shop — see `/ventures/etsy/CLAUDE.md`
-- **Venture B:** EchoForge — Podcast show notes — see `/ventures/podcast_notes/CLAUDE.md`
+- **Venture B:** EchoForge — Podcast Show Notes (Service A) + Content Repurposing Pack (Service B: audio/video → blog + captions + newsletter, human-reviewed) — see `/ventures/content_studio/CLAUDE.md`
 - **Venture C:** EchoForge — Website marketing audit — see `/ventures/marketing_audit/CLAUDE.md`
 - **Venture D:** EchoForge — Web application security audit — see `/ventures/security_audit/CLAUDE.md`
 - **Venture E:** Plan B AI — Market Research (multi-LLM research committee) — see `/ventures/market_research/CLAUDE.md`
 - **Venture F+:** Future ventures — each gets its own directory and CLAUDE.md
+
+### Venture B — Content Studio: Architecture Notes
+
+The Content Studio venture runs two services on the same pipeline:
+
+**Service A — Podcast Show Notes:** audio file → Whisper transcription → Claude content generation (show notes, timestamps, transcript, social captions, SEO metadata) → Google Doc + PDF → human review gate → delivery email.
+
+**Service B — Content Repurposing Pack:** audio OR video file → FFmpeg audio extraction (if video) → Whisper → Claude core generation → three extended output skills run sequentially: `generate_blog_post.py`, `generate_caption_pack.py`, `generate_newsletter_draft.py` → Google Doc → **forced human review** (never auto-approved, human review is the product differentiator) → delivery email with output checklist.
+
+Service B adds components not shared with other ventures (do not move to `/platform/skills/` unless truly venture-agnostic):
+- `nixpacks.toml` `ffmpeg` package (video audio extraction)
+- Service B tier config (`REPURPOSING_TIERS`) in `config.py`
+- Service B prompt builder in `prompts.py`
+- Phase 2b extended output orchestration in `pipeline.py`
 
 ### Venture D — Security Audit: Architecture Notes
 

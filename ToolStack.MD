@@ -97,6 +97,7 @@ Complete inventory of every third-party tool, service, API, and library used acr
 | **reportlab** (`reportlab>=4.0.0`) | PDF generation (alternative) | Reserved for advanced PDF layouts (Hebrew/RTL documents) |
 | **arabic-reshaper** (`arabic-reshaper>=3.0.0`) | Arabic text shaping | Correct rendering of Arabic characters in PDFs |
 | **python-bidi** (`python-bidi>=0.4.2`) | Bidirectional text | Right-to-left text layout for Hebrew and Arabic content in reports |
+| **FFmpeg** (system binary via nixpacks) | Video/audio processing | Extract audio track from video files (.mp4/.mov/.mkv/.avi/.webm) before Whisper transcription — Service B (Content Repurposing Pack). Installed via `nixpacks.toml` nixPkgs on Railway. |
 | **python-docx** (`python-docx>=1.1.0`) | Word document parsing | Extract text from DOCX/DOC files uploaded as RAG documents in Market Research |
 | **openpyxl** (`openpyxl>=3.1.0`) | Excel spreadsheet parsing | Extract cell data from XLSX/XLS files uploaded as RAG documents in Market Research |
 | **python-pptx** (`python-pptx>=0.6.23`) | PowerPoint parsing | Extract slide text from PPTX/PPT files uploaded as RAG documents in Market Research |
@@ -211,4 +212,5 @@ No code changes required to swap — set `active: true` in `skills.json`.
 | Qdrant | `QDRANT_URL`, `QDRANT_API_KEY` |
 | xAI Grok | `XAI_API_KEY` (or `GROK_API_KEY` or `X_AI_API_KEY`) |
 | Market Research Drive | `DRIVE_MARKET_RESEARCH_ID` |
+| Content Studio — Service B | `REPURPOSING_PACK_HUMAN_REVIEW_ALWAYS` (default true), `REPURPOSING_PACK_VIDEO_MAX_MB` (default 500), `FFMPEG_BINARY` (default ffmpeg) |
 | LangSmith *(planned)* | `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT`, `LANGCHAIN_TRACING_V2` |

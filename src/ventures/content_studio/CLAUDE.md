@@ -232,6 +232,19 @@ Run these after core pipeline Sprints 1–3 are stable.
 - [x] Drive upload errors now return HTTP 503 with detail message (CORS was stripping headers from unhandled 500s)
 - [x] Unified Drive auth: `create_gdoc.py` and `drive_organise.py` now use `get_drive_service()` from `_drive_auth.py` (was hardcoded to service account, causing quota errors)
 
+### Sprint 3e — Service B: Content Repurposing Pack ✅ DONE (2026-04-26)
+- [x] `extract_audio_from_video.py` platform skill — FFmpeg audio extraction from video files (.mp4/.mov/.mkv/.avi/.webm)
+- [x] `generate_blog_post.py` platform skill — 800–1,800 word SEO blog post with brand voice injection
+- [x] `generate_caption_pack.py` platform skill — per-platform captions (LinkedIn/Instagram/Twitter/TikTok/YouTube), N variants per platform
+- [x] `generate_newsletter_draft.py` platform skill — full newsletter draft with A/B subject lines and preview text
+- [x] `ffmpeg` added to `nixpacks.toml` Railway build config
+- [x] `config.py` — `REPURPOSING_TIERS` (£49 Starter / £99 Standard / £149 Pro), video config, `REPURPOSING_PACK_HUMAN_REVIEW_ALWAYS` flag
+- [x] `prompts.py` — Service B prompt builder (`build_repurposing_prompt`), parser (`parse_repurposing_response`), separate system prompt
+- [x] `pipeline.py` — Phase 1 detects video by extension → FFmpeg → Whisper; Phase 2 routes by `service_type`; Phase 2b runs blog/captions/newsletter skills; human review gate forced ON for all Service B orders
+- [x] Content Studio router — accepts `service_type` form field, video file extensions, 500 MB limit for Service B, separate tier validation per service
+- [x] Frontend `ContentStudio.tsx` — service type toggle (Show Notes / Repurposing Pack), dynamic tier cards, video file picker, "human-reviewed" badge, orders table shows Service column + audio/video icon
+- [x] `types.ts` + `api.ts` — `service_type` and `"pro"` tier added to `PodcastOrderRequest`
+
 ### Sprint 4b — Social Calendar + Email Sequence
 - Integrate `market-social/SKILL.md` with podcast context prefix
 - Build `generate_social_calendar.py` wrapper
@@ -272,4 +285,27 @@ Run these after core pipeline Sprints 1–3 are stable.
 | Podcast context injection | Prefix at skill invocation, not hardcoded in skill files |
 | Bundle pricing | Detected by SKU in order requirements form |
 | Add-on delivery | Appended as additional links in same Google Doc delivery |
-| Human review | Active for all add-on types first 20 orders; then AUTO per type |
+| Human review — Service A | Auto-approve after 20 validated orders per tier |
+| Human review — Service B | ALWAYS on — never auto-approved (human review is the product differentiator) |
+| Video processing | FFmpeg on Railway (nixpacks) for audio extraction; no GPU needed |
+| Blog post | New platform skill (venture-agnostic); injected into Service B Phase 2b |
+| Caption packs | Per-platform prompts in `generate_caption_pack.py`; N variants per platform |
+| Newsletter draft | Full draft (300–600 words) in Service B; excerpt only (150–200w) in Service A |
+
+## Pipeline Status
+<!-- managed by update_task.py -->
+
+| Roadmap ID | Task | Status | Note | Updated |
+|---|---|---|---|---|
+| U-01 | Core Podcast Pipeline — Sprint 1 & 2 | ✅ done | Manual trigger pipeline live | 2026-03-25 |
+| H-06 | Podcast Sample Generator | ✅ done | Demo mode + pdf-only flag | 2026-03-25 |
+| M-03 | Podcast Add-on: Brand Voice Guide | ✅ done | generate_brand_voice.py, cached JSON | 2026-03-25 |
+| M-04 | Podcast Add-on: Episode Promotional Copy | ✅ done | generate_promo_copy.py | 2026-03-25 |
+| D-21 | Admin Order Form — File Upload + Full Fields | ✅ done | multipart/form-data, Drive upload in web router, unified Drive auth | 2026-04-05 |
+| NEW | Service B — Content Repurposing Pack | ✅ done | Sprint 3e: video input, blog/captions/newsletter skills, forced review gate | 2026-04-26 |
+| M-05 | Podcast Add-on: 30-Day Social Calendar | 🔲 planned | Sprint 4b | — |
+| M-06 | Podcast Add-on: Listener Email Sequence | 🔲 planned | Sprint 4b | — |
+| M-11 | Podcast Add-on: Guest Outreach Templates | 🔲 planned | Sprint 5b | — |
+| M-12 | Podcast Add-on: Show Landing Page Audit | 🔲 planned | Sprint 5b | — |
+| L-02 | Podcast Add-on: Competitive Show Analysis | 🔲 idea | Sprint 6b | — |
+| L-03 | Podcast Add-on: Launch Playbook | 🔲 idea | Sprint 6b | — |

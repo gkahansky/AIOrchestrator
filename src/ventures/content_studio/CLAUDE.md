@@ -245,11 +245,20 @@ Run these after core pipeline Sprints 1–3 are stable.
 - [x] Frontend `ContentStudio.tsx` — service type toggle (Show Notes / Repurposing Pack), dynamic tier cards, video file picker, "human-reviewed" badge, orders table shows Service column + audio/video icon
 - [x] `types.ts` + `api.ts` — `service_type` and `"pro"` tier added to `PodcastOrderRequest`
 
-### Sprint 4b — Social Calendar + Email Sequence
-- Integrate `market-social/SKILL.md` with podcast context prefix
-- Build `generate_social_calendar.py` wrapper
-- Integrate `market-emails/SKILL.md` with listener-nurture framing
-- Build `generate_email_sequence.py` wrapper
+### Sprint 3f — Service C: Short-Clip SaaS (EchoForge)
+> Full spec in `ventures/content_repurposing/CLAUDE.md`
+- Self-serve SaaS at app.echoforge.biz — Clerk auth + Stripe billing
+- 11 new platform skills: virality scoring, segment extraction, caption burn, watermark,
+  thumbnail (Pillow/Creatomate), clip title/description generation
+- Sprint CR-1: backend + pipeline (2 weeks); Sprint CR-2: React UI (1 week)
+- Shares platform skills with content_studio; no cross-venture imports
+
+### Sprint 4b — Social Calendar + Email Sequence ✅ DONE (2026-04-27)
+- [x] `generate_social_calendar.py` — 30-day platform-specific calendar; content pillar framework (40% educational / 20% BTS / 20% social proof / 10% engagement / 10% promotional); platform guides for LinkedIn/Instagram/Twitter/TikTok/YouTube; brand voice injection; `[DAY N]/[/DAY]` block parser
+- [x] `generate_email_sequence.py` — 5-email welcome/nurture sequence; value-before-ask framework; welcome→positioning→highlight→social proof→re-engagement structure; send-day scheduling (Day 0/2/5/9/14)
+- [x] `_run_addon_social_calendar` + `_run_addon_email_sequence` wired into `_ADDON_RUNNERS` in `pipeline.py`; both load brand voice cache + support `extra_transcripts`
+- [x] Router: `niche` + `audience` Form fields added to `POST /api/ventures/content-studio/orders`
+- [x] Frontend: `niche` + `audience` side-by-side inputs added to New Order form; `PodcastOrderRequest` type + `api.ts` updated
 
 ### Sprint 5b — Guest Outreach + Landing Page Audit
 - Build `generate_guest_outreach.py`
@@ -291,6 +300,9 @@ Run these after core pipeline Sprints 1–3 are stable.
 | Blog post | New platform skill (venture-agnostic); injected into Service B Phase 2b |
 | Caption packs | Per-platform prompts in `generate_caption_pack.py`; N variants per platform |
 | Newsletter draft | Full draft (300–600 words) in Service B; excerpt only (150–200w) in Service A |
+| Social calendar | Standalone Claude skill (no runtime dependency on ai-marketing-claude repo); uses pillar framework from its SKILL.md as prompt methodology; `social-calendar` add-on ID |
+| Email sequence | Same — Claude skill using ai-marketing-claude's value-before-ask framework in prompt; `email-sequence` add-on ID |
+| Niche + audience fields | Added as explicit form fields (not just Special Instructions) — required by social calendar, email sequence, and all future marketing add-ons for quality output |
 
 ## Pipeline Status
 <!-- managed by update_task.py -->
@@ -303,8 +315,9 @@ Run these after core pipeline Sprints 1–3 are stable.
 | M-04 | Podcast Add-on: Episode Promotional Copy | ✅ done | generate_promo_copy.py | 2026-03-25 |
 | D-21 | Admin Order Form — File Upload + Full Fields | ✅ done | multipart/form-data, Drive upload in web router, unified Drive auth | 2026-04-05 |
 | NEW | Service B — Content Repurposing Pack | ✅ done | Sprint 3e: video input, blog/captions/newsletter skills, forced review gate | 2026-04-26 |
-| M-05 | Podcast Add-on: 30-Day Social Calendar | 🔲 planned | Sprint 4b | — |
-| M-06 | Podcast Add-on: Listener Email Sequence | 🔲 planned | Sprint 4b | — |
+| NEW | Service C — Short-Clip SaaS (EchoForge) | 🔲 planned | Sprint CR-1/CR-2 — see ventures/content_repurposing/CLAUDE.md | — |
+| M-05 | Podcast Add-on: 30-Day Social Calendar | ✅ done | generate_social_calendar.py; content pillar framework; 5-platform support; brand voice injection | 2026-04-27 |
+| M-06 | Podcast Add-on: Listener Email Sequence | ✅ done | generate_email_sequence.py; 5-email nurture; value-before-ask; send-day scheduling | 2026-04-27 |
 | M-11 | Podcast Add-on: Guest Outreach Templates | 🔲 planned | Sprint 5b | — |
 | M-12 | Podcast Add-on: Show Landing Page Audit | 🔲 planned | Sprint 5b | — |
 | L-02 | Podcast Add-on: Competitive Show Analysis | 🔲 idea | Sprint 6b | — |

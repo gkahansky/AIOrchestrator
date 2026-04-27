@@ -62,6 +62,8 @@ from aiplatform.skills.media.generate_promo_copy import generate_promo_copy
 from aiplatform.skills.media.generate_blog_post import generate_blog_post
 from aiplatform.skills.media.generate_caption_pack import generate_caption_pack
 from aiplatform.skills.media.generate_newsletter_draft import generate_newsletter_draft
+from aiplatform.skills.media.generate_social_calendar import generate_social_calendar
+from aiplatform.skills.media.generate_email_sequence import generate_email_sequence
 from aiplatform.skills.storage.create_gdoc import create_gdoc
 from aiplatform.skills.storage.drive_organise import create_folder
 from aiplatform.skills.storage.drive_write import drive_write
@@ -746,9 +748,128 @@ def _format_promo_output(pieces: dict) -> str:
     return "\n".join(lines)
 
 
+def _run_addon_social_calendar(order: dict, content: dict, work_dir: Path) -> dict:
+    """
+    Add-on: social-calendar
+    Generates a 30-day social media calendar from the current episode transcript.
+    Up to 3 additional transcript files can be supplied via order["extra_transcripts"].
+    """
+    transcripts = []
+    primary = (content.get("transcript") or order.get("transcript_data", {}).get("transcript") or "").strip()
+    if primary:
+        transcripts.append(primary)
+    for extra in (order.get("extra_transcripts") or []):
+        path = Path(extra)
+        if path.exists():
+            transcripts.append(path.read_text(encoding="utf-8"))
+
+    if not transcripts:
+        raise ValueError("No transcript available for social-calendar add-on.")
+
+    episode_context = {
+        "show_name": order.get("show_name", ""),
+        "niche":     order.get("niche", "general"),
+        "audience":  order.get("audience", "general audience"),
+        "host_name": order.get("host_name", ""),
+    }
+
+    platforms = (
+        [p.strip() for p in order.get("social_platforms", "").split(",") if p.strip()]
+        or config.CAPTION_PLATFORMS_DEFAULT
+    )
+
+    brand_voice = _load_brand_voice(order, work_dir)
+
+    result = generate_social_calendar(
+        transcripts=transcripts,
+        episode_context=episode_context,
+        brand_voice_injection=brand_voice,
+        platforms=platforms,
+        max_tokens=8192,
+    )
+
+    # Save as text table
+    cal_path = work_dir / f"{order['order_id']}-social-calendar.txt"
+    cal_path.write_text(_format_calendar_output(result["calendar"]), encoding="utf-8")
+    result["calendar_path"] = str(cal_path)
+    return result
+
+
+def _run_addon_email_sequence(order: dict, content: dict, work_dir: Path) -> dict:
+    """
+    Add-on: email-sequence
+    Generates a 5-email welcome/nurture sequence for new podcast subscribers.
+    """
+    transcripts = []
+    primary = (content.get("transcript") or order.get("transcript_data", {}).get("transcript") or "").strip()
+    if primary:
+        transcripts.append(primary)
+    for extra in (order.get("extra_transcripts") or []):
+        path = Path(extra)
+        if path.exists():
+            transcripts.append(path.read_text(encoding="utf-8"))
+
+    if not transcripts:
+        raise ValueError("No transcript available for email-sequence add-on.")
+
+    episode_context = {
+        "show_name": order.get("show_name", ""),
+        "niche":     order.get("niche", "general"),
+        "audience":  order.get("audience", "general audience"),
+        "host_name": order.get("host_name", ""),
+    }
+
+    brand_voice = _load_brand_voice(order, work_dir)
+    sequence_length = int(order.get("email_sequence_length", 5))
+
+    result = generate_email_sequence(
+        transcripts=transcripts,
+        episode_context=episode_context,
+        brand_voice_injection=brand_voice,
+        sequence_length=sequence_length,
+        max_tokens=6144,
+    )
+
+    seq_path = work_dir / f"{order['order_id']}-email-sequence.txt"
+    seq_path.write_text(_format_email_sequence_output(result["emails"]), encoding="utf-8")
+    result["sequence_path"] = str(seq_path)
+    return result
+
+
+def _format_calendar_output(calendar: list[dict]) -> str:
+    lines = [f"{'Day':<5} {'Platform':<12} {'Pillar':<20} {'Hook':<60} Post"]
+    lines.append("─" * 120)
+    for entry in calendar:
+        hook = entry.get("hook", "")[:57] + "..." if len(entry.get("hook", "")) > 60 else entry.get("hook", "")
+        lines.append(
+            f"{entry['day']:<5} {entry.get('platform',''):<12} {entry.get('pillar',''):<20} {hook:<60}"
+        )
+        lines.append(f"       {entry.get('post', '')}")
+        lines.append(f"       {entry.get('hashtags', '')}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _format_email_sequence_output(emails: list[dict]) -> str:
+    parts = []
+    for email in emails:
+        day_map = {1: 0, 2: 2, 3: 5, 4: 9, 5: 14, 6: 21, 7: 30}
+        send_day = day_map.get(email["number"], (email["number"] - 1) * 3)
+        parts.append(f"{'─' * 60}")
+        parts.append(f"EMAIL {email['number']} — Send Day {send_day}")
+        parts.append(f"Subject:      {email.get('subject', '')}")
+        parts.append(f"Preview Text: {email.get('preview_text', '')}")
+        parts.append(f"")
+        parts.append(email.get("body_text", ""))
+        parts.append(f"")
+    return "\n".join(parts)
+
+
 # Register runners
-_ADDON_RUNNERS["brand-voice"] = _run_addon_brand_voice
-_ADDON_RUNNERS["promo-copy"]  = _run_addon_promo_copy
+_ADDON_RUNNERS["brand-voice"]      = _run_addon_brand_voice
+_ADDON_RUNNERS["promo-copy"]       = _run_addon_promo_copy
+_ADDON_RUNNERS["social-calendar"]  = _run_addon_social_calendar
+_ADDON_RUNNERS["email-sequence"]   = _run_addon_email_sequence
 
 
 # ─── HTML builder ─────────────────────────────────────────────────────────────

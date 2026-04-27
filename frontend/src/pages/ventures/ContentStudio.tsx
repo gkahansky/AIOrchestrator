@@ -22,7 +22,6 @@ const SERVICE_B_TIERS = [
 ] as const
 
 const ALLOWED_AUDIO = ".mp3,.m4a,.wav,.webm,.mpeg,.mpga,.ogg,.flac"
-const ALLOWED_VIDEO = ".mp4,.mov,.mkv,.avi,.webm"
 const ALLOWED_ALL   = `${ALLOWED_AUDIO},.mp4,.mov,.mkv,.avi`
 
 function formatDate(iso: string) {
@@ -99,6 +98,8 @@ function NewOrderForm() {
   const [episodeTitle, setEpisodeTitle] = useState("")
   const [hostName, setHostName] = useState("")
   const [guestName, setGuestName] = useState("")
+  const [niche, setNiche] = useState("")
+  const [audience, setAudience] = useState("")
   const [specialInstructions, setSpecialInstructions] = useState("")
   const [mediaFile, setMediaFile] = useState<File | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -146,6 +147,8 @@ function NewOrderForm() {
       episode_title: episodeTitle,
       host_name: hostName,
       guest_name: guestName,
+      niche: niche,
+      audience: audience,
       special_instructions: specialInstructions,
     })
   }
@@ -347,6 +350,34 @@ function NewOrderForm() {
         />
       </div>
 
+      {/* Niche + Audience (two columns) */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
+            Content Niche
+          </label>
+          <input
+            type="text"
+            value={niche}
+            onChange={(e) => setNiche(e.target.value)}
+            placeholder="business, tech, health…"
+            className="w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
+            Target Audience
+          </label>
+          <input
+            type="text"
+            value={audience}
+            onChange={(e) => setAudience(e.target.value)}
+            placeholder="early-stage SaaS founders…"
+            className="w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors"
+          />
+        </div>
+      </div>
+
       {/* Special Instructions */}
       <div>
         <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
@@ -355,11 +386,7 @@ function NewOrderForm() {
         <textarea
           value={specialInstructions}
           onChange={(e) => setSpecialInstructions(e.target.value)}
-          placeholder={
-            isServiceB
-              ? "Target audience, content niche, tone preferences, brand notes…"
-              : "Any specific focus areas, tone preferences, or sections to emphasise…"
-          }
+          placeholder="Tone preferences, brand notes, sections to emphasise, topics to avoid…"
           rows={3}
           className="w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors resize-none"
         />

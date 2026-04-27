@@ -100,6 +100,8 @@ function NewOrderForm() {
   const [guestName, setGuestName] = useState("")
   const [niche, setNiche] = useState("")
   const [audience, setAudience] = useState("")
+  const [showUrl, setShowUrl] = useState("")
+  const [guestExpertise, setGuestExpertise] = useState("")
   const [specialInstructions, setSpecialInstructions] = useState("")
   const [mediaFile, setMediaFile] = useState<File | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -149,6 +151,8 @@ function NewOrderForm() {
       guest_name: guestName,
       niche: niche,
       audience: audience,
+      show_url: showUrl,
+      guest_expertise: guestExpertise,
       special_instructions: specialInstructions,
     })
   }
@@ -375,6 +379,36 @@ function NewOrderForm() {
             placeholder="early-stage SaaS founders…"
             className="w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors"
           />
+        </div>
+      </div>
+
+      {/* Show Website URL + Guest Expertise (two columns) */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
+            Show Website URL
+          </label>
+          <input
+            type="url"
+            value={showUrl}
+            onChange={(e) => setShowUrl(e.target.value)}
+            placeholder="https://yourshow.com"
+            className="w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors"
+          />
+          <p className="text-xs text-on-surface-variant/60 mt-1 font-label">Required for Landing Page Audit add-on</p>
+        </div>
+        <div>
+          <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
+            Guest Expertise
+          </label>
+          <input
+            type="text"
+            value={guestExpertise}
+            onChange={(e) => setGuestExpertise(e.target.value)}
+            placeholder="SaaS growth, B2B sales, mindfulness…"
+            className="w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors"
+          />
+          <p className="text-xs text-on-surface-variant/60 mt-1 font-label">Required for Guest Outreach add-on</p>
         </div>
       </div>
 

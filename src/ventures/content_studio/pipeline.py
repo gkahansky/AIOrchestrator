@@ -64,6 +64,8 @@ from aiplatform.skills.media.generate_caption_pack import generate_caption_pack
 from aiplatform.skills.media.generate_newsletter_draft import generate_newsletter_draft
 from aiplatform.skills.media.generate_social_calendar import generate_social_calendar
 from aiplatform.skills.media.generate_email_sequence import generate_email_sequence
+from aiplatform.skills.media.generate_guest_outreach import generate_guest_outreach
+from aiplatform.skills.research.audit_landing_page import audit_landing_page, FetchError, PageTooLarge
 from aiplatform.skills.storage.create_gdoc import create_gdoc
 from aiplatform.skills.storage.drive_organise import create_folder
 from aiplatform.skills.storage.drive_write import drive_write
@@ -865,11 +867,102 @@ def _format_email_sequence_output(emails: list[dict]) -> str:
     return "\n".join(parts)
 
 
+def _run_addon_guest_outreach(order: dict, content: dict, work_dir: Path) -> dict:
+    """
+    Add-on: guest-outreach
+    Generates 3 email templates (cold/warm/follow-up) for pitching podcast guests.
+    """
+    episode_context = {
+        "show_name":  order.get("show_name", ""),
+        "niche":      order.get("niche", "general"),
+        "audience":   order.get("audience", "general audience"),
+        "host_name":  order.get("host_name", ""),
+        "show_notes": content.get("show_notes", ""),
+    }
+
+    result = generate_guest_outreach(
+        episode_context=episode_context,
+        guest_name=order.get("guest_name", ""),
+        guest_expertise=order.get("guest_expertise", ""),
+        max_tokens=4096,
+    )
+
+    out_path = work_dir / f"{order['order_id']}-guest-outreach.txt"
+    out_path.write_text(_format_outreach_output(result["templates"]), encoding="utf-8")
+    result["outreach_path"] = str(out_path)
+    return result
+
+
+def _run_addon_landing_audit(order: dict, content: dict, work_dir: Path) -> dict:
+    """
+    Add-on: landing-audit
+    Fetches show_url and produces a scored CRO audit report.
+    Requires order["show_url"] to be set.
+    """
+    show_url = order.get("show_url", "").strip()
+    if not show_url:
+        raise ValueError(
+            "landing-audit add-on requires 'show_url' in the order. "
+            "Add the podcast website URL to the order form."
+        )
+
+    page_context = {
+        "show_name": order.get("show_name", ""),
+        "niche":     order.get("niche", "general"),
+        "audience":  order.get("audience", "general audience"),
+    }
+
+    try:
+        result = audit_landing_page(
+            url=show_url,
+            page_context=page_context,
+            max_tokens=6144,
+        )
+    except (FetchError, PageTooLarge) as exc:
+        raise ValueError(f"Could not audit {show_url}: {exc}") from exc
+
+    out_path = work_dir / f"{order['order_id']}-landing-audit.txt"
+    out_path.write_text(result["raw_report"], encoding="utf-8")
+    result["audit_path"] = str(out_path)
+
+    summary_lines = [
+        f"Overall Score: {result['overall_score']}/10",
+        "",
+        "Section Scores:",
+    ]
+    for s in result["sections"]:
+        score_str = f"{s['score']}/10" if s["score"] is not None else "n/a"
+        summary_lines.append(f"  {s['name']:<16} {score_str}")
+    print("    " + "\n    ".join(summary_lines))
+
+    return result
+
+
+def _format_outreach_output(templates: list[dict]) -> str:
+    parts = []
+    for t in templates:
+        parts.append(f"{'─' * 60}")
+        parts.append(f"{t.get('type', '').upper()}")
+        parts.append(f"{'─' * 60}")
+        parts.append(f"Subject: {t.get('subject', '')}")
+        parts.append("")
+        parts.append(t.get("body", ""))
+        guide = t.get("personalisation_guide", "")
+        if guide:
+            parts.append("")
+            parts.append("PERSONALISATION GUIDE:")
+            parts.append(guide)
+        parts.append("")
+    return "\n".join(parts)
+
+
 # Register runners
 _ADDON_RUNNERS["brand-voice"]      = _run_addon_brand_voice
 _ADDON_RUNNERS["promo-copy"]       = _run_addon_promo_copy
 _ADDON_RUNNERS["social-calendar"]  = _run_addon_social_calendar
 _ADDON_RUNNERS["email-sequence"]   = _run_addon_email_sequence
+_ADDON_RUNNERS["guest-outreach"]   = _run_addon_guest_outreach
+_ADDON_RUNNERS["landing-audit"]    = _run_addon_landing_audit
 
 
 # ─── HTML builder ─────────────────────────────────────────────────────────────

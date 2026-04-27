@@ -144,6 +144,8 @@ export interface PodcastOrderRequest {
   special_instructions?: string
   niche?: string
   audience?: string
+  show_url?: string
+  guest_expertise?: string
 }
 
 export interface OrderResponse {

@@ -262,6 +262,8 @@ export async function createPodcastOrder(data: PodcastOrderRequest): Promise<Ord
   if (data.special_instructions) formData.append("special_instructions", data.special_instructions)
   if (data.niche) formData.append("niche", data.niche)
   if (data.audience) formData.append("audience", data.audience)
+  if (data.show_url) formData.append("show_url", data.show_url)
+  if (data.guest_expertise) formData.append("guest_expertise", data.guest_expertise)
   const res = await fetch(`${BASE}/api/ventures/content-studio/orders`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },

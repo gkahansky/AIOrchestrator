@@ -71,6 +71,7 @@ class CRJobSummary(BaseModel):
     show_name: str | None
     episode_title: str | None
     clip_count: int | None
+    error_message: str | None
     created_at: str
 
 
@@ -258,6 +259,7 @@ async def list_cr_jobs(
             show_name=j.show_name,
             episode_title=j.episode_title,
             clip_count=j.clip_count,
+            error_message=j.error_message,
             created_at=j.created_at.isoformat(),
         )
         for j in jobs
@@ -334,3 +336,41 @@ async def approve_cr_job(
             pass
 
     return {"job_id": job_id, "status": "delivered"}
+
+
+@router.post("/jobs/{job_id}/retry", status_code=status.HTTP_202_ACCEPTED)
+async def retry_cr_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_auth),
+) -> dict:
+    """Re-queue a failed job using the same input_data (no re-upload needed)."""
+    try:
+        uid = uuid.UUID(job_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid job_id")
+
+    job = db.query(CRJob).filter(CRJob.id == uid).first()
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    if job.status not in ("failed", "cancelled"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Job is in status '{job.status}'; only failed or cancelled jobs can be retried.",
+        )
+
+    job.status = "pending"
+    job.error_message = None
+    job.celery_task_id = None
+    job.completed_at = None
+    db.commit()
+
+    from aiplatform.worker import run_cr_job
+    order = job.input_data or {}
+    task = run_cr_job.delay(str(job_id), order)
+
+    job.celery_task_id = task.id
+    db.commit()
+
+    return {"job_id": job_id, "status": "pending", "message": "Job re-queued."}

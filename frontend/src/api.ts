@@ -335,6 +335,14 @@ export async function approveCRJob(jobId: string): Promise<{ job_id: string; sta
   return handleResponse(res)
 }
 
+export async function retryCRJob(jobId: string): Promise<{ job_id: string; status: string }> {
+  const res = await fetch(`${BASE}/api/ventures/content-repurposing/jobs/${jobId}/retry`, {
+    method: "POST",
+    headers: getHeaders(),
+  })
+  return handleResponse(res)
+}
+
 export async function fetchPodcastOrders(params?: {
   page?: number
   page_size?: number

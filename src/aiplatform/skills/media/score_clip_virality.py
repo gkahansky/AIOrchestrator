@@ -104,7 +104,7 @@ Return ONLY the JSON array, nothing else."""
 
     response = client.messages.create(
         model=model,
-        max_tokens=2048,
+        max_tokens=8192,   # 15 clips × ~300 tokens each ≈ 4500; headroom for long transcript_chunks
         system=_SYSTEM,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -118,7 +118,20 @@ Return ONLY the JSON array, nothing else."""
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
 
-    clips = json.loads(raw)
+    try:
+        clips = json.loads(raw)
+    except json.JSONDecodeError:
+        # Response was truncated — drop the last incomplete object and close the array
+        trimmed = re.sub(r",\s*\{[^{]*$", "", raw).rstrip(",").rstrip()
+        if not trimmed.endswith("]"):
+            trimmed += "]"
+        try:
+            clips = json.loads(trimmed)
+        except json.JSONDecodeError as exc2:
+            raise RuntimeError(
+                f"Virality scorer returned unparseable JSON: {exc2}. "
+                f"First 300 chars: {raw[:300]}"
+            )
 
     # Clamp durations to valid range
     valid = []

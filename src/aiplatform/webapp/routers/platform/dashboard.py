@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends
 
-from aiplatform.database.models import Job
+from aiplatform.database.models import Job, CRJob
 from aiplatform.database.session import get_db, ping as db_ping
 from aiplatform.webapp.auth import require_auth
 from aiplatform.webapp.schemas import DashboardResponse, VentureStats
@@ -61,6 +61,23 @@ def get_dashboard(
             failed=failed,
             pending_review=review,
         ))
+
+    # CR jobs live in a separate table — add as its own venture card
+    cr_rows = db.query(CRJob.status, func.count()).group_by(CRJob.status).all()
+    cr_counts: dict[str, int] = {s: c for s, c in cr_rows}
+    cr_in_prog_statuses = {
+        "downloading", "transcribing", "scoring", "processing",
+        "generating_text", "packaging",
+    }
+    stats.append(VentureStats(
+        venture="content_repurposing",
+        total_jobs=sum(cr_counts.values()),
+        pending=cr_counts.get("pending", 0),
+        in_progress=sum(v for k, v in cr_counts.items() if k in cr_in_prog_statuses),
+        completed=cr_counts.get("delivered", 0),
+        failed=cr_counts.get("failed", 0),
+        pending_review=cr_counts.get("review_pending", 0),
+    ))
 
     cost_month = db.query(func.coalesce(func.sum(CostEvent.cost_usd), 0)).filter(
         func.extract("year",  CostEvent.created_at) == now.year,

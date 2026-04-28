@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { createCRJob, fetchCRJobs } from "../../api"
+import { createCRJob, fetchCRJobs, retryCRJob } from "../../api"
 import StatusBadge from "../../components/StatusBadge"
 
 type Tab = "cr_order" | "cr_orders"
@@ -268,10 +268,18 @@ function CROrderForm({ onSuccess }: { onSuccess: () => void }) {
 }
 
 function CROrdersList() {
+  const queryClient = useQueryClient()
+  const [expanded, setExpanded] = useState<string | null>(null)
+
   const { data, isLoading, error } = useQuery({
     queryKey: ["crJobs"],
     queryFn: fetchCRJobs,
     refetchInterval: 15_000,
+  })
+
+  const retryMutation = useMutation({
+    mutationFn: retryCRJob,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["crJobs"] }),
   })
 
   const planColor: Record<string, string> = {
@@ -295,7 +303,7 @@ function CROrdersList() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-surface-container-low border-b border-outline-variant/10">
-              {["Job ID", "Plan", "Episode", "Clips", "Status", "Created"].map((h) => (
+              {["Job ID", "Plan", "Episode", "Clips", "Status", "Created", "Actions"].map((h) => (
                 <th key={h} className="px-4 py-2.5 text-left text-[11px] font-label font-semibold uppercase tracking-wider text-on-surface-variant">
                   {h}
                 </th>
@@ -306,36 +314,91 @@ function CROrdersList() {
             {isLoading
               ? Array(4).fill(null).map((_, i) => (
                   <tr key={i}>
-                    {Array(6).fill(null).map((__, j) => (
+                    {Array(7).fill(null).map((__, j) => (
                       <td key={j} className="px-4 py-3"><div className="h-4 bg-surface-dim rounded animate-pulse" /></td>
                     ))}
                   </tr>
                 ))
               : jobs.map((job) => (
-                  <tr key={job.id} className="hover:bg-surface-container-low/40 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs text-on-surface-variant">{job.id.slice(0, 8)}…</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs font-label font-semibold px-2 py-0.5 rounded-full capitalize ${planColor[job.plan] ?? planColor.free}`}>
-                        {job.plan}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm font-label text-on-surface max-w-[200px] truncate">
-                      {job.episode_title || job.show_name || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-sm font-label text-on-surface">
-                      {job.clip_count != null ? `${job.clip_count} clips` : "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={job.status} />
-                    </td>
-                    <td className="px-4 py-3 text-xs font-label text-on-surface-variant">
-                      {formatDate(job.created_at)}
-                    </td>
-                  </tr>
+                  <>
+                    <tr key={job.id} className="hover:bg-surface-container-low/40 transition-colors">
+                      <td className="px-4 py-3 font-mono text-xs text-on-surface-variant">{job.id.slice(0, 8)}…</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs font-label font-semibold px-2 py-0.5 rounded-full capitalize ${planColor[job.plan] ?? planColor.free}`}>
+                          {job.plan}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm font-label text-on-surface max-w-[200px] truncate">
+                        {job.episode_title || job.show_name || "—"}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-label text-on-surface">
+                        {job.clip_count != null ? `${job.clip_count} clips` : "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={job.status} />
+                      </td>
+                      <td className="px-4 py-3 text-xs font-label text-on-surface-variant whitespace-nowrap">
+                        {formatDate(job.created_at)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setExpanded(expanded === job.id ? null : job.id)}
+                            className="text-xs font-label font-semibold text-primary hover:underline"
+                          >
+                            {expanded === job.id ? "Hide" : "Details"}
+                          </button>
+                          {job.status === "failed" && (
+                            <button
+                              onClick={() => retryMutation.mutate(job.id)}
+                              disabled={retryMutation.isPending}
+                              className="text-xs font-label font-semibold text-secondary hover:underline disabled:opacity-50"
+                            >
+                              Retry
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    {expanded === job.id && (
+                      <tr key={`${job.id}-detail`} className="bg-surface-container-low/30">
+                        <td colSpan={7} className="px-6 py-4">
+                          <div className="space-y-2 text-xs font-label">
+                            <div className="flex gap-2">
+                              <span className="text-on-surface-variant w-24 shrink-0">Job ID</span>
+                              <span className="font-mono text-on-surface">{job.id}</span>
+                            </div>
+                            <div className="flex gap-2">
+                              <span className="text-on-surface-variant w-24 shrink-0">Status</span>
+                              <StatusBadge status={job.status} />
+                            </div>
+                            <div className="flex gap-2">
+                              <span className="text-on-surface-variant w-24 shrink-0">Plan</span>
+                              <span className="text-on-surface capitalize">{job.plan}</span>
+                            </div>
+                            <div className="flex gap-2">
+                              <span className="text-on-surface-variant w-24 shrink-0">Episode</span>
+                              <span className="text-on-surface">{job.episode_title || "—"}</span>
+                            </div>
+                            <div className="flex gap-2">
+                              <span className="text-on-surface-variant w-24 shrink-0">Show</span>
+                              <span className="text-on-surface">{job.show_name || "—"}</span>
+                            </div>
+                            {job.error_message && (
+                              <div className="flex gap-2">
+                                <span className="text-error w-24 shrink-0">Error</span>
+                                <span className="text-error break-all">{job.error_message}</span>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 ))}
             {!isLoading && jobs.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm font-label text-on-surface-variant">
+                <td colSpan={7} className="px-4 py-8 text-center text-sm font-label text-on-surface-variant">
                   No jobs yet — submit a video above to get started.
                 </td>
               </tr>

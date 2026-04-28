@@ -70,6 +70,7 @@ export interface CRJobSummary {
   show_name: string | null
   episode_title: string | null
   clip_count: number | null
+  error_message: string | null
   created_at: string
 }
 

@@ -81,8 +81,10 @@ export default function CRJobDetail() {
     queryKey: ["crJob", id],
     queryFn: () => fetchCRJob(id!),
     enabled: !!id,
-    refetchInterval: (data) =>
-      data && ["review_pending", "delivered", "failed"].includes(data.status) ? false : 10_000,
+    refetchInterval: (query) => {
+      const s = query.state.data?.status
+      return s && ["review_pending", "delivered", "failed"].includes(s) ? false : 10_000
+    },
   })
 
   const approve = useMutation({

@@ -1,6 +1,6 @@
 ﻿// ── Jobs ──────────────────────────────────────────────────────────────────────
 
-export type Venture = "marketing_audit" | "content_studio" | "etsy" | "accessibility_audit"
+export type Venture = "marketing_audit" | "content_studio" | "etsy" | "accessibility_audit" | "content_repurposing"
 
 export type JobStatus =
   | "pending"

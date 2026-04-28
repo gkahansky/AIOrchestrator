@@ -1474,3 +1474,63 @@ def run_market_research(self, research_id: str) -> dict:
         raise
     finally:
         db.close()
+
+
+# ── Content Repurposing ────────────────────────────────────────────────────────
+
+@celery_app.task(name="cr.run_job", bind=True, max_retries=1,
+                 soft_time_limit=3600, time_limit=3700)
+def run_cr_job(self, job_id: str, order: dict) -> dict:
+    """
+    Run the unified content repurposing pipeline for one job.
+
+    job_id: CRJob UUID string
+    order:  dict with plan, drive_video_id, show_name, episode_title,
+            host_name, guest_name, client_email, niche, audience, brand_voice
+    """
+    try:
+        from ventures.content_repurposing.pipeline import run_repurposing_job
+        from aiplatform.database.session import SessionLocal
+        from aiplatform.database.models import CRJob
+        from datetime import datetime, timezone
+
+        # Record celery task ID on the job row
+        with SessionLocal() as db:
+            job = db.query(CRJob).filter(CRJob.id == job_id).first()
+            if job:
+                job.celery_task_id = self.request.id
+                db.commit()
+
+        result = run_repurposing_job(job_id, order)
+
+        # Mark completed
+        with SessionLocal() as db:
+            job = db.query(CRJob).filter(CRJob.id == job_id).first()
+            if job:
+                job.clip_count = result.get("clip_count", 0)
+                job.completed_at = datetime.now(timezone.utc)
+                db.commit()
+
+        _slack_alert_review_needed(
+            "content_repurposing", job_id,
+            detail=f"Plan: {order.get('plan', '')}  ·  Clips: {result.get('clip_count', 0)}",
+        )
+        return {"job_id": job_id, "status": result.get("status"), "clip_count": result.get("clip_count", 0)}
+
+    except Exception as exc:
+        try:
+            from aiplatform.database.session import SessionLocal
+            from aiplatform.database.models import CRJob
+            with SessionLocal() as db:
+                job = db.query(CRJob).filter(CRJob.id == job_id).first()
+                if job:
+                    job.status = "failed"
+                    job.error_message = str(exc)[:500]
+                    db.commit()
+        except Exception:
+            pass
+
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=120)
+        _slack_alert_failure("content_repurposing", job_id, exc)
+        raise

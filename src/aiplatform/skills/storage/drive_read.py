@@ -54,6 +54,9 @@ def drive_read(file_id: str, dest_path: str | Path) -> dict:
     }
 
 
+drive_download = drive_read   # alias used by content_repurposing pipeline
+
+
 def drive_read_json(file_id: str) -> dict:
     """Convenience wrapper — download a JSON file and return parsed content."""
     import json

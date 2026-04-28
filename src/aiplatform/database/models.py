@@ -19,6 +19,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Enum,
+    Float,
     Integer,
     Numeric,
     String,
@@ -683,3 +684,90 @@ class MetricsHistory(Base):
                          default=lambda: datetime.now(timezone.utc), index=True)
 
     campaign = relationship("Campaign", back_populates="metrics")
+
+
+# ── Content Repurposing ────────────────────────────────────────────────────────
+
+class CRJob(Base):
+    """
+    Content Repurposing job — one per submitted video.
+
+    State machine:
+      pending → downloading → transcribing → scoring → processing →
+      generating_text → packaging → review_pending → approved →
+      delivering → delivered → failed
+    """
+    __tablename__ = "cr_jobs"
+
+    id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    status         = Column(String(50), nullable=False, default="pending", index=True)
+    plan           = Column(String(50), nullable=False, default="starter")
+
+    # Order fields (flat copy for quick reads without deserialising input_data)
+    show_name      = Column(String(255), nullable=True)
+    episode_title  = Column(String(255), nullable=True)
+    client_email   = Column(String(255), nullable=True)
+
+    # Full original order payload
+    input_data     = Column(JSONB, nullable=False, default=dict)
+
+    # Transcription outputs
+    transcript      = Column(Text, nullable=True)
+    segments_json   = Column(JSONB, nullable=True)   # Whisper word-level segments
+    video_duration_s = Column(Float, nullable=True)
+
+    # Delivery
+    drive_folder_id = Column(String(255), nullable=True)
+    clip_count      = Column(Integer, nullable=True)
+
+    error_message  = Column(Text, nullable=True)
+    celery_task_id = Column(String(100), nullable=True)
+
+    created_at   = Column(DateTime(timezone=True), nullable=False,
+                          default=lambda: datetime.now(timezone.utc))
+    updated_at   = Column(DateTime(timezone=True), nullable=False,
+                          default=lambda: datetime.now(timezone.utc),
+                          onupdate=lambda: datetime.now(timezone.utc))
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    clips = relationship("CRClipAsset", back_populates="job",
+                         cascade="all, delete-orphan", order_by="CRClipAsset.clip_index")
+
+    def __repr__(self):
+        return f"<CRJob {self.id} plan={self.plan} status={self.status}>"
+
+
+class CRClipAsset(Base):
+    """
+    One extracted, transcoded, and titled clip within a CRJob.
+    Created per clip during Phase 4-6.
+    """
+    __tablename__ = "cr_clip_assets"
+
+    id               = Column(BigInteger, primary_key=True, autoincrement=True)
+    cr_job_id        = Column(UUID(as_uuid=True), ForeignKey("cr_jobs.id", ondelete="CASCADE"),
+                              nullable=False, index=True)
+    clip_index       = Column(Integer, nullable=False)   # 0-based within job
+    start_s          = Column(Float, nullable=False)
+    end_s            = Column(Float, nullable=False)
+    virality_score   = Column(Float, nullable=True)
+    hook             = Column(Text, nullable=True)       # one-line hook from virality scorer
+
+    # Drive references (file IDs)
+    drive_clip_id      = Column(String(255), nullable=True)
+    drive_thumbnail_id = Column(String(255), nullable=True)
+
+    # Metadata
+    title         = Column(String(500), nullable=True)
+    description   = Column(Text, nullable=True)
+    platform      = Column(String(50), nullable=True)   # primary platform for this clip
+    caption_text  = Column(Text, nullable=True)         # SRT content
+
+    created_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc))
+
+    job = relationship("CRJob", back_populates="clips")
+
+    def __repr__(self):
+        return (f"<CRClipAsset job={self.cr_job_id} idx={self.clip_index} "
+                f"score={self.virality_score}>")

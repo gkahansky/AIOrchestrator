@@ -97,7 +97,7 @@ Complete inventory of every third-party tool, service, API, and library used acr
 | **reportlab** (`reportlab>=4.0.0`) | PDF generation (alternative) | Reserved for advanced PDF layouts (Hebrew/RTL documents) |
 | **arabic-reshaper** (`arabic-reshaper>=3.0.0`) | Arabic text shaping | Correct rendering of Arabic characters in PDFs |
 | **python-bidi** (`python-bidi>=0.4.2`) | Bidirectional text | Right-to-left text layout for Hebrew and Arabic content in reports |
-| **FFmpeg** (system binary via nixpacks) | Video/audio processing | Extract audio track from video files (.mp4/.mov/.mkv/.avi/.webm) before Whisper transcription — Service B (Content Repurposing Pack). Installed via `nixpacks.toml` nixPkgs on Railway. |
+| **FFmpeg** (system binary, apt-get in Dockerfile) | Video/audio processing | Extract audio from video (Content Studio Service B); full video pipeline for Content Repurposing (Venture F): stream-copy segment extraction, 9:16 portrait transcode, subtitle burn, watermark overlay, frame grab. Installed via `apt-get install ffmpeg` in Dockerfile (nixpacks.toml is not used — Railway build uses Dockerfile). |
 | **python-docx** (`python-docx>=1.1.0`) | Word document parsing | Extract text from DOCX/DOC files uploaded as RAG documents in Market Research |
 | **openpyxl** (`openpyxl>=3.1.0`) | Excel spreadsheet parsing | Extract cell data from XLSX/XLS files uploaded as RAG documents in Market Research |
 | **python-pptx** (`python-pptx>=0.6.23`) | PowerPoint parsing | Extract slide text from PPTX/PPT files uploaded as RAG documents in Market Research |
@@ -118,7 +118,8 @@ Complete inventory of every third-party tool, service, API, and library used acr
 | Tool | Purpose | Use Cases |
 |---|---|---|
 | **Pinterest API v5** *(stub — not yet implemented)* | Pin creation | Publish product images to Pinterest boards for Etsy traffic |
-| **Buffer API** *(stub — not yet implemented)* | Social scheduling | Schedule posts to Instagram, Facebook, LinkedIn across ventures |
+| **Buffer API** *(stub — not yet implemented)* | Social scheduling | Schedule posts to Instagram, Facebook, LinkedIn across ventures — Pro + Studio plan gate on Content Repurposing |
+| **Creatomate API** | Branded video template rendering | Content Repurposing Studio plan — branded clip templates via `POST /v1/renders`; Pillow fallback when key absent |
 
 ---
 
@@ -212,4 +213,6 @@ No code changes required to swap — set `active: true` in `skills.json`.
 | xAI Grok | `XAI_API_KEY` (or `GROK_API_KEY` or `X_AI_API_KEY`) |
 | Market Research Drive | `DRIVE_MARKET_RESEARCH_ID` |
 | Content Studio — Service B | `REPURPOSING_PACK_HUMAN_REVIEW_ALWAYS` (default true), `REPURPOSING_PACK_VIDEO_MAX_MB` (default 500), `FFMPEG_BINARY` (default ffmpeg), `FFPROBE_BINARY` (default ffprobe) |
+| Content Repurposing (Venture F) | `DRIVE_CR_ROOT_ID`, `CR_TEMP_DIR` (default /tmp), `CR_MAX_UPLOAD_MB` (default 2000), `CR_VIRALITY_THRESHOLD` (default 0.55), `CR_CAPTION_FONT_SIZE` (default 48), `CR_CAPTION_FONT_COLOR` (default white), `CR_CAPTION_BORDER_COLOR` (default black), `CR_CAPTION_BORDER_WIDTH` (default 2), `HUMAN_REVIEW_EMAIL` |
+| Creatomate | `CREATOMATE_API_KEY`, `CREATOMATE_TEMPLATE_REEL` |
 | LangSmith *(planned)* | `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT`, `LANGCHAIN_TRACING_V2` |

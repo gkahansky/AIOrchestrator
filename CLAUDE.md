@@ -23,7 +23,8 @@ The core principle is that agents, skills, memory, and integrations live in a sh
 - **Venture C:** EchoForge — Website marketing audit — see `/ventures/marketing_audit/CLAUDE.md`
 - **Venture D:** EchoForge — Web application security audit — see `/ventures/security_audit/CLAUDE.md`
 - **Venture E:** Plan B AI — Market Research (multi-LLM research committee) — see `/ventures/market_research/CLAUDE.md`
-- **Venture F+:** Future ventures — each gets its own directory and CLAUDE.md
+- **Venture F:** EchoForge — Content Repurposing (unified clips + thumbnails + text — merged Service B+C) — see `/ventures/content_repurposing/CLAUDE.md`
+- **Venture G+:** Future ventures — each gets its own directory and CLAUDE.md
 
 ### Venture B — Content Studio: Architecture Notes
 
@@ -38,6 +39,21 @@ Service B adds components not shared with other ventures (do not move to `/platf
 - Service B tier config (`REPURPOSING_TIERS`) in `config.py`
 - Service B prompt builder in `prompts.py`
 - Phase 2b extended output orchestration in `pipeline.py`
+
+### Venture F — Content Repurposing: Architecture Notes
+
+Content Repurposing is the unified replacement for the original text-only Service B and the planned video Service C. The operator uploads a source video to Google Drive, then submits the Drive file ID via planBadmin. The pipeline produces portrait 9:16 short clips, burned-in captions, Pillow-composed thumbnails, and text artifacts (show notes, blog, newsletter, captions) gated by plan tier.
+
+It adds these components not shared with other ventures (do not move to `/platform/skills/`):
+- `ventures/content_repurposing/clip_selector.py` — virality threshold filter + overlap dedup logic
+- `ventures/content_repurposing/config.py` — unified `PLANS` dict mapping tiers to clip counts + text_outputs
+- New `CRJob` and `CRClipAsset` SQLAlchemy models (Alembic migration `a2b3c4d5e6f7`)
+- `cr.run_job` Celery task (soft_time_limit=3600 — video processing is slow)
+- FastAPI router at `/api/ventures/content-repurposing/`
+
+All 11 media processing skills added in Sprint CR-1 are venture-agnostic and live in `/aiplatform/skills/media/`. A `drive_download` alias was added to `drive_read.py` for clarity.
+
+**Key constraint:** human review is always required — pipeline always ends at `review_pending`; never auto-approves.
 
 ### Venture D — Security Audit: Architecture Notes
 

@@ -22,6 +22,11 @@ function CROrderForm({ onSuccess }: { onSuccess: () => void }) {
   const queryClient = useQueryClient()
   const [plan, setPlan] = useState<string>("starter")
   const [driveVideoId, setDriveVideoId] = useState("")
+
+  function parseDriveId(raw: string): string {
+    const m = raw.match(/\/d\/([a-zA-Z0-9_-]{10,})/)
+    return m ? m[1] : raw.trim()
+  }
   const [showName, setShowName] = useState("")
   const [episodeTitle, setEpisodeTitle] = useState("")
   const [hostName, setHostName] = useState("")
@@ -109,14 +114,14 @@ function CROrderForm({ onSuccess }: { onSuccess: () => void }) {
         <input
           type="text"
           value={driveVideoId}
-          onChange={(e) => { setDriveVideoId(e.target.value); setErrors((prev) => ({ ...prev, drive_video_id: "" })) }}
+          onChange={(e) => { setDriveVideoId(parseDriveId(e.target.value)); setErrors((prev) => ({ ...prev, drive_video_id: "" })) }}
           placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs"
           className={`w-full px-4 py-2.5 text-sm font-mono bg-surface-container-low rounded-xl border ${
             errors.drive_video_id ? "border-error" : "border-transparent"
           } focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors`}
         />
         <p className="text-xs text-on-surface-variant/60 mt-1 font-label">
-          Found in the Drive share URL after <code>/d/</code>. Upload the video to Drive first. Format is auto-detected (MP4, MOV, MKV, AVI, WebM supported).
+          Paste the Drive share URL or just the file ID — the ID is extracted automatically.
         </p>
         {errors.drive_video_id && <p className="text-xs text-error mt-1 font-label">{errors.drive_video_id}</p>}
       </div>

@@ -545,9 +545,10 @@ function OrdersList() {
                   </tr>
                 ))
               : data?.items.map((job) => {
-                  const svc = (job.input_data.service_type as string) || "show_notes"
+                  const d = (job.input_data ?? {}) as Record<string, unknown>
+                  const svc = (d.service_type as string) || "show_notes"
                   const isB = svc === "repurposing_pack"
-                  const inputType = (job.input_data.input_type as string) || "audio"
+                  const inputType = (d.input_type as string) || "audio"
                   return (
                     <tr key={job.id} className="hover:bg-surface-container-low/40 transition-colors">
                       <td className="px-4 py-3 font-mono text-xs text-on-surface-variant">
@@ -567,16 +568,16 @@ function OrdersList() {
                           <span className="material-symbols-outlined text-[14px] text-on-surface-variant">
                             {inputType === "video" ? "movie" : "audio_file"}
                           </span>
-                          {(job.input_data.audio_filename_suffix as string)
-                            ? `file${job.input_data.audio_filename_suffix as string}`
+                          {(d.audio_filename_suffix as string)
+                            ? `file${d.audio_filename_suffix as string}`
                             : "—"}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm font-label text-on-surface">
-                        {(job.input_data.show_name as string) || "—"}
+                        {(d.show_name as string) || "—"}
                       </td>
                       <td className="px-4 py-3 text-sm font-label text-on-surface capitalize">
-                        {(job.input_data.tier as string) ?? "—"}
+                        {(d.tier as string) ?? "—"}
                       </td>
                       <td className="px-4 py-3">
                         <StatusBadge status={job.status} />

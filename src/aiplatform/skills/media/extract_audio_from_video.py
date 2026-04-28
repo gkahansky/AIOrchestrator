@@ -7,6 +7,7 @@ suitable for Whisper transcription.
 Venture-agnostic — never references any specific venture.
 """
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -46,10 +47,13 @@ def extract_audio_from_video(
         UnsupportedVideoFormat: if the file extension is not in the supported set.
         RuntimeError:         if FFmpeg exits non-zero.
     """
-    if shutil.which("ffmpeg") is None:
+    ffmpeg_bin = os.getenv("FFMPEG_BINARY", "ffmpeg")
+    if shutil.which(ffmpeg_bin) is None:
         raise FFmpegNotInstalled(
-            "ffmpeg binary not found. "
-            "Add 'ffmpeg' to nixpacks.toml [phases.setup] nixPkgs."
+            f"FFmpeg binary '{ffmpeg_bin}' not found. "
+            "Railway: add 'ffmpeg' to nixpacks.toml [phases.setup] nixPkgs. "
+            "Local (Windows): run 'choco install ffmpeg' or set FFMPEG_BINARY to the full path. "
+            "Local (Mac): run 'brew install ffmpeg'."
         )
 
     video = Path(video_path)
@@ -64,7 +68,7 @@ def extract_audio_from_video(
         output_path = str(video.with_suffix(".mp3"))
 
     cmd = [
-        "ffmpeg",
+        ffmpeg_bin,
         "-y",              # overwrite without prompting
         "-i", str(video),
         "-vn",             # drop video stream
@@ -81,10 +85,11 @@ def extract_audio_from_video(
 
     # Attempt to read duration from ffprobe (non-fatal if unavailable)
     duration_seconds: float | None = None
-    if shutil.which("ffprobe"):
+    ffprobe_bin = os.getenv("FFPROBE_BINARY", "ffprobe")
+    if shutil.which(ffprobe_bin):
         probe = subprocess.run(
             [
-                "ffprobe", "-v", "error",
+                ffprobe_bin, "-v", "error",
                 "-show_entries", "format=duration",
                 "-of", "default=noprint_wrappers=1:nokey=1",
                 output_path,

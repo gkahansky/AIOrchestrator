@@ -78,6 +78,8 @@ async def create_podcast_order(
                 detail=f"Unknown bundle_sku '{bundle_sku}'. Valid: {', '.join(BUNDLES)}",
             )
         tier = bundle_cfg["requires_tier"]
+        # Bundles are always Service A (show notes) packages
+        service_type = "show_notes"
         # Merge bundle add-ons with any explicitly passed add-ons (deduplicated)
         resolved_add_ons = list(dict.fromkeys(bundle_cfg["add_ons"] + resolved_add_ons))
 

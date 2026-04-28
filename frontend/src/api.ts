@@ -293,7 +293,6 @@ export async function fetchAuditOrders(params?: {
 export async function createCRJob(data: {
   plan: string
   drive_video_id: string
-  video_suffix?: string
   show_name?: string
   episode_title?: string
   host_name?: string
@@ -311,7 +310,7 @@ export async function createCRJob(data: {
   return handleResponse(res)
 }
 
-export async function fetchCRJobs(): Promise<{ items: CRJobSummary[] }> {
+export async function fetchCRJobs(): Promise<CRJobSummary[]> {
   const res = await fetch(`${BASE}/api/ventures/content-repurposing/jobs`, { headers: getHeaders() })
   return handleResponse(res)
 }

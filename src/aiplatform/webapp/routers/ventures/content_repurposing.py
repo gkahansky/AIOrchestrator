@@ -25,13 +25,55 @@ router = APIRouter()
 
 _VALID_PLANS = {"free", "starter", "pro", "studio"}
 
+_MIME_TO_EXT = {
+    "video/mp4":        ".mp4",
+    "video/quicktime":  ".mov",
+    "video/x-matroska": ".mkv",
+    "video/x-msvideo":  ".avi",
+    "video/webm":       ".webm",
+    "video/mpeg":       ".mpeg",
+    "video/x-ms-wmv":   ".wmv",
+    "video/3gpp":       ".3gp",
+}
+
+
+def _detect_video_suffix(drive_video_id: str) -> str:
+    """Detect video extension from Drive file metadata. Raises 400 if unsupported."""
+    from aiplatform.skills.storage._drive_auth import get_drive_service
+    try:
+        svc = get_drive_service()
+        meta = svc.files().get(fileId=drive_video_id, fields="mimeType,name").execute()
+        mime = meta.get("mimeType", "")
+        name = meta.get("name", "")
+
+        if mime in _MIME_TO_EXT:
+            return _MIME_TO_EXT[mime]
+
+        for ext in _MIME_TO_EXT.values():
+            if name.lower().endswith(ext):
+                return ext
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Unsupported video format '{mime}' (file: {name!r}). "
+                "Supported: MP4, MOV, MKV, AVI, WebM."
+            ),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Could not read Drive file metadata for ID '{drive_video_id}': {exc}",
+        )
+
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
 
 class CROrderRequest(BaseModel):
     plan: str = "starter"
     drive_video_id: str                 # Drive file ID of the uploaded video
-    video_suffix: str = ".mp4"         # file extension for local temp copy
     show_name: str = ""
     episode_title: str = ""
     host_name: str = ""
@@ -140,8 +182,11 @@ async def create_cr_job(
             detail=f"Invalid plan '{payload.plan}'. Must be one of: {sorted(_VALID_PLANS)}",
         )
 
+    video_suffix = _detect_video_suffix(payload.drive_video_id)
+
     job_id = uuid.uuid4()
     order = payload.model_dump()
+    order["video_suffix"] = video_suffix   # injected by backend; not in request schema
 
     job = CRJob(
         id=job_id,

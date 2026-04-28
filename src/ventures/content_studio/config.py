@@ -122,6 +122,34 @@ SLACK_REVIEW_CHANNEL = os.getenv("CONTENT_STUDIO_SLACK_CHANNEL", "#content-studi
 # ─── Brand voice cache ────────────────────────────────────────────────────────
 BRAND_VOICE_CACHE_ENABLED = os.getenv("BRAND_VOICE_CACHE_ENABLED", "true").lower() == "true"
 
+# ─── Bundle pricing (Service A add-on packages) ──────────────────────────────
+BUNDLES = {
+    "content-brand": {
+        "name":          "Content + Brand Bundle",
+        "price_usd":     229,
+        "saves_usd":     28,
+        "requires_tier": "standard",
+        "add_ons":       ["brand-voice", "social-calendar"],
+        "description":   "Standard Show Notes + Brand Voice Guide + 30-Day Social Calendar",
+    },
+    "full-growth": {
+        "name":          "Full Growth Bundle",
+        "price_usd":     299,
+        "saves_usd":     46,
+        "requires_tier": "premium",
+        "add_ons":       ["brand-voice", "social-calendar", "email-sequence"],
+        "description":   "Premium Show Notes + Brand Voice Guide + 30-Day Calendar + Email Sequence",
+    },
+    "launch-ready": {
+        "name":          "Launch Ready Bundle",
+        "price_usd":     249,
+        "saves_usd":     18,
+        "requires_tier": "starter",
+        "add_ons":       ["launch-playbook", "guest-outreach"],
+        "description":   "Starter Show Notes + Launch Playbook + Guest Outreach Templates",
+    },
+}
+
 # ─── Content generation model ─────────────────────────────────────────────────
 CLAUDE_MODEL = "claude-sonnet-4-6"
 CLAUDE_MAX_TOKENS = 8192

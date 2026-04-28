@@ -146,6 +146,12 @@ export interface PodcastOrderRequest {
   audience?: string
   show_url?: string
   guest_expertise?: string
+  competitor_urls?: string
+  show_concept?: string
+  host_background?: string
+  launch_type?: "new" | "relaunch"
+  bundle_sku?: string
+  add_ons?: string
 }
 
 export interface OrderResponse {

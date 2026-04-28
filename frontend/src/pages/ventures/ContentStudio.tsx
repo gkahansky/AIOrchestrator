@@ -102,6 +102,9 @@ function NewOrderForm() {
   const [audience, setAudience] = useState("")
   const [showUrl, setShowUrl] = useState("")
   const [guestExpertise, setGuestExpertise] = useState("")
+  const [competitorUrls, setCompetitorUrls] = useState("")
+  const [bundleSku, setBundleSku] = useState("")
+  const [addOns, setAddOns] = useState("")
   const [specialInstructions, setSpecialInstructions] = useState("")
   const [mediaFile, setMediaFile] = useState<File | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -153,6 +156,9 @@ function NewOrderForm() {
       audience: audience,
       show_url: showUrl,
       guest_expertise: guestExpertise,
+      competitor_urls: competitorUrls,
+      bundle_sku: bundleSku,
+      add_ons: addOns,
       special_instructions: specialInstructions,
     })
   }
@@ -410,6 +416,58 @@ function NewOrderForm() {
           />
           <p className="text-xs text-on-surface-variant/60 mt-1 font-label">Required for Guest Outreach add-on</p>
         </div>
+      </div>
+
+      {/* Bundle selector */}
+      <div>
+        <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
+          Bundle Package
+        </label>
+        <select
+          value={bundleSku}
+          onChange={(e) => setBundleSku(e.target.value)}
+          className="w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-on-surface transition-colors"
+        >
+          <option value="">No bundle — individual order</option>
+          <option value="content-brand">Content + Brand ($229, saves $28) — Standard + Brand Voice + Social Calendar</option>
+          <option value="full-growth">Full Growth ($299, saves $46) — Premium + Brand Voice + Calendar + Email Sequence</option>
+          <option value="launch-ready">Launch Ready ($249, saves $18) — Starter + Launch Playbook + Guest Outreach</option>
+        </select>
+        {bundleSku && (
+          <p className="text-xs text-primary mt-1 font-label">Bundle selected — tier and add-ons will be set automatically</p>
+        )}
+      </div>
+
+      {/* Add-ons (individual) */}
+      {!bundleSku && (
+        <div>
+          <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
+            Add-ons
+          </label>
+          <input
+            type="text"
+            value={addOns}
+            onChange={(e) => setAddOns(e.target.value)}
+            placeholder="brand-voice, social-calendar, email-sequence, guest-outreach, landing-audit, launch-playbook, competitive-analysis"
+            className="w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors"
+          />
+          <p className="text-xs text-on-surface-variant/60 mt-1 font-label">Comma-separated add-on IDs</p>
+        </div>
+      )}
+
+      {/* Competitor URLs (for competitive analysis add-on) */}
+      <div>
+        <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
+          Competitor Show URLs
+        </label>
+        <input
+          type="text"
+          value={competitorUrls}
+          onChange={(e) => setCompetitorUrls(e.target.value)}
+          placeholder="https://show1.com, https://show2.com, https://show3.com"
+          className="w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors"
+        />
+        <p className="text-xs text-on-surface-variant/60 mt-1 font-label">Up to 3 URLs, comma-separated. Required for Competitive Analysis add-on.</p>
       </div>
 
       {/* Special Instructions */}

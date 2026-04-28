@@ -49,6 +49,12 @@ async def create_podcast_order(
     audience:             str              = Form(default=""),
     show_url:             str              = Form(default=""),
     guest_expertise:      str              = Form(default=""),
+    competitor_urls:      str              = Form(default=""),
+    show_concept:         str              = Form(default=""),
+    host_background:      str              = Form(default=""),
+    launch_type:          str              = Form(default="new"),
+    bundle_sku:           str              = Form(default=""),
+    add_ons:              str              = Form(default=""),
     order_id:             str | None       = Form(default=None),
     audio:                UploadFile | None = File(default=None),
     _: str = Depends(require_auth),
@@ -59,6 +65,21 @@ async def create_podcast_order(
     if service_type not in ("show_notes", "repurposing_pack"):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                             detail="service_type must be show_notes or repurposing_pack")
+
+    # ── Bundle expansion ──────────────────────────────────────────────────────
+    # If a bundle SKU is supplied, override tier + add_ons from the bundle config.
+    resolved_add_ons: list[str] = [a.strip() for a in add_ons.split(",") if a.strip()]
+    if bundle_sku:
+        from ventures.content_studio.config import BUNDLES
+        bundle_cfg = BUNDLES.get(bundle_sku)
+        if not bundle_cfg:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Unknown bundle_sku '{bundle_sku}'. Valid: {', '.join(BUNDLES)}",
+            )
+        tier = bundle_cfg["requires_tier"]
+        # Merge bundle add-ons with any explicitly passed add-ons (deduplicated)
+        resolved_add_ons = list(dict.fromkeys(bundle_cfg["add_ons"] + resolved_add_ons))
 
     valid_tiers = _SERVICE_A_TIERS if service_type == "show_notes" else _SERVICE_B_TIERS
     if tier not in valid_tiers:
@@ -167,6 +188,12 @@ async def create_podcast_order(
         "audience":              audience or "general audience",
         "show_url":              show_url or "",
         "guest_expertise":       guest_expertise or "",
+        "competitor_urls":       competitor_urls or "",
+        "show_concept":          show_concept or "",
+        "host_background":       host_background or "",
+        "launch_type":           launch_type or "new",
+        "bundle_sku":            bundle_sku or "",
+        "add_ons":               resolved_add_ons,
         "status":                "pending",
         "drive_audio_id":        drive_audio_id,
         "audio_filename_suffix": suffix,

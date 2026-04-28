@@ -65,7 +65,9 @@ from aiplatform.skills.media.generate_newsletter_draft import generate_newslette
 from aiplatform.skills.media.generate_social_calendar import generate_social_calendar
 from aiplatform.skills.media.generate_email_sequence import generate_email_sequence
 from aiplatform.skills.media.generate_guest_outreach import generate_guest_outreach
+from aiplatform.skills.media.generate_launch_playbook import generate_launch_playbook
 from aiplatform.skills.research.audit_landing_page import audit_landing_page, FetchError, PageTooLarge
+from aiplatform.skills.research.generate_competitive_analysis import generate_competitive_analysis
 from aiplatform.skills.storage.create_gdoc import create_gdoc
 from aiplatform.skills.storage.drive_organise import create_folder
 from aiplatform.skills.storage.drive_write import drive_write
@@ -190,12 +192,21 @@ def run_order(order: dict, output_dir: str | None = None) -> dict:
             # Only log revenue for paid orders — skip free samples
             tier_info = config.TIERS.get(order.get("tier", "starter"), {})
             if order.get("client_email"):
+                # Bundle price overrides tier price when a bundle SKU was applied
+                bundle_sku = order.get("bundle_sku", "")
+                bundle_info = config.BUNDLES.get(bundle_sku, {})
+                amount_usd = bundle_info.get("price_usd") or tier_info.get("price_usd", 0)
+                description = (
+                    f"{bundle_info.get('name', bundle_sku)} — {order.get('show_name','')[:60]}"
+                    if bundle_sku
+                    else f"{order.get('tier','starter')} — {order.get('show_name','')[:80]}"
+                )
                 log_revenue(
                     venture="content_studio",
                     source=order.get("source", "direct"),
-                    amount_usd=tier_info.get("price_usd", 0),
+                    amount_usd=amount_usd,
                     job_id=order.get("job_id"),
-                    description=f"{order.get('tier','starter')} — {order.get('show_name','')[:80]}",
+                    description=description,
                 )
             print(f"\n✓ Order {order['order_id']} delivered.")
 
@@ -956,13 +967,85 @@ def _format_outreach_output(templates: list[dict]) -> str:
     return "\n".join(parts)
 
 
+def _run_addon_launch_playbook(order: dict, content: dict, work_dir: Path) -> dict:
+    """
+    Add-on: launch-playbook
+    Generates an 8-week podcast launch plan.
+    """
+    show_context = {
+        "show_name":       order.get("show_name", ""),
+        "niche":           order.get("niche", "general"),
+        "audience":        order.get("audience", "general audience"),
+        "host_name":       order.get("host_name", ""),
+        "show_concept":    order.get("show_concept", ""),
+        "host_background": order.get("host_background", ""),
+        "launch_type":     order.get("launch_type", "new"),
+    }
+
+    result = generate_launch_playbook(show_context=show_context, max_tokens=10000)
+
+    out_path = work_dir / f"{order['order_id']}-launch-playbook.txt"
+    out_path.write_text(result["raw_playbook"], encoding="utf-8")
+    result["playbook_path"] = str(out_path)
+    return result
+
+
+def _run_addon_competitive_analysis(order: dict, content: dict, work_dir: Path) -> dict:
+    """
+    Add-on: competitive-analysis
+    Benchmarks the show against up to 3 competitor show URLs.
+    Requires order["competitor_urls"] (comma-separated or list).
+    """
+    raw_urls = order.get("competitor_urls", "")
+    if isinstance(raw_urls, str):
+        competitor_urls = [u.strip() for u in raw_urls.split(",") if u.strip()]
+    else:
+        competitor_urls = list(raw_urls)
+
+    if not competitor_urls:
+        raise ValueError(
+            "competitive-analysis add-on requires 'competitor_urls' in the order. "
+            "Add up to 3 competitor show website URLs (comma-separated)."
+        )
+
+    show_context = {
+        "show_name":  order.get("show_name", ""),
+        "niche":      order.get("niche", "general"),
+        "audience":   order.get("audience", "general audience"),
+        "host_name":  order.get("host_name", ""),
+        "show_notes": content.get("show_notes", ""),
+    }
+
+    brand_voice = _load_brand_voice(order, work_dir)
+
+    result = generate_competitive_analysis(
+        show_context=show_context,
+        competitor_urls=competitor_urls,
+        brand_voice_injection=brand_voice,
+        max_tokens=8192,
+    )
+
+    out_path = work_dir / f"{order['order_id']}-competitive-analysis.txt"
+    out_path.write_text(result["raw_report"], encoding="utf-8")
+    result["analysis_path"] = str(out_path)
+
+    print(
+        f"    Competitors analysed: {len(competitor_urls)} | "
+        f"Content gaps: {len(result.get('content_gaps', []))} | "
+        f"Tactics: {len(result.get('steal_worthy_tactics', []))}"
+    )
+    return result
+
+
 # Register runners
-_ADDON_RUNNERS["brand-voice"]      = _run_addon_brand_voice
-_ADDON_RUNNERS["promo-copy"]       = _run_addon_promo_copy
-_ADDON_RUNNERS["social-calendar"]  = _run_addon_social_calendar
-_ADDON_RUNNERS["email-sequence"]   = _run_addon_email_sequence
-_ADDON_RUNNERS["guest-outreach"]   = _run_addon_guest_outreach
-_ADDON_RUNNERS["landing-audit"]    = _run_addon_landing_audit
+_ADDON_RUNNERS["brand-voice"]          = _run_addon_brand_voice
+_ADDON_RUNNERS["promo-copy"]           = _run_addon_promo_copy
+_ADDON_RUNNERS["social-calendar"]      = _run_addon_social_calendar
+_ADDON_RUNNERS["email-sequence"]       = _run_addon_email_sequence
+_ADDON_RUNNERS["guest-outreach"]       = _run_addon_guest_outreach
+_ADDON_RUNNERS["landing-audit"]        = _run_addon_landing_audit
+_ADDON_RUNNERS["launch-playbook"]      = _run_addon_launch_playbook
+_ADDON_RUNNERS["competitive-analysis"] = _run_addon_competitive_analysis
 
 
 # ─── HTML builder ─────────────────────────────────────────────────────────────

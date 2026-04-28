@@ -7,10 +7,12 @@ Create Date: 2026-04-28
 Changes:
   cr_jobs        — one per uploaded video; tracks pipeline status + transcript
   cr_clip_assets — one per extracted clip within a job
+
+Note: uses IF NOT EXISTS throughout so re-running on a DB that already has the
+tables (from a partial migration) is safe.
 """
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 revision = 'a2b3c4d5e6f7'
 down_revision = 'f6a7b8c9d0e1'
@@ -19,53 +21,54 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        'cr_jobs',
-        sa.Column('id', UUID(as_uuid=True), primary_key=True),
-        sa.Column('status', sa.String(50), nullable=False, server_default='pending', index=True),
-        sa.Column('plan', sa.String(50), nullable=False, server_default='starter'),
-        sa.Column('show_name', sa.String(255), nullable=True),
-        sa.Column('episode_title', sa.String(255), nullable=True),
-        sa.Column('client_email', sa.String(255), nullable=True),
-        sa.Column('input_data', JSONB, nullable=False, server_default='{}'),
-        sa.Column('transcript', sa.Text, nullable=True),
-        sa.Column('segments_json', JSONB, nullable=True),
-        sa.Column('video_duration_s', sa.Float, nullable=True),
-        sa.Column('drive_folder_id', sa.String(255), nullable=True),
-        sa.Column('clip_count', sa.Integer, nullable=True),
-        sa.Column('error_message', sa.Text, nullable=True),
-        sa.Column('celery_task_id', sa.String(100), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False,
-                  server_default=sa.func.now()),
-        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False,
-                  server_default=sa.func.now()),
-        sa.Column('completed_at', sa.DateTime(timezone=True), nullable=True),
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS cr_jobs (
+            id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            status           VARCHAR(50)  NOT NULL DEFAULT 'pending',
+            plan             VARCHAR(50)  NOT NULL DEFAULT 'starter',
+            show_name        VARCHAR(255),
+            episode_title    VARCHAR(255),
+            client_email     VARCHAR(255),
+            input_data       JSONB        NOT NULL DEFAULT '{}',
+            transcript       TEXT,
+            segments_json    JSONB,
+            video_duration_s DOUBLE PRECISION,
+            drive_folder_id  VARCHAR(255),
+            clip_count       INTEGER,
+            error_message    TEXT,
+            celery_task_id   VARCHAR(100),
+            created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+            updated_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+            completed_at     TIMESTAMPTZ
+        )
+    """)
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_cr_jobs_status ON cr_jobs (status)"
     )
-    op.create_index('ix_cr_jobs_status', 'cr_jobs', ['status'])
 
-    op.create_table(
-        'cr_clip_assets',
-        sa.Column('id', sa.BigInteger, primary_key=True, autoincrement=True),
-        sa.Column('cr_job_id', UUID(as_uuid=True),
-                  sa.ForeignKey('cr_jobs.id', ondelete='CASCADE'),
-                  nullable=False, index=True),
-        sa.Column('clip_index', sa.Integer, nullable=False),
-        sa.Column('start_s', sa.Float, nullable=False),
-        sa.Column('end_s', sa.Float, nullable=False),
-        sa.Column('virality_score', sa.Float, nullable=True),
-        sa.Column('hook', sa.Text, nullable=True),
-        sa.Column('drive_clip_id', sa.String(255), nullable=True),
-        sa.Column('drive_thumbnail_id', sa.String(255), nullable=True),
-        sa.Column('title', sa.String(500), nullable=True),
-        sa.Column('description', sa.Text, nullable=True),
-        sa.Column('platform', sa.String(50), nullable=True),
-        sa.Column('caption_text', sa.Text, nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False,
-                  server_default=sa.func.now()),
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS cr_clip_assets (
+            id                 BIGSERIAL PRIMARY KEY,
+            cr_job_id          UUID         NOT NULL REFERENCES cr_jobs(id) ON DELETE CASCADE,
+            clip_index         INTEGER      NOT NULL,
+            start_s            DOUBLE PRECISION NOT NULL,
+            end_s              DOUBLE PRECISION NOT NULL,
+            virality_score     DOUBLE PRECISION,
+            hook               TEXT,
+            drive_clip_id      VARCHAR(255),
+            drive_thumbnail_id VARCHAR(255),
+            title              VARCHAR(500),
+            description        TEXT,
+            platform           VARCHAR(50),
+            caption_text       TEXT,
+            created_at         TIMESTAMPTZ  NOT NULL DEFAULT now()
+        )
+    """)
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_cr_clip_assets_cr_job_id ON cr_clip_assets (cr_job_id)"
     )
-    op.create_index('ix_cr_clip_assets_cr_job_id', 'cr_clip_assets', ['cr_job_id'])
 
 
 def downgrade() -> None:
-    op.drop_table('cr_clip_assets')
-    op.drop_table('cr_jobs')
+    op.execute("DROP TABLE IF EXISTS cr_clip_assets")
+    op.execute("DROP TABLE IF EXISTS cr_jobs")

@@ -292,7 +292,7 @@ export async function fetchAuditOrders(params?: {
 
 export async function createCRJob(data: {
   plan: string
-  drive_video_id: string
+  video: File
   show_name?: string
   episode_title?: string
   host_name?: string
@@ -302,10 +302,22 @@ export async function createCRJob(data: {
   audience?: string
   brand_voice?: string
 }): Promise<{ job_id: string; status: string; message: string }> {
+  const token = localStorage.getItem("api_token") ?? "test"
+  const form = new FormData()
+  form.append("plan", data.plan)
+  form.append("video", data.video)
+  if (data.show_name)     form.append("show_name",     data.show_name)
+  if (data.episode_title) form.append("episode_title", data.episode_title)
+  if (data.host_name)     form.append("host_name",     data.host_name)
+  if (data.guest_name)    form.append("guest_name",    data.guest_name)
+  if (data.client_email)  form.append("client_email",  data.client_email)
+  if (data.niche)         form.append("niche",         data.niche)
+  if (data.audience)      form.append("audience",      data.audience)
+  if (data.brand_voice)   form.append("brand_voice",   data.brand_voice)
   const res = await fetch(`${BASE}/api/ventures/content-repurposing/jobs`, {
     method: "POST",
-    headers: getHeaders(),
-    body: JSON.stringify(data),
+    headers: { Authorization: `Bearer ${token}` },   // no Content-Type — browser sets multipart boundary
+    body: form,
   })
   return handleResponse(res)
 }

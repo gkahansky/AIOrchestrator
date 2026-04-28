@@ -2,7 +2,8 @@
 Content Repurposing venture router.
 
 Admin-triggered pipeline (planBadmin.com).
-The operator uploads the video to Drive first, then submits the Drive file ID here.
+Operator uploads the video file directly; the router writes it to Drive and
+passes the Drive file ID to the Celery worker.
 
   POST /api/ventures/content-repurposing/jobs   — queue a new repurposing job
   GET  /api/ventures/content-repurposing/jobs   — list jobs (newest first)
@@ -10,10 +11,12 @@ The operator uploads the video to Drive first, then submits the Drive file ID he
   POST /api/ventures/content-repurposing/jobs/{job_id}/approve — mark done / deliver
 """
 
+import os
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -24,65 +27,11 @@ from aiplatform.webapp.auth import require_auth
 router = APIRouter()
 
 _VALID_PLANS = {"free", "starter", "pro", "studio"}
-
-_MIME_TO_EXT = {
-    "video/mp4":        ".mp4",
-    "video/quicktime":  ".mov",
-    "video/x-matroska": ".mkv",
-    "video/x-msvideo":  ".avi",
-    "video/webm":       ".webm",
-    "video/mpeg":       ".mpeg",
-    "video/x-ms-wmv":   ".wmv",
-    "video/3gpp":       ".3gp",
-}
-
-
-def _detect_video_suffix(drive_video_id: str) -> str:
-    """Detect video extension from Drive file metadata. Raises 400 if unsupported."""
-    from aiplatform.skills.storage._drive_auth import get_drive_service
-    try:
-        svc = get_drive_service()
-        meta = svc.files().get(fileId=drive_video_id, fields="mimeType,name").execute()
-        mime = meta.get("mimeType", "")
-        name = meta.get("name", "")
-
-        if mime in _MIME_TO_EXT:
-            return _MIME_TO_EXT[mime]
-
-        for ext in _MIME_TO_EXT.values():
-            if name.lower().endswith(ext):
-                return ext
-
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"Unsupported video format '{mime}' (file: {name!r}). "
-                "Supported: MP4, MOV, MKV, AVI, WebM."
-            ),
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Could not read Drive file metadata for ID '{drive_video_id}': {exc}",
-        )
+_ALLOWED_VIDEO_EXTS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".mpeg", ".wmv"}
+_MAX_VIDEO_BYTES = int(os.getenv("CR_MAX_UPLOAD_MB", "2000")) * 1024 * 1024
 
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
-
-class CROrderRequest(BaseModel):
-    plan: str = "starter"
-    drive_video_id: str                 # Drive file ID of the uploaded video
-    show_name: str = ""
-    episode_title: str = ""
-    host_name: str = ""
-    guest_name: str = ""
-    client_email: str = ""
-    niche: str = "general"
-    audience: str = "general audience"
-    brand_voice: str = ""              # Studio plan only — brand voice guide text
-
 
 class CRClipOut(BaseModel):
     id: int
@@ -166,41 +115,115 @@ def _job_to_detail(job: CRJob) -> CRJobDetail:
 
 @router.post("/jobs", status_code=status.HTTP_202_ACCEPTED)
 async def create_cr_job(
-    payload: CROrderRequest,
-    db: Session = Depends(get_db),
-    _: str = Depends(require_auth),
+    plan:           str              = Form("starter"),
+    show_name:      str              = Form(default=""),
+    episode_title:  str              = Form(default=""),
+    host_name:      str              = Form(default=""),
+    guest_name:     str              = Form(default=""),
+    client_email:   str              = Form(default=""),
+    niche:          str              = Form(default="general"),
+    audience:       str              = Form(default="general audience"),
+    brand_voice:    str              = Form(default=""),
+    video:          UploadFile | None = File(default=None),
+    db:             Session          = Depends(get_db),
+    _:              str              = Depends(require_auth),
 ) -> dict:
     """
     Queue a content repurposing job.
 
-    The video must already be uploaded to Google Drive.
-    Returns the job_id immediately; poll GET /jobs/{job_id} for status.
+    Accepts multipart/form-data with a video file upload.
+    The video is written to Drive; the worker downloads it from there.
+    Returns job_id immediately; poll GET /jobs/{job_id} for status.
     """
-    if payload.plan not in _VALID_PLANS:
+    if plan not in _VALID_PLANS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid plan '{payload.plan}'. Must be one of: {sorted(_VALID_PLANS)}",
+            detail=f"Invalid plan '{plan}'. Must be one of: {sorted(_VALID_PLANS)}",
         )
 
-    video_suffix = _detect_video_suffix(payload.drive_video_id)
+    if video is None or not video.filename:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A video file is required.",
+        )
 
+    suffix = Path(video.filename).suffix.lower()
+    if suffix not in _ALLOWED_VIDEO_EXTS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Unsupported file type '{suffix}'. "
+                f"Supported: {', '.join(sorted(_ALLOWED_VIDEO_EXTS))}."
+            ),
+        )
+
+    content = await video.read()
+    if len(content) > _MAX_VIDEO_BYTES:
+        limit_mb = _MAX_VIDEO_BYTES // (1024 * 1024)
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File too large. Maximum {limit_mb} MB.",
+        )
+
+    # Write to tmp then upload to Drive (worker + web are separate containers)
     job_id = uuid.uuid4()
-    order = payload.model_dump()
-    order["video_suffix"] = video_suffix   # injected by backend; not in request schema
+    tmp_dir = Path("/tmp") / f"cr_{job_id}"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    tmp_path = tmp_dir / f"source{suffix}"
+    tmp_path.write_bytes(content)
+
+    drive_root = (
+        os.environ.get("DRIVE_CR_ROOT_ID")
+        or os.environ.get("DRIVE_PODCAST_ORDERS_ID", "")
+    )
+    if not drive_root:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google Drive is not configured (DRIVE_PODCAST_ORDERS_ID missing).",
+        )
+
+    try:
+        from aiplatform.skills.storage.drive_write import drive_write
+        result = drive_write(str(tmp_path), drive_root, filename=f"cr_{job_id}{suffix}")
+        drive_video_id = result["file_id"]
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Failed to upload video to Google Drive: {exc}",
+        )
+    finally:
+        tmp_path.unlink(missing_ok=True)
+        try:
+            tmp_dir.rmdir()
+        except OSError:
+            pass
+
+    order = {
+        "plan":           plan,
+        "drive_video_id": drive_video_id,
+        "video_suffix":   suffix,
+        "show_name":      show_name or "",
+        "episode_title":  episode_title or "",
+        "host_name":      host_name or "",
+        "guest_name":     guest_name or "",
+        "client_email":   client_email or "",
+        "niche":          niche or "general",
+        "audience":       audience or "general audience",
+        "brand_voice":    brand_voice or "",
+    }
 
     job = CRJob(
         id=job_id,
         status="pending",
-        plan=payload.plan,
-        show_name=payload.show_name or None,
-        episode_title=payload.episode_title or None,
-        client_email=payload.client_email or None,
+        plan=plan,
+        show_name=show_name or None,
+        episode_title=episode_title or None,
+        client_email=client_email or None,
         input_data=order,
     )
     db.add(job)
     db.commit()
 
-    # Dispatch Celery task
     from aiplatform.worker import run_cr_job
     task = run_cr_job.delay(str(job_id), order)
 
@@ -289,7 +312,6 @@ async def approve_cr_job(
     job.completed_at = datetime.now(timezone.utc)
     db.commit()
 
-    # Send delivery email if client_email is set
     if job.client_email:
         try:
             from aiplatform.skills.comms.send_email import send_email
@@ -309,6 +331,6 @@ async def approve_cr_job(
                 ),
             )
         except Exception:
-            pass  # never block approval on email failure
+            pass
 
     return {"job_id": job_id, "status": "delivered"}

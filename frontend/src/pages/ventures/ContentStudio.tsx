@@ -21,12 +21,7 @@ function formatDate(iso: string) {
 function CROrderForm({ onSuccess }: { onSuccess: () => void }) {
   const queryClient = useQueryClient()
   const [plan, setPlan] = useState<string>("starter")
-  const [driveVideoId, setDriveVideoId] = useState("")
-
-  function parseDriveId(raw: string): string {
-    const m = raw.match(/\/d\/([a-zA-Z0-9_-]{10,})/)
-    return m ? m[1] : raw.trim()
-  }
+  const [videoFile, setVideoFile] = useState<File | null>(null)
   const [showName, setShowName] = useState("")
   const [episodeTitle, setEpisodeTitle] = useState("")
   const [hostName, setHostName] = useState("")
@@ -47,7 +42,7 @@ function CROrderForm({ onSuccess }: { onSuccess: () => void }) {
 
   function validate() {
     const e: Record<string, string> = {}
-    if (!driveVideoId.trim()) e.drive_video_id = "Google Drive file ID is required"
+    if (!videoFile) e.video = "A video file is required"
     if (!episodeTitle.trim()) e.episode_title = "Episode title is required"
     return e
   }
@@ -59,7 +54,7 @@ function CROrderForm({ onSuccess }: { onSuccess: () => void }) {
     setErrors({})
     mutation.mutate({
       plan,
-      drive_video_id: driveVideoId.trim(),
+      video: videoFile!,
       show_name: showName,
       episode_title: episodeTitle,
       host_name: hostName,
@@ -106,24 +101,35 @@ function CROrderForm({ onSuccess }: { onSuccess: () => void }) {
         </div>
       </div>
 
-      {/* Drive Video ID */}
+      {/* Video file upload */}
       <div>
         <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
-          Google Drive Video File ID <span className="text-error">*</span>
+          Video File <span className="text-error">*</span>
         </label>
-        <input
-          type="text"
-          value={driveVideoId}
-          onChange={(e) => { setDriveVideoId(parseDriveId(e.target.value)); setErrors((prev) => ({ ...prev, drive_video_id: "" })) }}
-          placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs"
-          className={`w-full px-4 py-2.5 text-sm font-mono bg-surface-container-low rounded-xl border ${
-            errors.drive_video_id ? "border-error" : "border-transparent"
-          } focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors`}
-        />
+        <label
+          className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border cursor-pointer transition-colors ${
+            errors.video
+              ? "border-error bg-error-container/10"
+              : "border-transparent bg-surface-container-low hover:bg-surface-container"
+          }`}
+        >
+          <span className="material-symbols-outlined text-[20px] text-on-surface-variant">movie</span>
+          <span className="text-sm font-label text-on-surface-variant flex-1 truncate">
+            {videoFile
+              ? `${videoFile.name} (${(videoFile.size / 1024 / 1024).toFixed(1)} MB)`
+              : "Choose video — MP4, MOV, MKV, AVI, WebM…"}
+          </span>
+          <input
+            type="file"
+            accept=".mp4,.mov,.mkv,.avi,.webm,.mpeg,.wmv"
+            className="hidden"
+            onChange={(e) => { setVideoFile(e.target.files?.[0] ?? null); setErrors((prev) => ({ ...prev, video: "" })) }}
+          />
+        </label>
         <p className="text-xs text-on-surface-variant/60 mt-1 font-label">
-          Paste the Drive share URL or just the file ID — the ID is extracted automatically.
+          Up to {Math.round(2000)} MB. Audio is extracted automatically before processing.
         </p>
-        {errors.drive_video_id && <p className="text-xs text-error mt-1 font-label">{errors.drive_video_id}</p>}
+        {errors.video && <p className="text-xs text-error mt-1 font-label">{errors.video}</p>}
       </div>
 
       {/* Episode Title */}

@@ -282,7 +282,6 @@ Run these after core pipeline Sprints 1–3 are stable.
 - [x] Add new env vars to `.env.example` — `ADDON_AUTO_REVIEW`, `BRAND_VOICE_CACHE_ENABLED`, `ADDON_MAX_PARALLEL`, `SOCIAL_CALENDAR_PLATFORMS`, `EMAIL_SEQUENCE_LENGTH`
 - [x] Update order form: `niche`, `audience`, `show_url`, `guest_expertise`, `competitor_urls`, `bundle_sku`, `add_ons` fields added
 - [ ] Update Fiverr gig with add-ons section and bundle pricing
-- [ ] Update Upwork profile + add Podcast Growth Bundle to Project Catalog
 - [ ] echoforge.biz — add Service B service card and add-on pricing section
 
 ---

@@ -47,7 +47,7 @@ Add-ons: +$20/30 min over limit · 10% off for 4+/month · $399/month retainer
 
 ## Pipeline — Core (existing, unchanged)
 
-1. Order detection (Upwork API / Fiverr Gmail polling)
+1. Order detection (Fiverr Gmail polling)
 2. Transcription — GPT-4o Mini Transcribe ($0.003/min)
 3. Content generation — Claude API, tier-aware
 4. Packaging — Google Doc creation + PDF backup
@@ -219,7 +219,6 @@ Run these after core pipeline Sprints 1–3 are stable.
 - [ ] Confirm skills available at `~/.claude/skills/market-*/`
 - [ ] Add podcast_context_prefix template to platform prompt library
 - [ ] Update Fiverr gig with add-ons section
-- [ ] Update Upwork profile + add Podcast Growth Bundle to Project Catalog
 - [ ] Add new env vars to .env.example
 - [ ] Update order requirements form: add optional "website URL" field
 

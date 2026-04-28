@@ -110,7 +110,6 @@ Complete inventory of every third-party tool, service, API, and library used acr
 |---|---|---|
 | **Etsy Open API v3** (REST via `requests`) | Etsy shop management | Create draft listings, upload listing images, attach digital download ZIPs, poll publish status |
 | **Fiverr** (Gmail-based order intake) | Freelance order intake | Receives Fiverr order confirmation emails, parses order details, triggers venture pipelines |
-| **Upwork API** *(planned)* | Alternative order intake | Secondary freelance channel — deferred, Fiverr-first strategy |
 
 ---
 

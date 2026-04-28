@@ -41,7 +41,6 @@
 - ✅ echoforge.biz has pricing page, three tiers ($49/$149/$249), and free sample lead-gen form at `/try-audit`
 - ✅ Sample report generates censored PDF (score + dimensions visible; findings/actions unlocked after purchase)
 - ✅ Accessibility scan auto-injected on Premium tier (hard-coded in pipeline)
-- ⏸️ Upwork on hold — evaluating Fiverr-only vs independent billing (Stripe) model
 - ❌ Cold outreach pipeline not built (M-10) — this is the primary proactive acquisition channel
 - ❌ No reviews or orders yet — need first customers
 
@@ -88,7 +87,6 @@
 - ✅ echoforge.biz has pricing ($49/$79/$119), service page, and free 10-minute sample form at `/try-podcast`
 - ✅ Brand Voice Guide add-on implemented (`generate_brand_voice.py`, 185 lines, wired into pipeline)
 - ✅ Promo Copy add-on implemented (`generate_promo_copy.py`, 157 lines, wired into pipeline)
-- ⏸️ Upwork on hold
 - ❌ Fiverr gig extras not yet configured for add-ons (Brand Voice $79, Promo Copy $39)
 - ❌ Social Calendar add-on — not built (`generate_social_calendar.py` missing)
 - ❌ Email Sequence add-on — not built (`generate_email_sequence.py` missing)
@@ -118,7 +116,6 @@
 | Marketing Audit gig | ✅ Published |
 | Podcast Show Notes gig | ✅ Published |
 | Accessibility Audit gig | ❌ Missing — Fiverr category TBD |
-| Upwork | ⏸️ On hold — decision pending on billing model |
 | Independent billing (Stripe) | 🤔 Under consideration — would remove platform fees and unlock custom offerings |
 
 ### echoforge.biz

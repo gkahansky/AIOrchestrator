@@ -416,11 +416,9 @@ The following are shared with the Accessibility Audit Module (AAM) and the broad
 - Scope validation middleware (ensure tools cannot probe out-of-scope hosts)
 - PoC screenshot capture and evidence tagging system
 
-### Freelance Platform Positioning (Upwork/Fiverr/Freelancer)
+### Freelance Platform Positioning (Fiverr)
 - Fiverr: list as "I will perform a professional web security audit report"
   — Basic gig: $49 (Starter), Standard: $149 (Professional), Premium: $349 (Agency)
-- Upwork: position as "Automated Security Audit — OWASP Top 10 + Full PDF Report"
-  — Hourly wrapper: charge $75–150/hr, actual delivery is automated, margin is very high
 - Differentiate in listings with: turnaround time, PoC evidence, attack chain narrative, CVSS scores
 
 ---
@@ -499,7 +497,7 @@ The pipeline automates the scanning, correlation, and report generation. The fol
 | **Terms of Service review** | Legal language covering authorisation responsibility, liability limits, data retention, and Rules of Engagement must be written and reviewed. | Before MVP |
 | **Tool Docker images hardening** | Each scanning tool (`nuclei`, `sqlmap`, `nmap`, etc.) runs in an isolated container. Container build, network isolation rules, and egress restrictions must be reviewed before production. | Before MVP |
 | **Rate-limit tuning** | Automated scans can inadvertently cause service disruption. Humans must set per-host request rates and test against a staging target before production use. | Before MVP |
-| **Fiverr / Upwork listing creation** | Platform-specific listing text, portfolio samples, pricing packaging, and response templates must be written and published manually. | Before first orders |
+| **Fiverr listing creation** | Platform-specific listing text, portfolio samples, pricing packaging, and response templates must be written and published manually. | Before first orders |
 | **Payment and billing setup** | Stripe or platform billing for paid orders is not in scope for the pipeline — must be configured manually. | Before first orders |
 
 ### 11.2 Per Order — Human Review Gate
@@ -569,7 +567,6 @@ These situations require human decision before the pipeline can continue:
 - [ ] Continuous tier with monthly delta reports
 - [ ] Slack/email alerting
 - [ ] Compliance mapping overlays (OWASP, GDPR, SOC 2)
-- [ ] Upwork profile and proposal templates
 
 ### v2.0
 - [ ] Retest workflow

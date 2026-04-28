@@ -127,7 +127,6 @@ canonical data structures for any downstream proposal template that needs the ce
 ### To Build (Sprint 2+)
 
 #### `marketplace/audit_order_listener.py`
-- Polls Upwork /contracts for "marketing audit" tagged orders (5-min interval)
 - Polls Fiverr via Gmail for order confirmation emails
 - Parses website URL from requirements form
 - Creates order record with status: pending
@@ -204,12 +203,7 @@ COMPETITOR_MAX=3                    # Max competitors scraped per report
 - [x] Rate limiting: 1 request per email per 24h via DB
 - [x] `openai` added to `requirements.txt`
 
-### Sprint 3 — Upwork Integration
-- Build `audit_order_listener.py` for Upwork
-- Auto-trigger pipeline on new contract detection
-- Deliver report link via Upwork contract message
-
-### Sprint 4 — Proposal Letter + Outreach System
+### Sprint 3 — Proposal Letter + Outreach System
 - Build proposal letter generator: takes sample MD + client context → full outreach email
 - Outreach queue: scan prospect URLs → generate personalised sample → personalised cold email
 - 3 reference sample audits (SaaS, service business, e-commerce) for portfolio
@@ -235,7 +229,6 @@ COMPETITOR_MAX=3                    # Max competitors scraped per report
 - [ ] Set `GOOGLE_DRIVE_TOKEN_JSON` + `GOOGLE_TOKEN_PATH=/tmp/google_token.json` in Railway (fixes Drive quota)
 - [ ] Create `/MarketingAudits/` Google Drive folder; add ID to `.env` as `GOOGLE_DRIVE_AUDIT_ROOT_ID`
 - [ ] Create new Fiverr gig (see platform_metadata_v4.md Part A)
-- [ ] Add marketing audit Project Catalog entries to Upwork profile
 
 ---
 

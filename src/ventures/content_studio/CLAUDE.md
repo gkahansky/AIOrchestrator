@@ -260,27 +260,30 @@ Run these after core pipeline Sprints 1–3 are stable.
 - [x] Router: `niche` + `audience` Form fields added to `POST /api/ventures/content-studio/orders`
 - [x] Frontend: `niche` + `audience` side-by-side inputs added to New Order form; `PodcastOrderRequest` type + `api.ts` updated
 
-### Sprint 5b — Guest Outreach + Landing Page Audit
-- Build `generate_guest_outreach.py`
-- Wire `market-landing/SKILL.md` against show website URL (optional form field)
+### Sprint 5b — Guest Outreach + Landing Page Audit ✅ DONE (2026-04-28)
+- [x] `generate_guest_outreach.py` — 3 email templates (cold/warm/follow-up) with `[PERSONALISATION]` placeholders and per-placeholder guidance; `[TEMPLATE: TYPE]/[/TEMPLATE]` block parser; `guest-outreach` add-on ID
+- [x] `audit_landing_page.py` — 7-point CRO audit (Hero/Value Prop/Social Proof/Features/Objections/CTA/Footer); HTTP fetch + HTML stripping; 1–10 scoring per section; priority fixes by effort-to-impact; A/B test hypotheses; `FetchError` + `PageTooLarge` for graceful failure; `landing-audit` add-on ID
+- [x] Router: `show_url` + `guest_expertise` Form fields added; pipeline runners wired
+- [x] Frontend: Show Website URL + Guest Expertise side-by-side inputs with helper text
 
-### Sprint 6b — Competitive Analysis + Launch Playbook + Bundles
-- Wire `market-competitors/SKILL.md` with 3 competing show URLs
-- Build `generate_launch_playbook.py` wrapper
-- Add bundle SKU detection to order intake
-- Apply bundle discount logic in revenue logging
+### Sprint 6b — Competitive Analysis + Launch Playbook + Bundles ✅ DONE (2026-04-28)
+- [x] `generate_competitive_analysis.py` — fetches up to 3 competitor landing pages; 5-dimension analysis (messaging/positioning/content/social/gaps); SWOT per competitor + aggregate; positioning map; steal-worthy tactics + strategic recommendations; `competitive-analysis` add-on ID
+- [x] `generate_launch_playbook.py` — 8-week launch plan (Foundation → Audience → Pre-launch → Launch day-by-day → Post-launch); 5 launch email templates + platform social posts + KPIs; `launch-playbook` add-on ID
+- [x] `config.py` — `BUNDLES` dict: content-brand ($229/saves $28), full-growth ($299/saves $46), launch-ready ($249/saves $18); each with required tier + add-on list
+- [x] Router: `bundle_sku` expansion — overrides tier, merges add-ons, validates against `BUNDLES`; `competitor_urls`, `show_concept`, `host_background`, `launch_type` fields added
+- [x] Pipeline: bundle-aware revenue logging (`bundle_price_usd` overrides tier price)
+- [x] Frontend: bundle SKU dropdown, add-ons text field (hidden when bundle selected), competitor URLs input
 
 ---
 
 ## Pre-Sprint Checklist (v2 additions)
 
-- [ ] Install ai-marketing-claude: `git clone` + `./install.sh`
-- [ ] Confirm skills available at `~/.claude/skills/market-*/`
-- [ ] Add podcast_context_prefix template to platform prompt library
-- [ ] Update Fiverr gig with add-ons section
+- [x] ai-marketing-claude — no runtime install needed; methodologies encoded as prompts
+- [x] Add new env vars to `.env.example` — `ADDON_AUTO_REVIEW`, `BRAND_VOICE_CACHE_ENABLED`, `ADDON_MAX_PARALLEL`, `SOCIAL_CALENDAR_PLATFORMS`, `EMAIL_SEQUENCE_LENGTH`
+- [x] Update order form: `niche`, `audience`, `show_url`, `guest_expertise`, `competitor_urls`, `bundle_sku`, `add_ons` fields added
+- [ ] Update Fiverr gig with add-ons section and bundle pricing
 - [ ] Update Upwork profile + add Podcast Growth Bundle to Project Catalog
-- [ ] Add new env vars to .env.example
-- [ ] Update order requirements form: add optional "website URL" field
+- [ ] echoforge.biz — add Service B service card and add-on pricing section
 
 ---
 
@@ -303,6 +306,10 @@ Run these after core pipeline Sprints 1–3 are stable.
 | Social calendar | Standalone Claude skill (no runtime dependency on ai-marketing-claude repo); uses pillar framework from its SKILL.md as prompt methodology; `social-calendar` add-on ID |
 | Email sequence | Same — Claude skill using ai-marketing-claude's value-before-ask framework in prompt; `email-sequence` add-on ID |
 | Niche + audience fields | Added as explicit form fields (not just Special Instructions) — required by social calendar, email sequence, and all future marketing add-ons for quality output |
+| Landing page audit | Uses plain HTTP `requests` (no Playwright) — works for most podcast sites; if JS-rendered, fetch returns limited content and audit notes the limitation |
+| Competitive analysis | Fetches competitor pages inside the skill (self-contained `_strip_html`); does not import from `audit_landing_page.py` — skills must not call other skills |
+| Bundle expansion | Happens in the FastAPI router before order dict is built — router resolves `bundle_sku` → `tier` + `add_ons`; pipeline only sees the resolved fields, no bundle logic in pipeline |
+| ai-marketing-claude dependency | No runtime import — methodologies from that repo are encoded as prompt instructions in each skill; the public repo is a reference, not a dependency |
 
 ## Pipeline Status
 <!-- managed by update_task.py -->
@@ -318,7 +325,8 @@ Run these after core pipeline Sprints 1–3 are stable.
 | NEW | Service C — Short-Clip SaaS (EchoForge) | 🔲 planned | Sprint CR-1/CR-2 — see ventures/content_repurposing/CLAUDE.md | — |
 | M-05 | Podcast Add-on: 30-Day Social Calendar | ✅ done | generate_social_calendar.py; content pillar framework; 5-platform support; brand voice injection | 2026-04-27 |
 | M-06 | Podcast Add-on: Listener Email Sequence | ✅ done | generate_email_sequence.py; 5-email nurture; value-before-ask; send-day scheduling | 2026-04-27 |
-| M-11 | Podcast Add-on: Guest Outreach Templates | 🔲 planned | Sprint 5b | — |
-| M-12 | Podcast Add-on: Show Landing Page Audit | 🔲 planned | Sprint 5b | — |
-| L-02 | Podcast Add-on: Competitive Show Analysis | 🔲 idea | Sprint 6b | — |
-| L-03 | Podcast Add-on: Launch Playbook | 🔲 idea | Sprint 6b | — |
+| M-11 | Podcast Add-on: Guest Outreach Templates | ✅ done | generate_guest_outreach.py; cold/warm/follow-up templates; [PERSONALISATION] placeholders | 2026-04-28 |
+| M-12 | Podcast Add-on: Show Landing Page Audit | ✅ done | audit_landing_page.py; 7-point CRO framework; HTTP fetch; 1-10 scoring per section | 2026-04-28 |
+| L-02 | Podcast Add-on: Competitive Show Analysis | ✅ done | generate_competitive_analysis.py; fetches up to 3 competitor pages; SWOT + positioning map | 2026-04-28 |
+| L-03 | Podcast Add-on: Launch Playbook | ✅ done | generate_launch_playbook.py; 8-week plan; launch email templates + social posts + KPIs | 2026-04-28 |
+| NEW | Bundle Pricing — SKU Detection + Discount Logic | ✅ done | BUNDLES config; router expands bundle_sku → tier + add_ons; pipeline logs bundle price | 2026-04-28 |

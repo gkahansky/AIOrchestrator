@@ -48,9 +48,9 @@ def extract_video_frames(
         ffmpeg_bin, "-y",
         "-i", str(clip),
         "-vf", f"select='not(mod(n,max(1,trunc(nb_frames/{n}))))',scale=1280:720",
-        "-vsync", "vfr",
+        "-fps_mode", "vfr",   # replaces deprecated -vsync vfr (FFmpeg 5+)
         "-frames:v", str(n),
-        "-q:v", "2",       # JPEG quality (2 = excellent)
+        "-q:v", "2",
         out_pattern,
     ]
 

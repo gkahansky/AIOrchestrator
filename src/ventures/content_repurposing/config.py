@@ -105,7 +105,11 @@ CAPTION_STYLE = {
 CR_TEMP_DIR = os.getenv("CR_TEMP_DIR", "/tmp")
 
 # ─── Drive folder ─────────────────────────────────────────────────────────────
-DRIVE_CR_ROOT_ID = os.getenv("DRIVE_CR_ROOT_ID", "")   # /ContentRepurposing/ root
+# Reuse the podcast orders folder — each CR job creates a subfolder inside it
+DRIVE_CR_ROOT_ID = (
+    os.getenv("DRIVE_CR_ROOT_ID")          # explicit override if needed
+    or os.getenv("DRIVE_PODCAST_ORDERS_ID", "")  # shared with content_studio
+)
 
 # ─── External APIs ────────────────────────────────────────────────────────────
 CREATOMATE_API_KEY       = os.getenv("CREATOMATE_API_KEY", "")
@@ -119,6 +123,5 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
 # ─── Review ───────────────────────────────────────────────────────────────────
-# Content repurposing always goes through human review before delivery
+# Review is handled via planBadmin (approval gate in Redis) — same as all other ventures.
 HUMAN_REVIEW_ALWAYS = True
-HUMAN_REVIEW_EMAIL = os.getenv("HUMAN_REVIEW_EMAIL", "")

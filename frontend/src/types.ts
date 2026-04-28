@@ -61,6 +61,18 @@ export interface DashboardStats {
   redis_ok: boolean
 }
 
+// ── Content Repurposing ───────────────────────────────────────────────────────
+
+export interface CRJobSummary {
+  id: string
+  status: string
+  plan: string
+  show_name: string | null
+  episode_title: string | null
+  clip_count: number | null
+  created_at: string
+}
+
 // ── Finance ───────────────────────────────────────────────────────────────────
 
 export interface CostSummary {

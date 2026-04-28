@@ -25,7 +25,6 @@ from ventures.content_repurposing.config import (
     CLAUDE_MODEL,
     CR_TEMP_DIR,
     DRIVE_CR_ROOT_ID,
-    HUMAN_REVIEW_EMAIL,
     OPENAI_API_KEY,
     PLANS,
 )
@@ -50,7 +49,6 @@ from aiplatform.skills.media.generate_caption_pack import generate_caption_pack
 from aiplatform.skills.storage.drive_write import drive_write
 from aiplatform.skills.storage.drive_organise import create_folder
 from aiplatform.skills.storage.drive_read import drive_download
-from aiplatform.skills.comms.send_email import send_email
 
 
 def run_repurposing_job(job_id: str, order: dict) -> dict:
@@ -116,9 +114,11 @@ def run_repurposing_job(job_id: str, order: dict) -> dict:
         )
         selected_clips = select_clips(virality_result["clips"], plan, PLANS)
 
-        # Create Drive output folder
+        # Create Drive output folder with Clips/ and Thumbnails/ subfolders
         drive_folder_id = _ensure_drive_folder(job_id, order)
         _update_folder(job_id, drive_folder_id)
+        clips_folder_id = _create_subfolder(drive_folder_id, "Clips")
+        thumbs_folder_id = _create_subfolder(drive_folder_id, "Thumbnails")
 
         # ── Phase 4-6: Per-clip media processing ──────────────────────────────
         _set_status(job_id, "processing")
@@ -194,16 +194,15 @@ def run_repurposing_job(job_id: str, order: dict) -> dict:
                 model=CLAUDE_MODEL,
             )
 
-            # Upload clip + thumbnail to Drive
-            clip_subfolder = _create_clip_folder(drive_folder_id, i)
+            # Upload clip + thumbnail to their respective Drive subfolders
             clip_drive = drive_write(
                 final_clip_path,
-                clip_subfolder,
+                clips_folder_id,
                 filename=f"clip_{i+1:02d}.mp4",
             )
             thumb_drive = drive_write(
                 thumb_result["thumbnail_path"],
-                clip_subfolder,
+                thumbs_folder_id,
                 filename=f"thumbnail_{i+1:02d}.jpg",
             )
 
@@ -333,9 +332,7 @@ def run_repurposing_job(job_id: str, order: dict) -> dict:
             drive_write(str(doc_path), drive_folder_id, filename="text_artifacts.md")
 
         _set_status(job_id, "review_pending")
-
-        if HUMAN_REVIEW_EMAIL:
-            _send_review_notification(job_id, order, len(clip_assets), drive_folder_id)
+        _set_approval_gate(job_id, "pending")
 
         return {
             "status": "review_pending",
@@ -412,28 +409,24 @@ def _save_clip_asset(job_id: str, asset: dict) -> None:
 
 def _ensure_drive_folder(job_id: str, order: dict) -> str:
     if not DRIVE_CR_ROOT_ID:
-        raise RuntimeError("DRIVE_CR_ROOT_ID is not configured.")
+        raise RuntimeError(
+            "Drive root folder not configured. Set DRIVE_PODCAST_ORDERS_ID (or DRIVE_CR_ROOT_ID) in env."
+        )
     folder_name = f"{order.get('episode_title', 'Episode')} — {job_id[:8]}"
     result = create_folder(folder_name, parent_id=DRIVE_CR_ROOT_ID)
     return result["folder_id"]
 
 
-def _create_clip_folder(parent_id: str, clip_index: int) -> str:
-    result = create_folder(f"clip_{clip_index+1:02d}", parent_id=parent_id)
+def _create_subfolder(parent_id: str, name: str) -> str:
+    result = create_folder(name, parent_id=parent_id)
     return result["folder_id"]
 
 
-def _send_review_notification(job_id: str, order: dict, clip_count: int, folder_id: str) -> None:
-    drive_link = f"https://drive.google.com/drive/folders/{folder_id}"
-    send_email(
-        to=HUMAN_REVIEW_EMAIL,
-        subject=f"[Review] Content Repurposing — {order.get('episode_title', job_id)}",
-        body=(
-            f"Job {job_id} is ready for review.\n\n"
-            f"Plan: {order.get('plan', 'starter')}\n"
-            f"Clips generated: {clip_count}\n"
-            f"Episode: {order.get('episode_title', '')}\n\n"
-            f"Drive folder: {drive_link}\n\n"
-            f"Approve or reject at planBadmin.com."
-        ),
-    )
+def _set_approval_gate(job_id: str, signal: str = "pending") -> None:
+    """Write an approval signal to Redis so planBadmin can poll and display it."""
+    try:
+        import os, redis as redis_lib
+        r = redis_lib.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
+        r.set(f"approval_gate:{job_id}", signal, ex=86400)
+    except Exception:
+        pass

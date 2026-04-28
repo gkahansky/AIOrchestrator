@@ -30,6 +30,7 @@ class JobSummary(BaseModel):
     phase_total: int | None
     environment: str
     input_data: dict = Field(default_factory=dict)
+    output_data: dict = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
     started_at: datetime | None

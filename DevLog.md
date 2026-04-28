@@ -172,3 +172,16 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-26 16:38 |  | 9d912ef | docs: update project docs post Sprint 3e |
 | 2026-04-26 17:30 |  | b0d1075 | Fix brand voice cache: persist to Redis (90-day TTL) with local file fallback for dev |
 | 2026-04-26 17:30 |  | b0d1075 | Fix brand voice cache — primary storage moved to Redis key `content_studio:brand_voice:{slug}` (TTL 90d); falls back to local ./output/ file if REDIS_URL unset. Fixes data loss on Railway container restart. |
+| 2026-04-26 17:30 |  | bee8358 | docs: update DevLog for brand voice Redis cache fix |
+| 2026-04-26 18:14 |  | 82d03a7 | fix: add exponential backoff retry to drive_write for transient 5xx errors |
+| 2026-04-27 19:25 |  | 7a814da | feat(content-studio): Sprint 4b â€” Social Calendar + Email Sequence add-ons |
+| 2026-04-27 19:26 |  | 6772af5 | docs: mark Sprint 4b done in content_studio CLAUDE.md â€” social calendar + email sequence |
+| 2026-04-27 19:39 |  | 94f0504 | feat(content-studio): Sprint 5b â€” Guest Outreach Templates + Landing Page Audit add-ons |
+| 2026-04-28 07:59 |  | ca819e1 | feat(content-studio): Sprint 6b â€” Competitive Analysis + Launch Playbook + Bundle pricing |
+| 2026-04-28 08:00 |  | 3f3b142 | docs: update content_studio CLAUDE.md post Sprint 5b+6b â€” all add-ons complete |
+| 2026-04-28 09:03 |  | 800dbda | fix(content-studio): 3 bugs â€” bundle service_type, ffmpeg path, orders null crash |
+| 2026-04-28 09:28 |  | c140f03 | docs: add FFPROBE_BINARY to ToolStack env vars table |
+| 2026-04-28 09:33 |  | ab4f452 | docs: remove all Upwork references from documentation â€” not part of the plan |
+| 2026-04-28 09:37 |  | 9ec5bd2 | fix: add ffmpeg to Dockerfile apt-get â€” nixpacks.toml not used (Dockerfile build) |
+| 2026-04-28 10:13 |  | 9e2a5bf | feat(content-repurposing): Sprint CR-1 â€” unified media+text repurposing pipeline |
+| 2026-04-28 10:16 |  | d9d12f8 | docs: update project docs post Sprint CR-1 â€” Content Repurposing venture |

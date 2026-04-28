@@ -18,6 +18,7 @@
   RoadmapItemUpdate,
   ChatRequest,
   ChatApiResponse,
+  CRJobSummary,
 } from "./types"
 
 const BASE = import.meta.env.VITE_API_URL || "https://api.planbadmin.com"
@@ -287,6 +288,40 @@ export async function fetchAuditOrders(params?: {
   if (params?.page_size) url.searchParams.set("page_size", String(params.page_size))
   const res = await fetch(url.toString(), { headers: getHeaders() })
   return handleResponse<JobListResponse>(res)
+}
+
+export async function createCRJob(data: {
+  plan: string
+  drive_video_id: string
+  video_suffix?: string
+  show_name?: string
+  episode_title?: string
+  host_name?: string
+  guest_name?: string
+  client_email?: string
+  niche?: string
+  audience?: string
+  brand_voice?: string
+}): Promise<{ job_id: string; status: string; message: string }> {
+  const res = await fetch(`${BASE}/api/ventures/content-repurposing/jobs`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(data),
+  })
+  return handleResponse(res)
+}
+
+export async function fetchCRJobs(): Promise<{ items: CRJobSummary[] }> {
+  const res = await fetch(`${BASE}/api/ventures/content-repurposing/jobs`, { headers: getHeaders() })
+  return handleResponse(res)
+}
+
+export async function approveCRJob(jobId: string): Promise<{ job_id: string; status: string }> {
+  const res = await fetch(`${BASE}/api/ventures/content-repurposing/jobs/${jobId}/approve`, {
+    method: "POST",
+    headers: getHeaders(),
+  })
+  return handleResponse(res)
 }
 
 export async function fetchPodcastOrders(params?: {

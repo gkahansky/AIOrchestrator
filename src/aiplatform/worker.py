@@ -1511,10 +1511,12 @@ def run_cr_job(self, job_id: str, order: dict) -> dict:
                 job.completed_at = datetime.now(timezone.utc)
                 db.commit()
 
-        _slack_alert_review_needed(
-            "content_repurposing", job_id,
-            detail=f"Plan: {order.get('plan', '')}  ·  Clips: {result.get('clip_count', 0)}",
-        )
+        if result.get("status") == "review_pending":
+            _set_approval_gate(job_id, "pending")
+            _slack_alert_review_needed(
+                "content_repurposing", job_id,
+                detail=f"Plan: {order.get('plan', '')}  ·  Clips: {result.get('clip_count', 0)}",
+            )
         return {"job_id": job_id, "status": result.get("status"), "clip_count": result.get("clip_count", 0)}
 
     except Exception as exc:

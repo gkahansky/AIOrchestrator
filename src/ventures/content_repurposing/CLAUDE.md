@@ -46,7 +46,7 @@ planBadmin.com → POST /api/ventures/content-repurposing/jobs
               → CRClipAsset row created
         → text artifacts (gated by plan's text_outputs)
         → CRJob status = review_pending
-        → review notification email
+        → Redis approval_gate:{job_id} = "pending" (planBadmin review queue)
 ```
 
 ### Third-party dependencies
@@ -101,11 +101,11 @@ alembic/versions/a2b3c4d5e6f7_add_content_repurposing_tables.py
 |---|---|---|
 | 1 | downloading | drive_download → local temp video |
 | 2 | transcribing | extract_audio_from_video → transcribe_audio (Whisper) |
-| 3 | scoring | score_clip_virality → select_clips → create Drive folder |
-| 4–6 | processing | per-clip: extract → transcode → captions → watermark → frames → thumbnail → title → description → drive_write |
+| 3 | scoring | score_clip_virality → select_clips → create Drive job folder + Clips/ + Thumbnails/ subfolders |
+| 4–6 | processing | per-clip: extract → transcode → captions → watermark → frames → thumbnail → title → description → drive_write to Clips/ or Thumbnails/ |
 | 7 | generating_text | show_notes / captions / blog / newsletter gated by plan |
-| 8 | packaging | write transcript.txt + text_artifacts.md to Drive |
-| final | review_pending | send review notification email to HUMAN_REVIEW_EMAIL |
+| 8 | packaging | write transcript.txt + text_artifacts.md to Drive job folder |
+| final | review_pending | Redis approval_gate:{job_id}=pending → planBadmin review queue |
 
 ---
 
@@ -166,7 +166,7 @@ All endpoints require planBadmin JWT (`Authorization: Bearer <token>`).
 
 | Variable | Default | Notes |
 |---|---|---|
-| `DRIVE_CR_ROOT_ID` | — | Drive folder ID for `/ContentRepurposing/` root (required) |
+| `DRIVE_CR_ROOT_ID` | — | Drive folder ID for `/ContentRepurposing/` root; falls back to `DRIVE_PODCAST_ORDERS_ID` if not set |
 | `CR_TEMP_DIR` | `/tmp` | Temp dir for in-flight files; cleaned after each job |
 | `CR_MAX_UPLOAD_MB` | `2000` | Max video file size in MB |
 | `CR_VIRALITY_THRESHOLD` | `0.55` | Min virality score for clip selection |
@@ -177,7 +177,6 @@ All endpoints require planBadmin JWT (`Authorization: Bearer <token>`).
 | `CREATOMATE_API_KEY` | — | Studio plan — branded template rendering |
 | `CREATOMATE_TEMPLATE_REEL` | — | Creatomate template ID for branded clips |
 | `BUFFER_ACCESS_TOKEN` | — | Pro + Studio — social scheduling (Sprint CR-2) |
-| `HUMAN_REVIEW_EMAIL` | — | Email address to notify when job is review_pending |
 | `ANTHROPIC_API_KEY` | — | Required — virality scoring, titles, descriptions, text artifacts |
 | `OPENAI_API_KEY` | — | Required — Whisper transcription |
 
@@ -189,7 +188,7 @@ All endpoints require planBadmin JWT (`Authorization: Bearer <token>`).
 - Clip output format is always portrait 9:16 (1080×1920) H.264/AAC — universal reel format.
 - Clip length: 30–90 seconds (`CLIP_MIN_S` / `CLIP_MAX_S`).
 - Overlap deduplication: windows with >50% overlap keep the higher-scored segment.
-- Human review is mandatory — pipeline always ends at `review_pending`; the `/approve` endpoint sets `delivered` and sends the delivery email.
+- Human review is mandatory — pipeline always ends at `review_pending` with a Redis approval gate; the `/approve` endpoint sets `delivered` and sends the delivery email. Never auto-approves.
 - Creatomate is Studio-only and has a Pillow fallback if the API key is absent or returns an error.
 - `score_thumbnail_frame` encodes up to 8 frames as base64 JPEG in a single Claude Vision call.
 

@@ -212,5 +212,5 @@ No code changes required to swap — set `active: true` in `skills.json`.
 | Qdrant | `QDRANT_URL`, `QDRANT_API_KEY` |
 | xAI Grok | `XAI_API_KEY` (or `GROK_API_KEY` or `X_AI_API_KEY`) |
 | Market Research Drive | `DRIVE_MARKET_RESEARCH_ID` |
-| Content Studio — Service B | `REPURPOSING_PACK_HUMAN_REVIEW_ALWAYS` (default true), `REPURPOSING_PACK_VIDEO_MAX_MB` (default 500), `FFMPEG_BINARY` (default ffmpeg) |
+| Content Studio — Service B | `REPURPOSING_PACK_HUMAN_REVIEW_ALWAYS` (default true), `REPURPOSING_PACK_VIDEO_MAX_MB` (default 500), `FFMPEG_BINARY` (default ffmpeg), `FFPROBE_BINARY` (default ffprobe) |
 | LangSmith *(planned)* | `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT`, `LANGCHAIN_TRACING_V2` |

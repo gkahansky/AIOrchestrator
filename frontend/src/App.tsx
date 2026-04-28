@@ -5,6 +5,7 @@ import Login from "./pages/Login"
 import Dashboard from "./pages/Dashboard"
 import GigGenerator from "./pages/GigGenerator"
 import JobDetail from "./pages/JobDetail"
+import CRJobDetail from "./pages/CRJobDetail"
 import Ventures from "./pages/Ventures"
 import MarketingAudit from "./pages/ventures/MarketingAudit"
 import ContentStudio from "./pages/ventures/ContentStudio"
@@ -47,6 +48,7 @@ export default function App() {
           >
             <Route index element={<Dashboard />} />
             <Route path="jobs/:id" element={<JobDetail />} />
+            <Route path="cr-jobs/:id" element={<CRJobDetail />} />
             <Route path="gigs" element={<GigGenerator />} />
             <Route path="ventures" element={<Ventures />} />
             <Route path="ventures/marketing-audit" element={<MarketingAudit />} />

@@ -19,6 +19,7 @@
   ChatRequest,
   ChatApiResponse,
   CRJobSummary,
+  CRJobDetail,
 } from "./types"
 
 const BASE = import.meta.env.VITE_API_URL || "https://api.planbadmin.com"
@@ -325,6 +326,11 @@ export async function createCRJob(data: {
 export async function fetchCRJobs(): Promise<CRJobSummary[]> {
   const res = await fetch(`${BASE}/api/ventures/content-repurposing/jobs`, { headers: getHeaders() })
   return handleResponse(res)
+}
+
+export async function fetchCRJob(jobId: string): Promise<CRJobDetail> {
+  const res = await fetch(`${BASE}/api/ventures/content-repurposing/jobs/${jobId}`, { headers: getHeaders() })
+  return handleResponse<CRJobDetail>(res)
 }
 
 export async function approveCRJob(jobId: string): Promise<{ job_id: string; status: string }> {

@@ -84,10 +84,15 @@ function HealthDot({ status }: { status: string }) {
   )
 }
 
+function jobPath(job: Job) {
+  return job.venture === "content_repurposing" ? `/cr-jobs/${job.id}` : `/jobs/${job.id}`
+}
+
 function InlineJobActions({ job }: { job: Job }) {
   const retry = useRetryJob()
   const cancel = useCancelJob()
   const [done, setDone] = useState<string | null>(null)
+  const isCR = job.venture === "content_repurposing"
 
   if (done) {
     return <span className="text-xs font-label text-emerald-600">{done}</span>
@@ -96,12 +101,12 @@ function InlineJobActions({ job }: { job: Job }) {
   return (
     <div className="flex items-center gap-2">
       <Link
-        to={`/jobs/${job.id}`}
+        to={jobPath(job)}
         className="text-xs font-label font-semibold text-primary hover:underline"
       >
         View
       </Link>
-      {job.status === "failed" && (
+      {job.status === "failed" && !isCR && (
         <button
           onClick={async () => {
             await retry.mutateAsync({ id: job.id })
@@ -113,7 +118,7 @@ function InlineJobActions({ job }: { job: Job }) {
           {retry.isPending ? "…" : "Retry"}
         </button>
       )}
-      {!TERMINAL_STATUSES.has(job.status) && (
+      {!TERMINAL_STATUSES.has(job.status) && !isCR && (
         <button
           onClick={async () => {
             await cancel.mutateAsync({ id: job.id })
@@ -138,12 +143,15 @@ export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState("")
   const [page, setPage] = useState(1)
 
-  const jobsVenture = ventureFilter === "content_repurposing" ? undefined : (ventureFilter || undefined)
+  const isCRFilter  = ventureFilter === "content_repurposing"
+  const isAllFilter = ventureFilter === ""
+  // Don't pass a venture filter to the main API when showing "all" or "content_repurposing"
+  const jobsVenture = (isCRFilter || isAllFilter) ? undefined : ventureFilter
   const { data: jobsData, isLoading: jobsLoading } = useJobs({
     venture: jobsVenture,
     status: statusFilter || undefined,
-    page,
-    page_size: PAGE_SIZE,
+    page: isAllFilter ? 1 : page,
+    page_size: isAllFilter ? 50 : PAGE_SIZE,
   })
 
   const { data: crData } = useQuery({
@@ -152,7 +160,7 @@ export default function Dashboard() {
     refetchInterval: 30_000,
   })
 
-  // Review queue — always fetched separately so it isn't limited by the table's page/filter
+  // Review queue — always fetched separately (both tables)
   const { data: reviewData } = useJobs({ status: "review_pending", page_size: 50 })
 
   const activeJobs    = dash?.ventures.reduce((s, v) => s + v.in_progress + v.pending, 0) ?? 0
@@ -166,11 +174,29 @@ export default function Dashboard() {
   ]
 
   const crJobs: Job[] = (crData ?? []).map(crToJob)
-  const isCRFilter = ventureFilter === "content_repurposing"
-  const jobs: Job[] = isCRFilter ? crJobs : (jobsData?.items ?? [])
-  const totalJobs   = isCRFilter ? crJobs.length : (jobsData?.total ?? 0)
-  const totalPages  = isCRFilter ? 1 : Math.ceil(totalJobs / PAGE_SIZE)
-  const reviewQueue: Job[] = reviewData?.items ?? []
+
+  // Filter CR jobs by status when a status filter is active
+  const filteredCRJobs = statusFilter
+    ? crJobs.filter(j => j.status === statusFilter)
+    : crJobs
+
+  // Build the table job list
+  const baseJobs: Job[] = jobsData?.items ?? []
+  const jobs: Job[] = isCRFilter
+    ? filteredCRJobs
+    : isAllFilter
+      // Merge + sort by date for "all ventures"; show newest across both tables
+      ? [...baseJobs, ...filteredCRJobs].sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        ).slice(0, 50)
+      : baseJobs
+
+  const totalJobs  = isCRFilter ? filteredCRJobs.length : (jobsData?.total ?? 0)
+  const totalPages = (isCRFilter || isAllFilter) ? 1 : Math.ceil(totalJobs / PAGE_SIZE)
+
+  // Review queue: regular review_pending + CR review_pending
+  const crReviewJobs = crJobs.filter(j => j.status === "review_pending")
+  const reviewQueue: Job[] = [...(reviewData?.items ?? []), ...crReviewJobs]
 
   function resetPage() { setPage(1) }
 
@@ -233,7 +259,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <Link
-                    to={`/jobs/${job.id}`}
+                    to={jobPath(job)}
                     className="text-xs font-label font-semibold text-primary hover:underline"
                   >
                     Review →
@@ -336,7 +362,7 @@ export default function Dashboard() {
           </select>
 
           <span className="ml-auto text-xs font-label text-on-surface-variant">
-            {totalJobs} {isCRFilter ? "repurposing" : ""} jobs
+            {isAllFilter ? jobs.length : totalJobs} {isCRFilter ? "repurposing " : ""}jobs
           </span>
         </div>
 

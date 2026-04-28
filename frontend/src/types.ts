@@ -74,6 +74,39 @@ export interface CRJobSummary {
   created_at: string
 }
 
+// ── Content Repurposing Detail ────────────────────────────────────────────────
+
+export interface CRClipAsset {
+  id: number
+  clip_index: number
+  start_s: number
+  end_s: number
+  virality_score: number | null
+  hook: string | null
+  drive_clip_id: string | null
+  drive_thumbnail_id: string | null
+  title: string | null
+  platform: string | null
+  created_at: string
+}
+
+export interface CRJobDetail {
+  id: string
+  status: string
+  plan: string
+  show_name: string | null
+  episode_title: string | null
+  client_email: string | null
+  drive_folder_id: string | null
+  clip_count: number | null
+  video_duration_s: number | null
+  error_message: string | null
+  created_at: string
+  updated_at: string
+  completed_at: string | null
+  clips: CRClipAsset[]
+}
+
 // ── Finance ───────────────────────────────────────────────────────────────────
 
 export interface CostSummary {

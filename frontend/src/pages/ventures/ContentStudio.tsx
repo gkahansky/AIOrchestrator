@@ -279,7 +279,10 @@ function CROrdersList() {
 
   const retryMutation = useMutation({
     mutationFn: retryCRJob,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["crJobs"] }),
+    onSuccess: () => {
+      setExpanded(null)
+      queryClient.invalidateQueries({ queryKey: ["crJobs"] })
+    },
   })
 
   const planColor: Record<string, string> = {

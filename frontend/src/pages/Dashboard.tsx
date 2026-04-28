@@ -1,15 +1,39 @@
 import { useState } from "react"
 import { Link } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import { useDashboard } from "../hooks/useDashboard"
 import { useJobs, useRetryJob, useCancelJob } from "../hooks/useJobs"
 import { useHealth } from "../hooks/useHealth"
+import { fetchCRJobs } from "../api"
 import KpiCard from "../components/KpiCard"
 import StatusBadge from "../components/StatusBadge"
 import PhaseBar from "../components/PhaseBar"
-import type { Job } from "../types"
+import type { Job, CRJobSummary } from "../types"
 
 const TERMINAL_STATUSES = new Set(["delivered", "published", "failed", "cancelled", "rejected"])
-  const VENTURE_OPTIONS = ["", "etsy", "marketing_audit", "content_studio", "accessibility_audit"]
+const VENTURE_OPTIONS = [
+  "", "etsy", "marketing_audit", "content_studio",
+  "content_repurposing", "accessibility_audit",
+]
+
+function crToJob(j: CRJobSummary): Job {
+  return {
+    id: j.id,
+    venture: "content_repurposing" as Job["venture"],
+    status: j.status as Job["status"],
+    phase_current: null,
+    phase_total: null,
+    environment: "production",
+    input_data: { episode_title: j.episode_title, show_name: j.show_name, plan: j.plan },
+    output_data: {},
+    error_message: j.error_message,
+    celery_task_id: null,
+    created_at: j.created_at,
+    updated_at: j.created_at,
+    started_at: null,
+    completed_at: null,
+  }
+}
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
   { value: "pending", label: "Pending" },
@@ -114,11 +138,18 @@ export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState("")
   const [page, setPage] = useState(1)
 
+  const jobsVenture = ventureFilter === "content_repurposing" ? undefined : (ventureFilter || undefined)
   const { data: jobsData, isLoading: jobsLoading } = useJobs({
-    venture: ventureFilter || undefined,
+    venture: jobsVenture,
     status: statusFilter || undefined,
     page,
     page_size: PAGE_SIZE,
+  })
+
+  const { data: crData } = useQuery({
+    queryKey: ["crJobs"],
+    queryFn: fetchCRJobs,
+    refetchInterval: 30_000,
   })
 
   // Review queue — always fetched separately so it isn't limited by the table's page/filter
@@ -134,9 +165,11 @@ export default function Dashboard() {
     { label: "API Spend",         value: dashLoading ? "—" : formatCurrency(dash?.total_cost_usd_month ?? 0),    icon: "account_balance_wallet" },
   ]
 
-  const jobs: Job[] = jobsData?.items ?? []
-  const totalJobs   = jobsData?.total ?? 0
-  const totalPages  = Math.ceil(totalJobs / PAGE_SIZE)
+  const crJobs: Job[] = (crData ?? []).map(crToJob)
+  const isCRFilter = ventureFilter === "content_repurposing"
+  const jobs: Job[] = isCRFilter ? crJobs : (jobsData?.items ?? [])
+  const totalJobs   = isCRFilter ? crJobs.length : (jobsData?.total ?? 0)
+  const totalPages  = isCRFilter ? 1 : Math.ceil(totalJobs / PAGE_SIZE)
   const reviewQueue: Job[] = reviewData?.items ?? []
 
   function resetPage() { setPage(1) }
@@ -303,7 +336,7 @@ export default function Dashboard() {
           </select>
 
           <span className="ml-auto text-xs font-label text-on-surface-variant">
-            {totalJobs} jobs
+            {totalJobs} {isCRFilter ? "repurposing" : ""} jobs
           </span>
         </div>
 
@@ -322,7 +355,7 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/10">
-              {jobsLoading && !jobs.length
+              {(jobsLoading && !isCRFilter && !jobs.length)
                 ? Array(5).fill(null).map((_, i) => <SkeletonRow key={i} />)
                 : jobs.map((job) => (
                     <tr key={job.id} className="hover:bg-surface-container-low/40 transition-colors">

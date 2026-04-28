@@ -12,14 +12,14 @@ import os
 import textwrap
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 
-_THUMB_W = 1280
-_THUMB_H = 720
-_GRADIENT_HEIGHT_RATIO = 0.30   # bottom 30% of the thumbnail
-_FONT_SIZE = 56
-_PADDING = 24
+_THUMB_W = 1080
+_THUMB_H = 1920   # portrait 9:16 — matches the transcoded clip format
+_GRADIENT_HEIGHT_RATIO = 0.25   # bottom 25% of the thumbnail
+_FONT_SIZE = 80
+_PADDING = 40
 
 
 def generate_thumbnail(
@@ -69,7 +69,8 @@ def generate_thumbnail(
 
 def _pillow_thumbnail(frame_path: str, title: str, show_name: str, output_path: str) -> str:
     img = Image.open(frame_path).convert("RGB")
-    img = img.resize((_THUMB_W, _THUMB_H), Image.LANCZOS)
+    # Smart-crop to portrait 9:16 without distortion (preserves aspect ratio via centre crop)
+    img = ImageOps.fit(img, (_THUMB_W, _THUMB_H), Image.LANCZOS)
 
     draw = ImageDraw.Draw(img, "RGBA")
 
@@ -77,26 +78,26 @@ def _pillow_thumbnail(frame_path: str, title: str, show_name: str, output_path: 
     grad_h = int(_THUMB_H * _GRADIENT_HEIGHT_RATIO)
     grad_top = _THUMB_H - grad_h
     for y in range(grad_h):
-        alpha = int(200 * (y / grad_h))  # fade in from top of bar
+        alpha = int(210 * (y / grad_h))  # fade in from top of bar
         draw.rectangle([(0, grad_top + y), (_THUMB_W, grad_top + y + 1)], fill=(0, 0, 0, alpha))
 
     # Load font — try system fonts, fall back to PIL default
     font_title = _load_font(_FONT_SIZE)
-    font_show = _load_font(int(_FONT_SIZE * 0.55))
+    font_show = _load_font(int(_FONT_SIZE * 0.5))
 
     # Wrap title to fit width
-    max_chars = max(20, int(_THUMB_W / (_FONT_SIZE * 0.55)))
+    max_chars = max(15, int(_THUMB_W / (_FONT_SIZE * 0.55)))
     wrapped = textwrap.fill(title, width=max_chars)
 
     text_y = grad_top + _PADDING
     # Shadow
-    draw.text((_PADDING + 2, text_y + 2), wrapped, font=font_title, fill=(0, 0, 0, 180))
+    draw.text((_PADDING + 3, text_y + 3), wrapped, font=font_title, fill=(0, 0, 0, 180))
     # Main text
     draw.text((_PADDING, text_y), wrapped, font=font_title, fill=(255, 255, 255, 255))
 
     if show_name:
         _, _, _, text_h = draw.textbbox((0, 0), wrapped, font=font_title)
-        show_y = text_y + text_h + 8
+        show_y = text_y + text_h + 10
         draw.text((_PADDING, show_y), show_name, font=font_show, fill=(200, 200, 200, 220))
 
     img.save(output_path, "JPEG", quality=92)

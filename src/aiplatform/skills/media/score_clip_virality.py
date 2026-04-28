@@ -121,16 +121,25 @@ Return ONLY the JSON array, nothing else."""
     try:
         clips = json.loads(raw)
     except json.JSONDecodeError:
-        # Response was truncated — drop the last incomplete object and close the array
-        trimmed = re.sub(r",\s*\{[^{]*$", "", raw).rstrip(",").rstrip()
-        if not trimmed.endswith("]"):
-            trimmed += "]"
-        try:
-            clips = json.loads(trimmed)
-        except json.JSONDecodeError as exc2:
+        # Response was truncated — find the last complete JSON object boundary (last "}"),
+        # then close the array. This handles truncation at any point inside an object.
+        last_close = raw.rfind("}")
+        if last_close != -1:
+            first_open = raw.find("[")
+            if first_open != -1:
+                truncated = raw[first_open : last_close + 1] + "]"
+            else:
+                truncated = "[" + raw[: last_close + 1] + "]"
+            try:
+                clips = json.loads(truncated)
+            except json.JSONDecodeError as exc2:
+                raise RuntimeError(
+                    f"Virality scorer returned unparseable JSON: {exc2}. "
+                    f"First 300 chars: {raw[:300]}"
+                )
+        else:
             raise RuntimeError(
-                f"Virality scorer returned unparseable JSON: {exc2}. "
-                f"First 300 chars: {raw[:300]}"
+                f"Virality scorer returned no parseable JSON. First 300 chars: {raw[:300]}"
             )
 
     # Clamp durations to valid range

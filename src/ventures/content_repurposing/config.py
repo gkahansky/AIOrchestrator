@@ -95,10 +95,10 @@ VIRALITY_SCORE_THRESHOLD = float(os.getenv("CR_VIRALITY_THRESHOLD", "0.55"))
 CLIP_TARGET_FORMAT = "portrait_9_16"   # 1080×1920 — universal reel format
 
 CAPTION_STYLE = {
-    "font_size":    int(os.getenv("CR_CAPTION_FONT_SIZE", "48")),
+    "font_size":    int(os.getenv("CR_CAPTION_FONT_SIZE", "64")),    # literal pixels on 1920px video
     "font_color":   os.getenv("CR_CAPTION_FONT_COLOR", "white"),
     "border_color": os.getenv("CR_CAPTION_BORDER_COLOR", "black"),
-    "border_width": int(os.getenv("CR_CAPTION_BORDER_WIDTH", "2")),
+    "border_width": int(os.getenv("CR_CAPTION_BORDER_WIDTH", "3")),
 }
 
 # ─── Temp file dir ────────────────────────────────────────────────────────────

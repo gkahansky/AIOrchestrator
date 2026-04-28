@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libjpeg-dev \
     zlib1g-dev \
     fonts-noto \
+    ffmpeg \
     # Security scanning deps (nikto not in bookworm repos — installed via git below)
     nmap \
     perl \

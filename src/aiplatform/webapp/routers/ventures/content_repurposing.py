@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -47,6 +47,14 @@ class CRClipOut(BaseModel):
     created_at: str
 
 
+class CRChapterOut(BaseModel):
+    index: int
+    title: str
+    start_s: float
+    end_s: float
+    summary: str
+
+
 class CRJobDetail(BaseModel):
     id: str
     status: str
@@ -62,6 +70,7 @@ class CRJobDetail(BaseModel):
     updated_at: str
     completed_at: str | None
     clips: list[CRClipOut]
+    chapters: list[CRChapterOut] | None = None
 
 
 class CRJobSummary(BaseModel):
@@ -94,6 +103,18 @@ def _job_to_detail(job: CRJob) -> CRJobDetail:
         )
         for c in (job.clips or [])
     ]
+    chapters = None
+    if job.chapters_json:
+        chapters = [
+            CRChapterOut(
+                index=ch.get("index", i),
+                title=ch.get("title", f"Chapter {i+1}"),
+                start_s=float(ch.get("start_s", 0)),
+                end_s=float(ch.get("end_s", 0)),
+                summary=ch.get("summary", ""),
+            )
+            for i, ch in enumerate(job.chapters_json)
+        ]
     return CRJobDetail(
         id=str(job.id),
         status=job.status,
@@ -109,6 +130,7 @@ def _job_to_detail(job: CRJob) -> CRJobDetail:
         updated_at=job.updated_at.isoformat(),
         completed_at=job.completed_at.isoformat() if job.completed_at else None,
         clips=clips,
+        chapters=chapters,
     )
 
 
@@ -124,8 +146,9 @@ async def create_cr_job(
     client_email:   str              = Form(default=""),
     niche:          str              = Form(default="general"),
     audience:       str              = Form(default="general audience"),
-    brand_voice:    str              = Form(default=""),
-    video:          UploadFile | None = File(default=None),
+    brand_voice:       str              = Form(default=""),
+    clip_instructions: str              = Form(default=""),
+    video:             UploadFile | None = File(default=None),
     db:             Session          = Depends(get_db),
     _:              str              = Depends(require_auth),
 ) -> dict:
@@ -210,7 +233,8 @@ async def create_cr_job(
         "client_email":   client_email or "",
         "niche":          niche or "general",
         "audience":       audience or "general audience",
-        "brand_voice":    brand_voice or "",
+        "brand_voice":       brand_voice or "",
+        "clip_instructions": clip_instructions or "",
     }
 
     job = CRJob(
@@ -336,6 +360,80 @@ async def approve_cr_job(
             pass
 
     return {"job_id": job_id, "status": "delivered"}
+
+
+@router.get("/jobs/{job_id}/chapters")
+async def get_cr_job_chapters(
+    job_id: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_auth),
+) -> dict:
+    """Return generated chapters for a job (populated after transcription, before chapter_review)."""
+    try:
+        uid = uuid.UUID(job_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid job_id")
+
+    job = db.query(CRJob).filter(CRJob.id == uid).first()
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    return {"job_id": job_id, "chapters": job.chapters_json or []}
+
+
+class ChapterApproveRequest(BaseModel):
+    selected_ids: list[int] | None = None   # None or [] → use all chapters
+
+
+@router.post("/jobs/{job_id}/chapters/approve", status_code=status.HTTP_202_ACCEPTED)
+async def approve_cr_job_chapters(
+    job_id: str,
+    body: ChapterApproveRequest = Body(default=ChapterApproveRequest()),
+    db: Session = Depends(get_db),
+    _: str = Depends(require_auth),
+) -> dict:
+    """
+    Accept the admin's chapter selection and dispatch Phase 2.
+
+    body.selected_ids: list of chapter indexes to clip from.
+    Empty list or null → use all chapters (automatic virality selection on full episode).
+    Only valid when job status == 'chapter_review'.
+    """
+    try:
+        uid = uuid.UUID(job_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid job_id")
+
+    job = db.query(CRJob).filter(CRJob.id == uid).first()
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    if job.status != "chapter_review":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Job is in status '{job.status}', not 'chapter_review'.",
+        )
+
+    selected_ids = body.selected_ids if body.selected_ids else None
+
+    job.status = "pending"
+    job.selected_chapter_ids = selected_ids
+    job.error_message = None
+    db.commit()
+
+    from aiplatform.worker import run_cr_job_resume
+    order = job.input_data or {}
+    task = run_cr_job_resume.delay(str(job_id), order, selected_ids)
+
+    job.celery_task_id = task.id
+    db.commit()
+
+    return {
+        "job_id":        job_id,
+        "status":        "pending",
+        "selected_ids":  selected_ids,
+        "message":       "Phase 2 queued. Clips will be processed from selected chapters.",
+    }
 
 
 @router.post("/jobs/{job_id}/retry", status_code=status.HTTP_202_ACCEPTED)

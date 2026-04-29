@@ -30,6 +30,7 @@ function CROrderForm({ onSuccess }: { onSuccess: () => void }) {
   const [niche, setNiche] = useState("")
   const [audience, setAudience] = useState("")
   const [brandVoice, setBrandVoice] = useState("")
+  const [clipInstructions, setClipInstructions] = useState("")
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const mutation = useMutation({
@@ -62,7 +63,8 @@ function CROrderForm({ onSuccess }: { onSuccess: () => void }) {
       client_email: clientEmail,
       niche: niche || "general",
       audience: audience || "general audience",
-      brand_voice: plan === "studio" ? brandVoice : "",
+      brand_voice:       plan === "studio" ? brandVoice : "",
+      clip_instructions: clipInstructions,
     })
   }
 
@@ -249,6 +251,24 @@ function CROrderForm({ onSuccess }: { onSuccess: () => void }) {
           />
         </div>
       )}
+
+      {/* Clip instructions — optional hints for chapter selection */}
+      <div>
+        <label className="block text-xs font-label font-medium text-on-surface-variant mb-1.5 uppercase tracking-wider">
+          Clip Instructions
+          <span className="ml-1 text-on-surface-variant/60 normal-case font-normal">(optional)</span>
+        </label>
+        <textarea
+          value={clipInstructions}
+          onChange={(e) => setClipInstructions(e.target.value)}
+          placeholder="Focus on moments about X… avoid topics Y and Z… include the story at min 14…"
+          rows={2}
+          className="w-full px-4 py-2.5 text-sm font-label bg-surface-container-low rounded-xl border border-transparent focus:border-primary/40 focus:outline-none text-on-surface placeholder:text-on-surface-variant/50 transition-colors resize-none"
+        />
+        <p className="text-xs text-on-surface-variant/60 mt-1 font-label">
+          Hints for the AI — you can also select chapters interactively after transcription.
+        </p>
+      </div>
 
       {mutation.error && (
         <div className="bg-error-container text-on-error-container rounded-xl px-4 py-3 text-sm font-label">

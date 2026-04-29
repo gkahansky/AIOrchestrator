@@ -1,13 +1,14 @@
 import { useState } from "react"
 import { useParams, useNavigate, Link } from "react-router-dom"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { fetchCRJob, approveCRJob, retryCRJob } from "../api"
+import { fetchCRJob, approveCRJob, retryCRJob, approveCRJobChapters } from "../api"
 import StatusBadge from "../components/StatusBadge"
 
-// Named CR pipeline phases
+// Named CR pipeline phases (includes chapter_review gate after transcription)
 const CR_PHASES = [
   { label: "Download video",      activeStatus: "downloading"     },
   { label: "Transcribe audio",    activeStatus: "transcribing"    },
+  { label: "Chapter review",      activeStatus: "chapter_review"  },
   { label: "Score clip virality", activeStatus: "scoring"         },
   { label: "Process clips",       activeStatus: "processing"      },
   { label: "Generate text",       activeStatus: "generating_text" },
@@ -16,7 +17,7 @@ const CR_PHASES = [
 ]
 
 const PHASE_ORDER = [
-  "pending", "downloading", "transcribing", "scoring",
+  "pending", "downloading", "transcribing", "chapter_review", "scoring",
   "processing", "generating_text", "packaging", "review_pending", "delivered",
 ]
 
@@ -76,6 +77,7 @@ export default function CRJobDetail() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [actionDone, setActionDone] = useState<string | null>(null)
+  const [selectedChapterIds, setSelectedChapterIds] = useState<Set<number>>(new Set())
 
   const { data: job, isLoading, error } = useQuery({
     queryKey: ["crJob", id],
@@ -83,7 +85,9 @@ export default function CRJobDetail() {
     enabled: !!id,
     refetchInterval: (query) => {
       const s = query.state.data?.status
-      return s && ["review_pending", "delivered", "failed"].includes(s) ? false : 10_000
+      return s && ["chapter_review", "review_pending", "delivered", "failed"].includes(s)
+        ? false
+        : 10_000
     },
   })
 
@@ -100,6 +104,15 @@ export default function CRJobDetail() {
     mutationFn: () => retryCRJob(id!),
     onSuccess: () => {
       setActionDone("retried")
+      queryClient.invalidateQueries({ queryKey: ["crJob", id] })
+      queryClient.invalidateQueries({ queryKey: ["crJobs"] })
+    },
+  })
+
+  const approveChapters = useMutation({
+    mutationFn: (ids: number[] | null) => approveCRJobChapters(id!, ids),
+    onSuccess: () => {
+      setActionDone("chapters approved")
       queryClient.invalidateQueries({ queryKey: ["crJob", id] })
       queryClient.invalidateQueries({ queryKey: ["crJobs"] })
     },
@@ -126,9 +139,19 @@ export default function CRJobDetail() {
     )
   }
 
-  const isReviewPending = job.status === "review_pending"
-  const isFailed = job.status === "failed"
-  const folderUrl = driveFileUrl(job.drive_folder_id, "folder")
+  const isReviewPending  = job.status === "review_pending"
+  const isChapterReview  = job.status === "chapter_review"
+  const isFailed         = job.status === "failed"
+  const folderUrl        = driveFileUrl(job.drive_folder_id, "folder")
+  const chapters         = job.chapters ?? []
+
+  function toggleChapter(idx: number) {
+    setSelectedChapterIds(prev => {
+      const next = new Set(prev)
+      next.has(idx) ? next.delete(idx) : next.add(idx)
+      return next
+    })
+  }
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -253,6 +276,77 @@ export default function CRJobDetail() {
 
         {/* Right column */}
         <div className="md:col-span-8 space-y-4">
+          {/* Chapter review panel — shown when status=chapter_review */}
+          {isChapterReview && chapters.length > 0 && !actionDone && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl shadow-float overflow-hidden">
+              <div className="px-5 py-4 border-b border-amber-200 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px] text-amber-600">rate_review</span>
+                <h2 className="font-headline font-bold text-sm text-amber-900">Select Chapters to Clip</h2>
+                <span className="ml-auto text-xs font-label text-amber-700">
+                  {selectedChapterIds.size > 0
+                    ? `${selectedChapterIds.size} of ${chapters.length} selected`
+                    : "None selected — will use full episode"}
+                </span>
+              </div>
+              <div className="divide-y divide-amber-100">
+                {chapters.map(ch => {
+                  const isSelected = selectedChapterIds.has(ch.index)
+                  const startMin = Math.floor(ch.start_s / 60)
+                  const startSec = Math.floor(ch.start_s % 60)
+                  const endMin   = Math.floor(ch.end_s / 60)
+                  const endSec   = Math.floor(ch.end_s % 60)
+                  return (
+                    <label
+                      key={ch.index}
+                      className={`flex gap-3 px-5 py-3 cursor-pointer transition-colors ${isSelected ? "bg-amber-100" : "hover:bg-amber-50/60"}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleChapter(ch.index)}
+                        className="mt-1 accent-amber-600 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-sm font-label font-semibold text-amber-900">{ch.title}</p>
+                        <p className="text-xs font-label text-amber-700 mt-0.5">{ch.summary}</p>
+                        <p className="text-[11px] font-mono text-amber-600 mt-1">
+                          {startMin}:{String(startSec).padStart(2,"0")} – {endMin}:{String(endSec).padStart(2,"0")}
+                        </p>
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
+              <div className="px-5 py-4 bg-amber-50 border-t border-amber-200 flex flex-wrap gap-3">
+                <button
+                  onClick={() => approveChapters.mutate(selectedChapterIds.size > 0 ? Array.from(selectedChapterIds) : null)}
+                  disabled={approveChapters.isPending}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 text-white text-sm font-label font-semibold hover:bg-amber-700 transition-colors disabled:opacity-60"
+                >
+                  <span className="material-symbols-outlined text-[15px]">play_arrow</span>
+                  {approveChapters.isPending
+                    ? "Processing…"
+                    : selectedChapterIds.size > 0
+                      ? `Clip from ${selectedChapterIds.size} chapter${selectedChapterIds.size > 1 ? "s" : ""}`
+                      : "Clip from full episode"}
+                </button>
+                {selectedChapterIds.size > 0 && (
+                  <button
+                    onClick={() => setSelectedChapterIds(new Set())}
+                    className="text-xs font-label text-amber-700 hover:text-amber-900 transition-colors"
+                  >
+                    Clear selection
+                  </button>
+                )}
+              </div>
+              {approveChapters.error && (
+                <div className="px-5 py-3 bg-error-container text-on-error-container text-xs font-label">
+                  {(approveChapters.error as Error).message}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Clips table */}
           {job.clips.length > 0 && (
             <div className="bg-surface-container-lowest rounded-xl shadow-float overflow-hidden">

@@ -24,18 +24,22 @@ def transcode_video(
     target_format: str = "portrait_9_16",
     output_path: str | None = None,
     crf: int = 23,
+    crop_x: int | None = None,
 ) -> dict:
     """
     Re-encode a video clip to the target aspect ratio.
 
-    For portrait 9:16: smart-crops the centre column of landscape footage,
-    scales to 1080×1920, re-encodes as H.264/AAC.
+    For portrait 9:16: scales landscape footage to target height then crops to
+    target width.  When crop_x is provided (from detect_crop_region), the crop
+    is offset to keep detected faces in frame; otherwise the centre column is used.
 
     Args:
         clip_path:      Path to source clip (from extract_video_segment).
         target_format:  "portrait_9_16" | "landscape_16_9" | "square_1_1"
         output_path:    Where to write. Defaults to <stem>_<format>.mp4.
         crf:            H.264 quality (18 = near-lossless, 28 = small file). Default 23.
+        crop_x:         Horizontal crop offset in scaled-image coordinates.
+                        None = use default center crop.
 
     Returns:
         {"transcoded_path": str, "width": int, "height": int}
@@ -60,13 +64,15 @@ def transcode_video(
     if output_path is None:
         output_path = str(clip.parent / f"{clip.stem}_{target_format}.mp4")
 
-    # Smart crop: scale so the short edge fills the target, then crop centre
-    # For 9:16 from landscape: scale height to 1920, crop width to 1080
-    # vf pipeline: scale, then crop to exact target dimensions
-    vf = (
-        f"scale={w}:{h}:force_original_aspect_ratio=increase,"
-        f"crop={w}:{h}"
-    )
+    if crop_x is not None:
+        # Face-detected crop: scale by height, then crop at the detected x offset
+        vf = f"scale=-2:{h}:flags=lanczos,crop={w}:{h}:{crop_x}:0"
+    else:
+        # Default center crop: scale so short edge fills target, crop centre
+        vf = (
+            f"scale={w}:{h}:force_original_aspect_ratio=increase,"
+            f"crop={w}:{h}"
+        )
 
     cmd = [
         ffmpeg_bin, "-y",

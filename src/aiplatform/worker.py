@@ -1503,7 +1503,11 @@ def run_cr_job(self, job_id: str, order: dict) -> dict:
 
         result = run_repurposing_job(job_id, order)
 
-        # Mark completed
+        # Phase 1 ends at chapter_review — don't mark completed yet
+        if result.get("status") == "chapter_review":
+            return {"job_id": job_id, "status": "chapter_review", "chapter_count": result.get("chapter_count", 0)}
+
+        # Shouldn't reach here normally, but handle review_pending for backwards compat
         with SessionLocal() as db:
             job = db.query(CRJob).filter(CRJob.id == job_id).first()
             if job:
@@ -1527,6 +1531,65 @@ def run_cr_job(self, job_id: str, order: dict) -> dict:
                 job = db.query(CRJob).filter(CRJob.id == job_id).first()
                 if job:
                     job.status = "failed"
+                    job.error_message = str(exc)[:500]
+                    db.commit()
+        except Exception:
+            pass
+
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=120)
+        _slack_alert_failure("content_repurposing", job_id, exc)
+        raise
+
+
+@celery_app.task(name="cr.resume_job", bind=True, max_retries=1,
+                 soft_time_limit=3600, time_limit=3700)
+def run_cr_job_resume(self, job_id: str, order: dict, selected_chapter_ids: list | None) -> dict:
+    """
+    Phase 2: run after admin selects chapters in the chapter-review gate.
+
+    job_id:               CRJob UUID string
+    order:                Original order dict from Phase 1
+    selected_chapter_ids: List of chapter indexes to clip from, or None for all
+    """
+    try:
+        from ventures.content_repurposing.pipeline import run_repurposing_job_phase2
+        from aiplatform.database.session import SessionLocal
+        from aiplatform.database.models import CRJob
+        from datetime import datetime, timezone
+
+        with SessionLocal() as db:
+            job = db.query(CRJob).filter(CRJob.id == job_id).first()
+            if job:
+                job.celery_task_id = self.request.id
+                job.selected_chapter_ids = selected_chapter_ids
+                db.commit()
+
+        result = run_repurposing_job_phase2(job_id, order, selected_chapter_ids)
+
+        with SessionLocal() as db:
+            job = db.query(CRJob).filter(CRJob.id == job_id).first()
+            if job:
+                job.clip_count   = result.get("clip_count", 0)
+                job.completed_at = datetime.now(timezone.utc)
+                db.commit()
+
+        if result.get("status") == "review_pending":
+            _set_approval_gate(job_id, "pending")
+            _slack_alert_review_needed(
+                "content_repurposing", job_id,
+                detail=f"Plan: {order.get('plan', '')}  ·  Clips: {result.get('clip_count', 0)}",
+            )
+        return {"job_id": job_id, "status": result.get("status"), "clip_count": result.get("clip_count", 0)}
+
+    except Exception as exc:
+        try:
+            from aiplatform.database.session import SessionLocal
+            from aiplatform.database.models import CRJob
+            with SessionLocal() as db:
+                job = db.query(CRJob).filter(CRJob.id == job_id).first()
+                if job:
+                    job.status        = "failed"
                     job.error_message = str(exc)[:500]
                     db.commit()
         except Exception:

@@ -101,6 +101,9 @@ CAPTION_STYLE = {
     "border_width": int(os.getenv("CR_CAPTION_BORDER_WIDTH", "3")),
 }
 
+# "standard" = phrase-level captions | "word_pop" = TikTok 2-word kinetic chunks
+CAPTION_STYLE_TYPE = os.getenv("CR_CAPTION_STYLE", "word_pop")
+
 # ─── Temp file dir ────────────────────────────────────────────────────────────
 CR_TEMP_DIR = os.getenv("CR_TEMP_DIR", "/tmp")
 

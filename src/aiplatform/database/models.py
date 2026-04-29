@@ -716,6 +716,10 @@ class CRJob(Base):
     segments_json   = Column(JSONB, nullable=True)   # Whisper word-level segments
     video_duration_s = Column(Float, nullable=True)
 
+    # Chapter review gate (Feature 4)
+    chapters_json        = Column(JSONB, nullable=True)   # [{index, title, start_s, end_s, summary}]
+    selected_chapter_ids = Column(JSONB, nullable=True)   # [0, 2, 4] — null means all chapters
+
     # Delivery
     drive_folder_id = Column(String(255), nullable=True)
     clip_count      = Column(Integer, nullable=True)

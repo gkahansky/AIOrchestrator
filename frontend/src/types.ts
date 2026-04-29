@@ -90,6 +90,14 @@ export interface CRClipAsset {
   created_at: string
 }
 
+export interface CRChapter {
+  index: number
+  title: string
+  start_s: number
+  end_s: number
+  summary: string
+}
+
 export interface CRJobDetail {
   id: string
   status: string
@@ -105,6 +113,7 @@ export interface CRJobDetail {
   updated_at: string
   completed_at: string | null
   clips: CRClipAsset[]
+  chapters: CRChapter[] | null
 }
 
 // ── Finance ───────────────────────────────────────────────────────────────────

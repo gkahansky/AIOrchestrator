@@ -134,6 +134,59 @@ def _build_ass(
     return "".join(lines)
 
 
+def _build_word_pop_srt(srt_content: str, words_per_chunk: int = 2) -> str:
+    """
+    Split each SRT segment into small word chunks with evenly divided timing.
+    Produces the TikTok-style word-pop caption effect.
+    """
+    def _ts_to_s(ts: str) -> float:
+        h, m, s_ms = ts.strip().split(":")
+        s, ms = s_ms.split(",")
+        return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000
+
+    def _s_to_ts(s: float) -> str:
+        s = max(0.0, s)
+        h = int(s // 3600)
+        m = int((s % 3600) // 60)
+        sec = int(s % 60)
+        ms = int(round((s - int(s)) * 1000))
+        return f"{h:02d}:{m:02d}:{sec:02d},{ms:03d}"
+
+    blocks = re.split(r"\n\s*\n", srt_content.strip())
+    result: list[str] = []
+    idx = 1
+
+    for block in blocks:
+        parts = block.strip().split("\n")
+        if len(parts) < 3:
+            continue
+        ts_line = parts[1]
+        if " --> " not in ts_line:
+            continue
+        start_str, end_str = ts_line.split(" --> ", 1)
+        text = " ".join(parts[2:]).strip()
+        words = text.split()
+        if not words:
+            continue
+
+        start_s = _ts_to_s(start_str)
+        end_s = _ts_to_s(end_str)
+        duration = max(0.05, end_s - start_s)
+
+        chunks = [words[i:i + words_per_chunk] for i in range(0, len(words), words_per_chunk)]
+        chunk_dur = duration / len(chunks)
+
+        for j, chunk_words in enumerate(chunks):
+            cs = start_s + j * chunk_dur
+            ce = cs + chunk_dur
+            result.append(
+                f"{idx}\n{_s_to_ts(cs)} --> {_s_to_ts(ce)}\n{' '.join(chunk_words).upper()}\n"
+            )
+            idx += 1
+
+    return "\n".join(result)
+
+
 def burn_captions(
     clip_path: str,
     srt_content: str,
@@ -144,6 +197,7 @@ def burn_captions(
     border_width: int = 3,
     video_w: int = 1080,
     video_h: int = 1920,
+    style: str = "standard",
 ) -> dict:
     """
     Burn hardcoded captions into a video clip via an ASS file.
@@ -158,6 +212,8 @@ def burn_captions(
         border_width: Border width in pixels.
         video_w:      Video width — must match the actual clip (default 1080 for 9:16 portrait).
         video_h:      Video height — must match the actual clip (default 1920 for 9:16 portrait).
+        style:        "standard" (phrase-level captions) or "word_pop" (2-word TikTok chunks,
+                      large yellow text — overrides font_size/color/border_width).
 
     Returns:
         {"captioned_path": str}
@@ -172,6 +228,12 @@ def burn_captions(
     clip = Path(clip_path)
     if output_path is None:
         output_path = str(clip.parent / f"{clip.stem}_captioned.mp4")
+
+    if style == "word_pop":
+        srt_content = _build_word_pop_srt(srt_content, words_per_chunk=2)
+        font_size   = 90
+        font_color  = "yellow"
+        border_width = 4
 
     ass_content = _build_ass(srt_content, video_w, video_h, font_size, font_color, border_color, border_width)
 

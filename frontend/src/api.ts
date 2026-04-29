@@ -302,19 +302,21 @@ export async function createCRJob(data: {
   niche?: string
   audience?: string
   brand_voice?: string
+  clip_instructions?: string
 }): Promise<{ job_id: string; status: string; message: string }> {
   const token = localStorage.getItem("api_token") ?? "test"
   const form = new FormData()
   form.append("plan", data.plan)
   form.append("video", data.video)
-  if (data.show_name)     form.append("show_name",     data.show_name)
-  if (data.episode_title) form.append("episode_title", data.episode_title)
-  if (data.host_name)     form.append("host_name",     data.host_name)
-  if (data.guest_name)    form.append("guest_name",    data.guest_name)
-  if (data.client_email)  form.append("client_email",  data.client_email)
-  if (data.niche)         form.append("niche",         data.niche)
-  if (data.audience)      form.append("audience",      data.audience)
-  if (data.brand_voice)   form.append("brand_voice",   data.brand_voice)
+  if (data.show_name)          form.append("show_name",          data.show_name)
+  if (data.episode_title)      form.append("episode_title",      data.episode_title)
+  if (data.host_name)          form.append("host_name",          data.host_name)
+  if (data.guest_name)         form.append("guest_name",         data.guest_name)
+  if (data.client_email)       form.append("client_email",       data.client_email)
+  if (data.niche)              form.append("niche",              data.niche)
+  if (data.audience)           form.append("audience",           data.audience)
+  if (data.brand_voice)        form.append("brand_voice",        data.brand_voice)
+  if (data.clip_instructions)  form.append("clip_instructions",  data.clip_instructions)
   const res = await fetch(`${BASE}/api/ventures/content-repurposing/jobs`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },   // no Content-Type — browser sets multipart boundary
@@ -346,6 +348,21 @@ export async function retryCRJob(jobId: string): Promise<{ job_id: string; statu
     method: "POST",
     headers: getHeaders(),
   })
+  return handleResponse(res)
+}
+
+export async function approveCRJobChapters(
+  jobId: string,
+  selectedIds: number[] | null,
+): Promise<{ job_id: string; status: string; message: string }> {
+  const res = await fetch(
+    `${BASE}/api/ventures/content-repurposing/jobs/${jobId}/chapters/approve`,
+    {
+      method: "POST",
+      headers: { ...getHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ selected_ids: selectedIds }),
+    },
+  )
   return handleResponse(res)
 }
 

@@ -82,9 +82,13 @@ celery_app.conf.update(
     result_serializer="json",
     accept_content=["json"],
     task_track_started=True,
-    task_acks_late=True,           # re-queue if worker dies mid-task
-    worker_prefetch_multiplier=1,  # one task at a time per worker thread
-    result_expires=86400,          # 24 hours
+    task_acks_late=True,                # re-queue if worker dies mid-task
+    task_reject_on_worker_lost=True,    # ensure SIGKILL also re-queues (not just graceful shutdown)
+    worker_prefetch_multiplier=1,       # one task at a time per worker thread
+    result_expires=86400,               # 24 hours
+    broker_transport_options={
+        "visibility_timeout": 600,      # 10 min — re-deliver unacked tasks after deploy/crash
+    },
     beat_schedule={
         # Daily — purge SecurityAudit records and associated data older than 30 days
         "security-audit-data-retention": {
@@ -115,6 +119,12 @@ celery_app.conf.update(
         "market-research-watchdog": {
             "task": "platform.market_research_watchdog",
             "schedule": 600,             # 10 minutes
+            "options": {"expires": 300},
+        },
+        # Every 10 min — re-queue CR jobs stuck mid-pipeline (deploy or crash recovery)
+        "cr-pipeline-watchdog": {
+            "task": "platform.cr_pipeline_watchdog",
+            "schedule": 600,
             "options": {"expires": 300},
         },
         # Hourly — fetch spend from vendor APIs; auto-pause campaigns that hit 100% budget
@@ -1451,6 +1461,67 @@ def market_research_watchdog() -> dict:
         if requeued:
             _slack_alert_failure("market_research_watchdog", None,
                                  Exception(f"Requeued {len(requeued)} stuck session(s): {requeued}"))
+        return {"requeued": requeued, "count": len(requeued)}
+    finally:
+        db.close()
+
+
+_CR_IN_PROGRESS = {
+    "downloading", "transcribing", "scoring", "processing", "generating_text", "packaging",
+}
+_CR_STUCK_THRESHOLD_MINUTES = 30  # any CR job not updated in 30 min is considered stuck
+
+
+@celery_app.task(name="platform.cr_pipeline_watchdog", bind=False)
+def cr_pipeline_watchdog() -> dict:
+    """
+    Scan for Content Repurposing jobs stuck in mid-pipeline states and re-queue them.
+
+    A job is stuck if its status is in _CR_IN_PROGRESS and updated_at has not changed
+    in more than _CR_STUCK_THRESHOLD_MINUTES minutes — which happens when the worker
+    was killed mid-task (e.g. during a Railway deploy) and the task was not re-delivered
+    quickly enough. Runs every 10 minutes via Beat.
+
+    Jobs in chapter_review are intentionally paused (waiting for admin) — never re-queued.
+    """
+    from aiplatform.database.models import CRJob
+    from aiplatform.database.session import SessionLocal
+    from datetime import datetime, timezone, timedelta
+
+    db = SessionLocal()
+    try:
+        threshold = datetime.now(timezone.utc) - timedelta(minutes=_CR_STUCK_THRESHOLD_MINUTES)
+        stuck = (
+            db.query(CRJob)
+            .filter(
+                CRJob.status.in_(list(_CR_IN_PROGRESS)),
+                CRJob.updated_at < threshold,
+            )
+            .all()
+        )
+
+        requeued = []
+        for job in stuck:
+            logger.warning(
+                "cr_pipeline_watchdog: job %s stuck in '%s' since %s — requeuing",
+                job.id, job.status, job.updated_at,
+            )
+            prior_status = job.status
+            job.status = "pending"
+            job.error_message = f"Auto-requeued by watchdog (was stuck in '{prior_status}' since {job.updated_at})"
+            db.commit()
+
+            order = job.input_data or {}
+            task = run_cr_job.delay(str(job.id), order)
+            job.celery_task_id = task.id
+            db.commit()
+            requeued.append(str(job.id))
+
+        if requeued:
+            _slack_alert_failure(
+                "cr_pipeline_watchdog", None,
+                Exception(f"Requeued {len(requeued)} stuck CR job(s): {requeued}"),
+            )
         return {"requeued": requeued, "count": len(requeued)}
     finally:
         db.close()

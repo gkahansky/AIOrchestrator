@@ -351,6 +351,14 @@ export async function retryCRJob(jobId: string): Promise<{ job_id: string; statu
   return handleResponse(res)
 }
 
+export async function cancelCRJob(jobId: string): Promise<{ job_id: string; status: string }> {
+  const res = await fetch(`${BASE}/api/ventures/content-repurposing/jobs/${jobId}/cancel`, {
+    method: "POST",
+    headers: getHeaders(),
+  })
+  return handleResponse(res)
+}
+
 export async function approveCRJobChapters(
   jobId: string,
   selectedIds: number[] | null,

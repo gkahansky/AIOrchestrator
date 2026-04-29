@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { useParams, useNavigate, Link } from "react-router-dom"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { fetchCRJob, approveCRJob, retryCRJob, approveCRJobChapters } from "../api"
+import { fetchCRJob, approveCRJob, retryCRJob, cancelCRJob, approveCRJobChapters } from "../api"
 import StatusBadge from "../components/StatusBadge"
 
 // Named CR pipeline phases (includes chapter_review gate after transcription)
@@ -109,6 +109,15 @@ export default function CRJobDetail() {
     },
   })
 
+  const cancel = useMutation({
+    mutationFn: () => cancelCRJob(id!),
+    onSuccess: () => {
+      setActionDone("cancelled")
+      queryClient.invalidateQueries({ queryKey: ["crJob", id] })
+      queryClient.invalidateQueries({ queryKey: ["crJobs"] })
+    },
+  })
+
   // Pre-check chapters suggested by clip_instructions when job first reaches chapter_review
   useEffect(() => {
     if (job?.status === "chapter_review" && job.suggested_chapter_ids?.length) {
@@ -149,6 +158,11 @@ export default function CRJobDetail() {
   const isReviewPending  = job.status === "review_pending"
   const isChapterReview  = job.status === "chapter_review"
   const isFailed         = job.status === "failed"
+  const isCancelled      = job.status === "cancelled"
+  const isStuck          = ["pending", "downloading", "transcribing", "chapter_review",
+                            "scoring", "processing", "generating_text", "packaging"].includes(job.status)
+  const isRetryable      = isFailed || isCancelled || isStuck
+  const isCancellable    = !["delivered", "cancelled"].includes(job.status)
   const folderUrl        = driveFileUrl(job.drive_folder_id, "folder")
   const chapters         = job.chapters ?? []
 
@@ -446,11 +460,11 @@ export default function CRJobDetail() {
       </div>
 
       {/* Action bar */}
-      {(isReviewPending || isFailed) && !actionDone && (
+      {(isReviewPending || isRetryable || isCancellable) && !actionDone && (
         <div className="bg-surface-container-lowest rounded-xl shadow-float px-6 py-5 space-y-4">
           <h2 className="font-headline font-bold text-sm text-on-surface">Actions</h2>
-          {isReviewPending && (
-            <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
+            {isReviewPending && (
               <button
                 onClick={() => approve.mutate()}
                 disabled={approve.isPending}
@@ -459,18 +473,28 @@ export default function CRJobDetail() {
                 <span className="material-symbols-outlined text-[16px]">check_circle</span>
                 {approve.isPending ? "Approving…" : "Approve & Deliver to Client"}
               </button>
-            </div>
-          )}
-          {isFailed && (
-            <button
-              onClick={() => retry.mutate()}
-              disabled={retry.isPending}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-label font-semibold hover:opacity-90 transition-opacity disabled:opacity-60"
-            >
-              <span className="material-symbols-outlined text-[16px]">replay</span>
-              {retry.isPending ? "Retrying…" : "Retry Job"}
-            </button>
-          )}
+            )}
+            {isRetryable && (
+              <button
+                onClick={() => retry.mutate()}
+                disabled={retry.isPending}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-label font-semibold hover:opacity-90 transition-opacity disabled:opacity-60"
+              >
+                <span className="material-symbols-outlined text-[16px]">replay</span>
+                {retry.isPending ? "Retrying…" : "Retry Job"}
+              </button>
+            )}
+            {isCancellable && (
+              <button
+                onClick={() => cancel.mutate()}
+                disabled={cancel.isPending}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-error-container text-on-error-container text-sm font-label font-semibold hover:opacity-90 transition-opacity disabled:opacity-60"
+              >
+                <span className="material-symbols-outlined text-[16px]">cancel</span>
+                {cancel.isPending ? "Cancelling…" : "Cancel Job"}
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -483,9 +507,9 @@ export default function CRJobDetail() {
       )}
 
       {/* Mutation errors */}
-      {(approve.error || retry.error) && (
+      {(approve.error || retry.error || cancel.error) && (
         <div className="bg-error-container text-on-error-container rounded-xl px-4 py-3 text-sm font-label">
-          {((approve.error || retry.error) as Error).message}
+          {((approve.error || retry.error || cancel.error) as Error).message}
         </div>
       )}
     </div>

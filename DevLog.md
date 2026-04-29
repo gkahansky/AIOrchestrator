@@ -198,3 +198,8 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-29 00:20 |  | 40dcf3b | fix(build): resolve TypeScript errors blocking Cloudflare Pages build |
 | 2026-04-29 09:26 |  | 27bba98 | feat(content-repurposing): Sprint CR-2 â€” smart crop, word-pop captions, chapter review gate |
 | 2026-04-29 09:37 |  | ef1de56 | feat(content-repurposing): pre-select chapters from clip_instructions |
+| 2026-04-29 09:43 |  | 278e707 | docs: update project docs post Sprint CR-2 â€” smart crop, word-pop, chapter review gate |
+| 2026-04-29 09:47 |  | 965df13 | fix(content-repurposing): remove broken f-string in generate_chapters prompt example |
+| 2026-04-29 15:18 |  | bd0e98c | feat(content-repurposing): dynamic smart crop + YouTube-style thumbnails |
+| 2026-04-29 15:55 |  | 0acd1bd | fix(content-studio): Details link navigates to job detail page instead of inline accordion |
+| 2026-04-29 16:20 |  | c550f96 | feat(market-research): add job history panel with prompts, timing, files, and PDF link |

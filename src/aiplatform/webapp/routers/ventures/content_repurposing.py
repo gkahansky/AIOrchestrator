@@ -454,10 +454,16 @@ async def retry_cr_job(
     if not job:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
 
-    if job.status not in ("failed", "cancelled"):
+    _RETRYABLE = {
+        "failed", "cancelled",
+        # allow manual retry of stuck in-progress jobs (e.g. after a deploy interrupted them)
+        "pending", "downloading", "transcribing", "chapter_review",
+        "scoring", "processing", "generating_text", "packaging",
+    }
+    if job.status not in _RETRYABLE:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Job is in status '{job.status}'; only failed or cancelled jobs can be retried.",
+            detail=f"Job is in status '{job.status}'; cannot retry from this state.",
         )
 
     job.status = "pending"
@@ -474,3 +480,41 @@ async def retry_cr_job(
     db.commit()
 
     return {"job_id": job_id, "status": "pending", "message": "Job re-queued."}
+
+
+@router.post("/jobs/{job_id}/cancel", status_code=status.HTTP_200_OK)
+async def cancel_cr_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_auth),
+) -> dict:
+    """Cancel a job that is stuck or still queued. Sets status to cancelled."""
+    try:
+        uid = uuid.UUID(job_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid job_id")
+
+    job = db.query(CRJob).filter(CRJob.id == uid).first()
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+
+    _NOT_CANCELLABLE = {"delivered", "cancelled"}
+    if job.status in _NOT_CANCELLABLE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Job is already in status '{job.status}'; cannot cancel.",
+        )
+
+    # Revoke the Celery task if one is running (best-effort — task may have already finished)
+    if job.celery_task_id:
+        try:
+            from aiplatform.worker import celery_app
+            celery_app.control.revoke(job.celery_task_id, terminate=True, signal="SIGTERM")
+        except Exception:
+            pass  # non-fatal — DB state is the source of truth
+
+    job.status = "cancelled"
+    job.completed_at = datetime.now(timezone.utc)
+    db.commit()
+
+    return {"job_id": job_id, "status": "cancelled", "message": "Job cancelled."}

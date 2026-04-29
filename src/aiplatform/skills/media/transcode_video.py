@@ -9,7 +9,6 @@ Venture-agnostic.
 import os
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 
 
@@ -69,52 +68,60 @@ def transcode_video(
     if output_path is None:
         output_path = str(clip.parent / f"{clip.stem}_{target_format}.mp4")
 
-    cmds_file: str | None = None
-    try:
-        if crop_timeline:
-            # Dynamic crop via sendcmd: write timestamped crop_x changes to a temp file.
-            # FFmpeg sendcmd updates the crop filter's x param at each listed time.
-            fd, cmds_file = tempfile.mkstemp(suffix=".txt", prefix="crop_cmds_")
-            with os.fdopen(fd, "w") as f:
-                for t, cx in crop_timeline:
-                    f.write(f"{t} crop x {cx};\n")
-            # Initial crop_x = first timeline value so frame 0 starts correctly
-            initial_cx = crop_timeline[0][1]
-            vf = (
-                f"scale=-2:{h}:flags=lanczos,"
-                f"crop={w}:{h}:{initial_cx}:0,"
-                f"sendcmd=f='{cmds_file}'"
-            )
-        elif crop_x is not None:
-            # Static face-detected crop (legacy path)
-            vf = f"scale=-2:{h}:flags=lanczos,crop={w}:{h}:{crop_x}:0"
-        else:
-            # Default center crop
-            vf = (
-                f"scale={w}:{h}:force_original_aspect_ratio=increase,"
-                f"crop={w}:{h}"
-            )
+    if crop_timeline:
+        # Dynamic crop via FFmpeg expression: builds a step-function if(lt(t,...)) chain.
+        # This is more portable than sendcmd (which requires filter command support).
+        cx_expr = _build_crop_x_expr(crop_timeline)
+        vf = f"scale=-2:{h}:flags=lanczos,crop={w}:{h}:{cx_expr}:0"
+    elif crop_x is not None:
+        # Static face-detected crop (legacy path)
+        vf = f"scale=-2:{h}:flags=lanczos,crop={w}:{h}:{crop_x}:0"
+    else:
+        # Default center crop
+        vf = (
+            f"scale={w}:{h}:force_original_aspect_ratio=increase,"
+            f"crop={w}:{h}"
+        )
 
-        cmd = [
-            ffmpeg_bin, "-y",
-            "-i", str(clip),
-            "-vf", vf,
-            "-c:v", "libx264",
-            "-crf", str(crf),
-            "-preset", "fast",
-            "-c:a", "aac",
-            "-b:a", "128k",
-            "-movflags", "+faststart",
-            output_path,
-        ]
+    cmd = [
+        ffmpeg_bin, "-y",
+        "-i", str(clip),
+        "-vf", vf,
+        "-c:v", "libx264",
+        "-crf", str(crf),
+        "-preset", "fast",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-movflags", "+faststart",
+        output_path,
+    ]
 
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"FFmpeg transcode failed (exit {result.returncode}):\n{result.stderr[-2000:]}"
-            )
-    finally:
-        if cmds_file and os.path.exists(cmds_file):
-            os.unlink(cmds_file)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"FFmpeg transcode failed (exit {result.returncode}):\n{result.stderr[-2000:]}"
+        )
 
     return {"transcoded_path": output_path, "width": w, "height": h}
+
+
+def _build_crop_x_expr(timeline: list[tuple[float, int]]) -> str:
+    """
+    Build an FFmpeg crop x step-function expression from a crop timeline.
+
+    Produces a nested if(lt(t,T),CX,...) chain so FFmpeg evaluates the correct
+    crop_x at each frame timestamp.  Commas inside expressions are escaped as \\,
+    (FFmpeg filter graph syntax — not shell escaping; subprocess handles quoting).
+
+    Example for [(0,0),(2,100),(4,50)]:
+      if(lt(t\\,2.000)\\,0\\,if(lt(t\\,4.000)\\,100\\,50))
+    """
+    if len(timeline) == 1:
+        return str(timeline[0][1])
+    # Build right-to-left: innermost is the last crop_x value
+    expr = str(timeline[-1][1])
+    for i in range(len(timeline) - 2, -1, -1):
+        t_switch = timeline[i + 1][0]   # time at which we leave cx[i]
+        cx = timeline[i][1]
+        expr = f"if(lt(t\\,{t_switch:.3f})\\,{cx}\\,{expr})"
+    return expr

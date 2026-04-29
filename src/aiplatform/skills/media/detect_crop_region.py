@@ -144,13 +144,18 @@ def detect_crop_timeline(
         if not frame_files:
             return {"timeline": [], "method": "center", "face_count": 0}
 
-        cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-        face_cascade = cv2.CascadeClassifier(cascade_path)
+        frontal_cascade = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        )
+        profile_cascade = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_profileface.xml"
+        )
 
         # ── 2. Detect faces per frame ─────────────────────────────────────────
         raw: list[tuple[float, int | None]] = []   # (t_seconds, crop_x | None)
         src_w = src_h = None
         total_faces = 0
+        last_cx: int | None = None
 
         for idx, fp in enumerate(frame_files):
             t = idx * sample_interval_s
@@ -162,9 +167,16 @@ def detect_crop_timeline(
             if src_w is None:
                 src_w, src_h = w, h
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            faces = face_cascade.detectMultiScale(
-                gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30)
+
+            # Try frontal first; fall back to profile cascade if nothing found
+            faces = frontal_cascade.detectMultiScale(
+                gray, scaleFactor=1.1, minNeighbors=3, minSize=(30, 30)
             )
+            if len(faces) == 0:
+                faces = profile_cascade.detectMultiScale(
+                    gray, scaleFactor=1.1, minNeighbors=3, minSize=(30, 30)
+                )
+
             if len(faces) == 0:
                 raw.append((t, None))
                 continue
@@ -172,11 +184,22 @@ def detect_crop_timeline(
             total_faces += len(faces)
             scale = target_h / src_h
             scaled_w = int(src_w * scale)
-            centers_x = [(fx + fw / 2) for (fx, fy, fw, fh) in faces]
-            avg_cx = (sum(centers_x) / len(centers_x)) * scale
-            cx = int(avg_cx - target_w / 2)
-            cx = max(0, min(cx, scaled_w - target_w))
-            raw.append((t, cx))
+
+            # Pick the face whose resulting crop_x keeps the most continuity with
+            # the previous frame — this tracks a single speaker across cuts and
+            # avoids averaging two faces onto the empty background between them.
+            best_cx = None
+            best_dist = float("inf")
+            for (fx, fy, fw, fh) in faces:
+                cx_candidate = int((fx + fw / 2) * scale - target_w / 2)
+                cx_candidate = max(0, min(cx_candidate, scaled_w - target_w))
+                dist = abs(cx_candidate - last_cx) if last_cx is not None else 0
+                if best_cx is None or dist < best_dist:
+                    best_cx = cx_candidate
+                    best_dist = dist
+
+            last_cx = best_cx
+            raw.append((t, best_cx))
 
     if total_faces == 0:
         return {"timeline": [], "method": "center", "face_count": 0}

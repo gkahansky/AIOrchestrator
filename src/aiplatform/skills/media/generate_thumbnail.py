@@ -14,7 +14,6 @@ Venture-agnostic.
 """
 
 import os
-import textwrap
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
@@ -130,15 +129,13 @@ def _pillow_thumbnail(
     font_headline = _load_font(font_size)
     font_show = _load_font(_FONT_SIZE_SHOW)
 
-    # ── Wrap title to fit width ───────────────────────────────────────────────
-    max_chars = max(10, int(_THUMB_W / (font_size * 0.52)))
-    lines = textwrap.wrap(title, width=max_chars) or [title[:40]]
+    # ── Wrap title to fit within usable width (pixel-accurate) ───────────────
+    usable_w = _THUMB_W - _PADDING * 2  # stay off the edges
 
     # Measure total text block height; shrink font if needed
     for attempt in range(3):
         font_headline = _load_font(font_size)
-        max_chars = max(10, int(_THUMB_W / (font_size * 0.52)))
-        lines = textwrap.wrap(title, width=max_chars) or [title[:40]]
+        lines = _pixel_wrap(draw, title, font_headline, usable_w)
         line_h = draw.textbbox((0, 0), "Ag", font=font_headline)[3]
         text_block_h = line_h * len(lines) + 10 * (len(lines) - 1)
 
@@ -169,24 +166,22 @@ def _pillow_thumbnail(
 
     for line in lines:
         words = line.split()
-        # Measure total line width to centre it
-        line_width = sum(
-            draw.textlength(w + " ", font=font_headline) for w in words
-        )
-        x = (_THUMB_W - line_width) // 2
+        # Measure actual line pixel width for centering (no trailing space on last word)
+        line_width = sum(draw.textlength(w + " ", font=font_headline) for w in words[:-1])
+        line_width += draw.textlength(words[-1], font=font_headline) if words else 0
+        x = max(_PADDING, (_THUMB_W - line_width) // 2)
 
-        for word in words:
+        for idx, word in enumerate(words):
             colour = _ACCENT_COLOUR if word.upper() == highlight_upper else _TEXT_COLOUR
-            word_with_space = word + " "
-            # Black stroke outline
+            word_str = word + (" " if idx < len(words) - 1 else "")
             draw.text(
-                (x, text_y), word_with_space, font=font_headline,
+                (x, text_y), word_str, font=font_headline,
                 fill=(0, 0, 0, 255),
                 stroke_width=_OUTLINE_WIDTH,
                 stroke_fill=(0, 0, 0, 255),
             )
-            draw.text((x, text_y), word_with_space, font=font_headline, fill=colour)
-            x += draw.textlength(word_with_space, font=font_headline)
+            draw.text((x, text_y), word_str, font=font_headline, fill=colour)
+            x += draw.textlength(word_str, font=font_headline)
 
         _, _, _, lh = draw.textbbox((0, 0), line, font=font_headline)
         text_y += lh + 10
@@ -203,6 +198,27 @@ def _pillow_thumbnail(
 
     img.save(output_path, "JPEG", quality=92)
     return output_path
+
+
+def _pixel_wrap(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> list[str]:
+    """Wrap text so each line fits within max_width pixels (actual glyph measurement)."""
+    words = text.split()
+    lines: list[str] = []
+    current: list[str] = []
+    current_w = 0.0
+    for word in words:
+        # Measure word + space (space is free on last word of line — conservative)
+        ww = draw.textlength(word + " ", font=font)
+        if current and current_w + ww > max_width:
+            lines.append(" ".join(current))
+            current = [word]
+            current_w = ww
+        else:
+            current.append(word)
+            current_w += ww
+    if current:
+        lines.append(" ".join(current))
+    return lines or [text[:40]]
 
 
 def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:

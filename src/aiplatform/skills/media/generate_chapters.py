@@ -59,7 +59,7 @@ def generate_chapters(
         f"TRANSCRIPT (first 8000 chars):\n{transcript[:8000]}\n\n"
         "Respond with ONLY valid JSON — no markdown, no explanation:\n"
         '{"chapters": [{"index": 0, "title": "...", "start_s": 0.0, '
-        f'"end_s": 120.0, "summary": "..."}}, ...]}}}'
+        '"end_s": 120.0, "summary": "..."}]}'
     )
 
     response = client.messages.create(

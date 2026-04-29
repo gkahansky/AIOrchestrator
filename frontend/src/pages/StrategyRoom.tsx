@@ -13,12 +13,13 @@ import {
   triggerAdvisor, chatWithAdvisors,
   fetchAvailableLlms, createMarketResearchSession, uploadResearchDocs,
   fetchMarketResearchSessions, fetchMarketResearchSession, rerunResearchSession,
-  retryResearchSession, fetchSectionLibrary, fetchSectionDetail,
+  retryResearchSession, fetchSectionLibrary, fetchSectionDetail, fetchResearchHistory,
 } from "../api"
 import type {
   MarketResearchDetail, V2OptimizedPrompts,
   SectionLibraryEntry, SectionConfigEntry, SectionConfig,
   V3ResearchResults, V3SectionStatus, SectionDetail,
+  MarketResearchHistory,
 } from "../api"
 import type {
   AdvisorConfig,
@@ -1952,6 +1953,174 @@ function SectionDetailPanel({
   )
 }
 
+function HistoryPanel({ history, isLoading }: { history: MarketResearchHistory | null; isLoading: boolean }) {
+  const [expandedSection, setExpandedSection] = useState<string | null>(null)
+  const [showSystemPrompt, setShowSystemPrompt] = useState(false)
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3 animate-pulse">
+        {Array(5).fill(null).map((_, i) => (
+          <div key={i} className="h-4 bg-gray-100 rounded" style={{ width: `${70 + (i % 3) * 10}%` }} />
+        ))}
+      </div>
+    )
+  }
+  if (!history) return <p className="text-gray-400 text-sm text-center py-8">No history available.</p>
+
+  const fmtTime = (iso: string | null) =>
+    iso ? new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—"
+
+  const fmtDuration = (s: number | null) => {
+    if (s === null) return "—"
+    if (s < 60) return `${Math.round(s)}s`
+    const m = Math.floor(s / 60), sec = Math.round(s % 60)
+    return sec > 0 ? `${m}m ${sec}s` : `${m}m`
+  }
+
+  const enabledSections = history.sections.filter(s => s.enabled)
+
+  return (
+    <div className="space-y-6 text-sm">
+
+      {/* ── Timing ───────────────────────────────────────────── */}
+      <div>
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Run Details</p>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
+          <div>
+            <span className="text-gray-400 block">Created</span>
+            <span className="text-gray-800 font-medium">{fmtTime(history.created_at)}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block">Started</span>
+            <span className="text-gray-800 font-medium">{fmtTime(history.started_at)}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block">Completed</span>
+            <span className="text-gray-800 font-medium">{fmtTime(history.completed_at)}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block">Duration</span>
+            <span className="text-gray-800 font-medium">{fmtDuration(history.duration_s)}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block">Status</span>
+            <span className="text-gray-800 font-medium capitalize">{history.status}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 block">LLMs used</span>
+            <span className="text-gray-800 font-medium">{history.selected_llms.join(", ") || "—"}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Error (if any) ────────────────────────────────────── */}
+      {history.error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <p className="text-xs font-semibold text-red-600 mb-1">Error</p>
+          <p className="text-xs text-red-700 break-all font-mono">{history.error}</p>
+        </div>
+      )}
+
+      {/* ── PDF link ─────────────────────────────────────────── */}
+      {history.drive_link && (
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Output</p>
+          <a href={history.drive_link} target="_blank" rel="noopener noreferrer"
+             className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
+            <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
+            Download final PDF report
+          </a>
+        </div>
+      )}
+
+      {/* ── Research topic ────────────────────────────────────── */}
+      <div>
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Research Topic</p>
+        <p className="text-gray-800 leading-relaxed bg-gray-50 rounded-xl px-4 py-3 text-xs">{history.topic}</p>
+      </div>
+
+      {/* ── Uploaded files ────────────────────────────────────── */}
+      <div>
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+          Uploaded Files ({history.uploaded_files.length})
+        </p>
+        {history.uploaded_files.length === 0
+          ? <p className="text-gray-400 text-xs">No files uploaded.</p>
+          : (
+            <ul className="space-y-1">
+              {history.uploaded_files.map((f, i) => (
+                <li key={i} className="flex items-center gap-2 text-xs text-gray-700 bg-gray-50 rounded-lg px-3 py-2">
+                  <span className="material-symbols-outlined text-sm text-gray-400">attach_file</span>
+                  {f}
+                </li>
+              ))}
+            </ul>
+          )
+        }
+      </div>
+
+      {/* ── System prompt ─────────────────────────────────────── */}
+      {history.system_prompt && (
+        <div>
+          <button
+            onClick={() => setShowSystemPrompt(p => !p)}
+            className="flex items-center gap-2 text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 hover:text-gray-600 transition-colors"
+          >
+            <span className="material-symbols-outlined text-sm">
+              {showSystemPrompt ? "expand_less" : "expand_more"}
+            </span>
+            Cross-Module System Prompt
+          </button>
+          {showSystemPrompt && (
+            <pre className="text-xs text-gray-700 bg-gray-50 rounded-xl px-4 py-3 whitespace-pre-wrap leading-relaxed font-sans overflow-y-auto max-h-48">
+              {history.system_prompt}
+            </pre>
+          )}
+        </div>
+      )}
+
+      {/* ── Section prompts ───────────────────────────────────── */}
+      {enabledSections.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+            Section Prompts ({enabledSections.length})
+          </p>
+          <div className="space-y-2">
+            {enabledSections.map(sec => (
+              <div key={sec.id} className="border border-gray-200 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setExpandedSection(expandedSection === sec.id ? null : sec.id)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+                >
+                  <span className="text-sm font-medium text-gray-800">{sec.name}</span>
+                  <span className="material-symbols-outlined text-sm text-gray-400 shrink-0">
+                    {expandedSection === sec.id ? "expand_less" : "expand_more"}
+                  </span>
+                </button>
+                {expandedSection === sec.id && (
+                  <div className="px-4 pb-4 pt-1 border-t border-gray-100">
+                    <pre className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed font-sans overflow-y-auto max-h-64">
+                      {sec.prompt}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {enabledSections.length === 0 && !history.system_prompt && (
+        <p className="text-gray-400 text-xs text-center py-4">
+          This is a V1/V2 session — per-section prompts are not available.
+        </p>
+      )}
+    </div>
+  )
+}
+
+
 function SessionDetailDrawer({
   session,
   isLoading,
@@ -1965,7 +2134,7 @@ function SessionDetailDrawer({
   onRerun: (topic: string, prompts: Record<string, string>, selectedLlms: string[], criticLlm: string) => void
   onRetry: () => void
 }) {
-  const [tab, setTab] = useState<"report" | "sections" | "citations" | "critic" | "prompts">("report")
+  const [tab, setTab] = useState<"report" | "sections" | "citations" | "critic" | "prompts" | "history">("report")
   const [rerunMode, setRerunMode] = useState(false)
   const [editedPrompts, setEditedPrompts] = useState<Record<string, string>>({})
   const [retrying, setRetrying] = useState(false)
@@ -1973,6 +2142,13 @@ function SessionDetailDrawer({
 
   const isV3 = !!session?.section_config
   const isV2 = !isV3 && (session?.optimized_prompts as V2OptimizedPrompts | null)?.version === 2
+
+  const { data: history, isLoading: historyLoading } = useQuery<MarketResearchHistory>({
+    queryKey: ["mrHistory", session?.id],
+    queryFn: () => fetchResearchHistory(session!.id),
+    enabled: !!session?.id && tab === "history",
+    staleTime: 30_000,
+  })
 
   useEffect(() => {
     if (session?.optimized_prompts && !isV2 && !isV3) {
@@ -2038,8 +2214,8 @@ function SessionDetailDrawer({
         {/* Tabs */}
         <div className="flex border-b px-6 gap-4 shrink-0 overflow-x-auto">
           {(isV3
-            ? ["sections", "report", "citations", "critic"] as const
-            : ["report", "critic", "prompts"] as const
+            ? ["sections", "report", "citations", "critic", "history"] as const
+            : ["report", "critic", "prompts", "history"] as const
           ).map(t => (
             <button key={t} onClick={() => { setTab(t as typeof tab); setRerunMode(false) }}
               className={`py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
@@ -2049,6 +2225,7 @@ function SessionDetailDrawer({
                : t === "sections" ? "Sections"
                : t === "citations" ? "Citations"
                : t === "critic" ? "Critic Feedback"
+               : t === "history" ? "History"
                : "Optimized Prompts"}
             </button>
           ))}
@@ -2182,6 +2359,10 @@ function SessionDetailDrawer({
                 <div className="mt-4 p-3 bg-red-50 text-red-700 rounded-lg text-xs">
                   <strong>Error:</strong> {session.error}
                 </div>
+              )}
+              {/* History tab */}
+              {tab === "history" && (
+                <HistoryPanel history={history ?? null} isLoading={historyLoading} />
               )}
             </>
           )}

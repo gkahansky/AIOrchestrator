@@ -670,6 +670,30 @@ export interface MarketResearchDetail extends MarketResearchSession {
   error: string | null
 }
 
+export interface MarketResearchHistorySection {
+  id: string
+  name: string
+  enabled: boolean
+  prompt: string
+}
+
+export interface MarketResearchHistory {
+  session_id: string
+  topic: string
+  title: string | null
+  status: string
+  selected_llms: string[]
+  system_prompt: string | null
+  sections: MarketResearchHistorySection[]
+  uploaded_files: string[]
+  started_at: string | null
+  completed_at: string | null
+  duration_s: number | null
+  error: string | null
+  drive_link: string | null
+  created_at: string
+}
+
 export interface SectionDetail {
   section_id: string
   name: string
@@ -735,6 +759,11 @@ export async function fetchMarketResearchSessions(): Promise<MarketResearchSessi
 export async function fetchMarketResearchSession(id: string): Promise<MarketResearchDetail> {
   const res = await fetch(`${BASE}/api/ventures/market-research/sessions/${id}`, { headers: getHeaders() })
   return handleResponse<MarketResearchDetail>(res)
+}
+
+export async function fetchResearchHistory(id: string): Promise<MarketResearchHistory> {
+  const res = await fetch(`${BASE}/api/ventures/market-research/sessions/${id}/history`, { headers: getHeaders() })
+  return handleResponse<MarketResearchHistory>(res)
 }
 
 export async function rerunResearchSession(

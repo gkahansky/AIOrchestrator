@@ -177,14 +177,19 @@ async def upload_documents(
         raise HTTPException(status_code=404, detail="Session not found")
 
     point_ids: list[str] = list(record.rag_doc_ids or [])
+    filenames: list[str] = list(record.uploaded_filenames or [])
     ingested = []
     for f in files:
         data = await f.read()
         ids = ingest_document(f.filename or "upload", data, session_id)
         point_ids.extend(ids)
-        ingested.append({"filename": f.filename, "chunks": len(ids)})
+        fname = f.filename or "upload"
+        if fname not in filenames:
+            filenames.append(fname)
+        ingested.append({"filename": fname, "chunks": len(ids)})
 
     record.rag_doc_ids = point_ids
+    record.uploaded_filenames = filenames
     db.commit()
 
     return {"ingested": ingested, "total_chunks": len(point_ids)}
@@ -215,6 +220,81 @@ def get_session(
         raise HTTPException(status_code=404, detail="Session not found")
 
     return _to_detail(record)
+
+
+class HistorySectionEntry(BaseModel):
+    id: str
+    name: str
+    enabled: bool
+    prompt: str
+
+
+class ResearchHistory(BaseModel):
+    session_id: str
+    topic: str
+    title: str | None
+    status: str
+    selected_llms: list[str]
+    system_prompt: str | None
+    sections: list[HistorySectionEntry]
+    uploaded_files: list[str]
+    started_at: str | None
+    completed_at: str | None
+    duration_s: float | None
+    error: str | None
+    drive_link: str | None
+    created_at: str
+
+
+@router.get("/sessions/{session_id}/history")
+def get_session_history(
+    session_id: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_auth),
+) -> ResearchHistory:
+    """Return a structured history/audit snapshot for a research session."""
+    try:
+        record_id = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+
+    record = db.get(MarketResearch, record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    sc = record.section_config or {}
+    system_prompt = sc.get("system_prompt") if sc else None
+    raw_sections = sc.get("sections", []) if sc else []
+    sections = [
+        HistorySectionEntry(
+            id=s.get("id", ""),
+            name=s.get("name", ""),
+            enabled=s.get("enabled", True),
+            prompt=s.get("prompt", ""),
+        )
+        for s in raw_sections
+    ]
+
+    duration_s: float | None = None
+    if record.started_at and record.completed_at:
+        duration_s = (record.completed_at - record.started_at).total_seconds()
+
+    return ResearchHistory(
+        session_id=str(record.id),
+        topic=record.topic,
+        title=record.title,
+        status=record.status,
+        selected_llms=record.selected_llms or [],
+        system_prompt=system_prompt,
+        sections=sections,
+        uploaded_files=record.uploaded_filenames or [],
+        started_at=record.started_at.isoformat() if record.started_at else None,
+        completed_at=record.completed_at.isoformat() if record.completed_at else None,
+        duration_s=duration_s,
+        error=record.error,
+        drive_link=record.drive_link,
+        created_at=record.created_at.isoformat(),
+    )
 
 
 @router.get("/section-library")

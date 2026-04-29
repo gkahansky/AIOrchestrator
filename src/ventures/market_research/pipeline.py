@@ -753,6 +753,9 @@ def run_market_research(research_id: str, db: Session) -> None:
     critic_llm = record.critic_llm or "grok"
 
     try:
+        record.started_at = datetime.now(timezone.utc)
+        db.commit()
+
         existing_prompts = record.optimized_prompts
 
         if record.section_config:
@@ -814,11 +817,13 @@ def run_market_research(research_id: str, db: Session) -> None:
             except Exception as email_exc:
                 logger.warning("Email delivery failed (non-fatal): %s", email_exc)
 
+        record.completed_at = datetime.now(timezone.utc)
         _set_status(db, record, "delivered")
 
     except Exception as exc:
         logger.exception("run_market_research failed for %s", research_id)
         record.status = "failed"
         record.error = str(exc)
+        record.completed_at = datetime.now(timezone.utc)
         db.commit()
         raise

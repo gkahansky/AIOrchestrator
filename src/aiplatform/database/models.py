@@ -623,6 +623,11 @@ class MarketResearch(Base):
     error          = Column(Text, nullable=True)
     celery_task_id = Column(String(100), nullable=True)
 
+    # History / audit fields
+    started_at         = Column(DateTime(timezone=True), nullable=True)   # when pipeline actually began
+    completed_at       = Column(DateTime(timezone=True), nullable=True)   # when pipeline finished (success or failure)
+    uploaded_filenames = Column(JSONB, nullable=True)                     # list of original filenames from RAG uploads
+
     created_at = Column(DateTime(timezone=True), nullable=False,
                         default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), nullable=False,

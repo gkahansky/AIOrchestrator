@@ -45,12 +45,13 @@ planBadmin.com → POST /api/ventures/content-repurposing/jobs
         → score_clip_virality (Claude) → select_clips (filtered to selected chapters)
         → per clip:
               extract_video_segment (landscape raw)
-              → extract_video_frames (landscape) → detect_crop_region (OpenCV faces)
-              → transcode_video (9:16 portrait, crop_x from face detection)
+              → detect_crop_timeline (OpenCV — per-2s face tracking → timeline of crop_x values)
+              → transcode_video (9:16 portrait, sendcmd dynamic crop via FFmpeg)
               → burn_captions (word_pop style — 2-word TikTok chunks, yellow 90px)
               → add_watermark (free plan)
               → extract_video_frames (portrait) → score_thumbnail_frame (Claude Vision)
-              → generate_thumbnail (Pillow / Creatomate)
+              → generate_thumbnail_headline (Claude — 4-7 word viral headline + highlight word)
+              → generate_thumbnail (Pillow / Creatomate — YouTube-style bold multi-color text)
               → generate_clip_title → generate_video_description
               → drive_write (clip + thumbnail)
               → CRClipAsset row created
@@ -90,12 +91,13 @@ src/aiplatform/skills/media/
     generate_chapters.py        — Claude API chapter segmentation (5-10 chapters with timestamps)
     extract_video_segments.py   — FFmpeg stream-copy segment extraction
     transcode_video.py          — FFmpeg 9:16 portrait re-encode; accepts crop_x for face-aware cropping
-    detect_crop_region.py       — OpenCV Haar cascade face detection → optimal portrait crop_x
+    detect_crop_region.py       — OpenCV Haar cascade; detect_crop_region() (static, fallback) + detect_crop_timeline() (per-2s tracking → sendcmd timeline)
     burn_captions.py            — FFmpeg ASS captions; style="word_pop" splits to 2-word TikTok chunks
     add_watermark.py            — FFmpeg drawtext overlay (free plan)
     extract_video_frames.py     — FFmpeg frame grab (n frames per clip)
     score_thumbnail_frame.py    — Claude Vision best-frame selection
-    generate_thumbnail.py       — Pillow composition (portrait 1080×1920); Creatomate for Studio
+    generate_thumbnail_headline.py — NEW: Claude — 4-7 word viral headline + highlight_word for accent color
+    generate_thumbnail.py       — Pillow YouTube-style compositor (bold white/yellow text, black stroke, dynamic bar height, vignette) + Creatomate for Studio
     generate_clip_title.py      — Claude API platform-specific titles
     generate_video_description.py — Claude API platform-specific descriptions
     generate_show_notes.py      — Claude API structured show notes
@@ -121,7 +123,7 @@ alembic/versions/b3c4d5e6f7a8_cr_jobs_add_chapters.py
 | — | pending | Phase 2 dispatched after chapter approval |
 | 4 | downloading | re-download source video |
 | 5 | scoring | score_clip_virality → select_clips (filtered to selected chapters if set) |
-| 6 | processing | per-clip: landscape frames → detect_crop_region (OpenCV) → transcode (portrait, smart crop) → word-pop captions → watermark → portrait frames → thumbnail → title → description → drive_write |
+| 6 | processing | per-clip: detect_crop_timeline (per-2s OpenCV face tracking) → transcode (portrait, FFmpeg sendcmd dynamic crop) → word-pop captions → watermark → portrait frames → thumbnail headline (Claude) → YouTube-style thumbnail (Pillow) → title → description → drive_write |
 | 7 | generating_text | show_notes / captions / blog / newsletter gated by plan |
 | 8 | packaging | write transcript.txt + text_artifacts.md to Drive job folder |
 | final | review_pending | Redis approval_gate:{job_id}=pending → planBadmin review queue |
@@ -184,7 +186,8 @@ All endpoints require planBadmin JWT (`Authorization: Bearer <token>`).
 | GET | `/api/ventures/content-repurposing/jobs/{job_id}/chapters` | Chapters list for the chapter review gate |
 | POST | `/api/ventures/content-repurposing/jobs/{job_id}/chapters/approve` | Submit chapter selection → dispatch Phase 2. Body: `{"selected_ids": [0, 2]}` or `{}` for all |
 | POST | `/api/ventures/content-repurposing/jobs/{job_id}/approve` | Approve final review → status=delivered + client email |
-| POST | `/api/ventures/content-repurposing/jobs/{job_id}/retry` | Re-queue a failed job (restarts from Phase 1) |
+| POST | `/api/ventures/content-repurposing/jobs/{job_id}/retry` | Re-queue a failed or stuck job (restarts from Phase 1; accepts any in-progress status) |
+| POST | `/api/ventures/content-repurposing/jobs/{job_id}/cancel` | Cancel a job (sets status=cancelled; best-effort Celery revoke) |
 
 ---
 
@@ -214,14 +217,15 @@ All endpoints require planBadmin JWT (`Authorization: Bearer <token>`).
 - Pipeline is two-phase with a human chapter-review gate between transcription and processing. Phase 1 ends at `chapter_review`; Phase 2 is dispatched by the `/chapters/approve` endpoint.
 - All temp files go in `{CR_TEMP_DIR}/cr_{job_id}/` (Phase 1) and `cr_{job_id}_p2/` (Phase 2); both cleaned in `finally` blocks.
 - Clip output is always portrait 9:16 (1080×1920) H.264/AAC.
-- Smart crop: OpenCV Haar cascade detects faces in landscape frames before transcoding. If no faces found (or OpenCV not installed), falls back to center crop silently.
+- Dynamic smart crop: `detect_crop_timeline()` samples one frame every 2 seconds, detects faces via OpenCV Haar cascade, applies rolling median smoothing (window=3) and a 120px max per-step cap to suppress jitter. Returns a timeline of `(t, crop_x)` pairs. `transcode_video()` converts this to an FFmpeg `sendcmd` filter file so the crop x-position updates dynamically throughout the clip — tracks alternating speakers in two-person podcasts. Falls back to center crop if no faces found.
 - Word-pop captions: each Whisper segment is split into 2-word chunks with evenly divided timing; 90px yellow text. Revert to `CR_CAPTION_STYLE=standard` for phrase-level captions.
 - Clip length: 30–90 seconds (`CLIP_MIN_S` / `CLIP_MAX_S`).
 - Chapter filtering: if admin selects chapters, only virality windows overlapping selected chapter time ranges are included. If filtering yields zero clips, falls back to top overall clips.
 - If `clip_instructions` is set on order, Claude runs a lightweight matching call to pre-select relevant chapters — the admin can still override before proceeding.
 - Human review is mandatory — pipeline always ends at `review_pending`; the `/approve` endpoint sets `delivered` and sends the delivery email. Never auto-approves.
-- Thumbnails are portrait 1080×1920, composed with Pillow `ImageOps.fit` (no distortion).
+- Thumbnails are portrait 1080×1920, composed with Pillow `ImageOps.fit` (no distortion). A `generate_thumbnail_headline` Claude call precedes thumbnail generation — it returns a 4-7 word ALL-CAPS viral headline and a single `highlight_word` to render in yellow (`#FFE600`). The Pillow compositor draws bold white/yellow text with a 4px black stroke over a semi-transparent backing box; bar height is dynamic (measured via `textbbox()`; font steps down 90→80→70px to fit within 45% of frame height). A vignette darkens frame edges. Text block position (top or bottom) is chosen to avoid the face detected by Claude Vision.
 - Creatomate is Studio-only; falls back to Pillow if key absent.
+- Stuck job protection: Celery `task_reject_on_worker_lost=True` and `visibility_timeout=600s` prevent jobs from permanently sticking on worker restart/deploy. A `cr_pipeline_watchdog` Beat task runs every 10 min and re-queues any CR job stuck in an in-progress status for >30 min (`chapter_review` excluded — it is an intentional human gate).
 
 ---
 
@@ -232,12 +236,13 @@ All endpoints require planBadmin JWT (`Authorization: Bearer <token>`).
 | score_clip_virality skill | ✅ done | Claude API window scoring |
 | extract_video_segments skill | ✅ done | FFmpeg stream copy |
 | transcode_video skill | ✅ done | 9:16 portrait re-encode; crop_x param for smart crop |
-| detect_crop_region skill | ✅ done | OpenCV Haar cascade face detection → portrait crop offset |
+| detect_crop_region skill | ✅ done | Static fallback (8-frame average). `detect_crop_timeline()` added — per-2s face tracking → FFmpeg sendcmd dynamic crop |
 | burn_captions skill | ✅ done | FFmpeg ASS captions; word_pop style (2-word TikTok chunks) |
 | add_watermark skill | ✅ done | FFmpeg drawtext (free plan) |
 | extract_video_frames skill | ✅ done | FFmpeg frame grab |
 | score_thumbnail_frame skill | ✅ done | Claude Vision multimodal |
-| generate_thumbnail skill | ✅ done | Pillow portrait 1080×1920 + Creatomate fallback |
+| generate_thumbnail_headline skill | ✅ done | NEW — Claude viral headline + highlight_word for accent color |
+| generate_thumbnail skill | ✅ done | Pillow YouTube-style compositor (white/yellow bold text, black stroke, dynamic bar, vignette) + Creatomate fallback |
 | generate_chapters skill | ✅ done | Claude API chapter segmentation with timestamps |
 | generate_clip_title skill | ✅ done | Claude API, 3 variants per platform |
 | generate_video_description skill | ✅ done | Claude API, platform caps enforced |
@@ -252,7 +257,9 @@ All endpoints require planBadmin JWT (`Authorization: Bearer <token>`).
 | cr.run_job Celery task (Phase 1) | ✅ done | worker.py |
 | cr.resume_job Celery task (Phase 2) | ✅ done | worker.py |
 | FastAPI router | ✅ done | /api/ventures/content-repurposing/jobs + /chapters/approve |
-| Admin detail page (planBadmin.com) | ✅ done | CRJobDetail.tsx — phases, clips table, chapter review, approve/retry |
+| Admin detail page (planBadmin.com) | ✅ done | CRJobDetail.tsx — phases, clips table, chapter review, approve/retry/cancel buttons |
+| CR pipeline watchdog | ✅ done | Celery Beat task every 10 min — auto-requeues jobs stuck >30 min; chapter_review excluded |
+| Deploy-safe job queuing | ✅ done | task_reject_on_worker_lost=True + visibility_timeout=600s — prevents permanent sticking on deploy |
 | Customer-facing React app (app.echoforge.biz) | 🔲 planned | Clerk + Stripe auth |
 | Buffer social scheduling | 🔲 planned | Pro + Studio plan gate |
 | Creatomate Studio templates | 🔲 planned | API key + template required |

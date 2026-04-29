@@ -197,6 +197,7 @@ V3 sessions are resumed by skipping sections whose status is already `"done"` or
 | `POST` | `/api/ventures/market-research/sessions/{id}/retry` | Re-queue a failed/stuck session |
 | `POST` | `/api/ventures/market-research/sessions/{id}/rerun` | Clone session with adjusted V1 prompts |
 | `GET` | `/api/ventures/market-research/available-llms` | Which LLMs are configured |
+| `GET` | `/api/ventures/market-research/sessions/{id}/history` | Full job audit snapshot — topic, system prompt, all section prompts, filenames, start/end time, duration, errors, PDF Drive link |
 
 ---
 
@@ -210,6 +211,7 @@ V3 sessions are resumed by skipping sections whose status is already `"done"` or
 - **Sections tab** in `SessionDetailDrawer`: grid of section cards with live status badge + word count; clicking opens `SectionDetailPanel`
 - **SectionDetailPanel**: section draft (markdown rendered), Critic Round 1 / Round 2 collapsible panels showing missing items and uncited claims
 - **Citations tab**: all citations grouped by section, live-updated as sections complete
+- **History tab**: lazy-loaded (fetched only when tab is opened); shows run details grid (topic, LLMs, start/end, duration), uploaded filenames, errors, PDF link, collapsible cross-module system prompt, collapsible per-section prompts
 
 **Polling:** existing 4s polling on session detail updates section statuses in real time.
 
@@ -276,3 +278,6 @@ Same as V2 — Qdrant-backed, injected into section prompts if documents uploade
 | Email delivery | ✅ live | Includes Drive link |
 | RAG document upload | ✅ live | Qdrant; Office formats; graceful degradation |
 | Retry Now | ✅ live | V3 resumes from last completed section |
+| Job history endpoint | ✅ built | GET /sessions/{id}/history — full audit snapshot with prompts, timing, files, PDF link |
+| History tab (frontend) | ✅ built | Lazy-loaded tab in SessionDetailDrawer; collapsible system/section prompts |
+| started_at / completed_at / uploaded_filenames | ✅ built | DB columns + migration c2d3e4f5a6b7; pipeline sets timestamps on start/end/error |

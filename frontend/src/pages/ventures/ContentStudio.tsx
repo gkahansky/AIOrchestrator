@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { Link } from "react-router-dom"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { createCRJob, fetchCRJobs, retryCRJob } from "../../api"
 import StatusBadge from "../../components/StatusBadge"
@@ -289,8 +290,6 @@ function CROrderForm({ onSuccess }: { onSuccess: () => void }) {
 
 function CROrdersList() {
   const queryClient = useQueryClient()
-  const [expanded, setExpanded] = useState<string | null>(null)
-
   const { data, isLoading, error } = useQuery({
     queryKey: ["crJobs"],
     queryFn: fetchCRJobs,
@@ -300,7 +299,6 @@ function CROrdersList() {
   const retryMutation = useMutation({
     mutationFn: retryCRJob,
     onSuccess: () => {
-      setExpanded(null)
       queryClient.invalidateQueries({ queryKey: ["crJobs"] })
     },
   })
@@ -365,12 +363,12 @@ function CROrdersList() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setExpanded(expanded === job.id ? null : job.id)}
+                          <Link
+                            to={`/cr-jobs/${job.id}`}
                             className="text-xs font-label font-semibold text-primary hover:underline"
                           >
-                            {expanded === job.id ? "Hide" : "Details"}
-                          </button>
+                            Details
+                          </Link>
                           {job.status === "failed" && (
                             <button
                               onClick={() => retryMutation.mutate(job.id)}
@@ -383,40 +381,6 @@ function CROrdersList() {
                         </div>
                       </td>
                     </tr>
-                    {expanded === job.id && (
-                      <tr key={`${job.id}-detail`} className="bg-surface-container-low/30">
-                        <td colSpan={7} className="px-6 py-4">
-                          <div className="space-y-2 text-xs font-label">
-                            <div className="flex gap-2">
-                              <span className="text-on-surface-variant w-24 shrink-0">Job ID</span>
-                              <span className="font-mono text-on-surface">{job.id}</span>
-                            </div>
-                            <div className="flex gap-2">
-                              <span className="text-on-surface-variant w-24 shrink-0">Status</span>
-                              <StatusBadge status={job.status} />
-                            </div>
-                            <div className="flex gap-2">
-                              <span className="text-on-surface-variant w-24 shrink-0">Plan</span>
-                              <span className="text-on-surface capitalize">{job.plan}</span>
-                            </div>
-                            <div className="flex gap-2">
-                              <span className="text-on-surface-variant w-24 shrink-0">Episode</span>
-                              <span className="text-on-surface">{job.episode_title || "—"}</span>
-                            </div>
-                            <div className="flex gap-2">
-                              <span className="text-on-surface-variant w-24 shrink-0">Show</span>
-                              <span className="text-on-surface">{job.show_name || "—"}</span>
-                            </div>
-                            {job.error_message && (
-                              <div className="flex gap-2">
-                                <span className="text-error w-24 shrink-0">Error</span>
-                                <span className="text-error break-all">{job.error_message}</span>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
                   </>
                 ))}
             {!isLoading && jobs.length === 0 && (

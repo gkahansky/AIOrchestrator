@@ -5,9 +5,17 @@ Analyses landscape video frames to find faces and compute the optimal horizontal
 crop offset for portrait (9:16) transcoding, keeping subjects fully in frame.
 Falls back to center crop when no faces are detected or OpenCV is unavailable.
 Venture-agnostic.
+
+Two public functions:
+  detect_crop_region(frame_paths)     — one crop_x from pre-extracted frames (legacy)
+  detect_crop_timeline(video_path)    — per-2s dynamic crop_x via inline FFmpeg extraction
 """
 
+import os
+import subprocess
+import tempfile
 from pathlib import Path
+from statistics import median
 
 
 def detect_crop_region(
@@ -81,3 +89,127 @@ def detect_crop_region(
         "method": "face_detection",
         "face_count": len(face_centers_x),
     }
+
+
+def detect_crop_timeline(
+    video_path: str,
+    target_w: int = 1080,
+    target_h: int = 1920,
+    sample_interval_s: float = 2.0,
+    max_step_px: int = 120,
+) -> dict:
+    """
+    Build a per-timestamp crop_x timeline from a landscape video clip.
+
+    Extracts one frame every sample_interval_s seconds using FFmpeg, detects
+    faces in each frame, smooths the crop_x values (rolling median, window=3),
+    and caps the per-step change to max_step_px to avoid jarring jumps.
+
+    Args:
+        video_path:        Path to landscape source video.
+        target_w:          Portrait crop width (default 1080).
+        target_h:          Portrait crop height (default 1920).
+        sample_interval_s: Seconds between face-detection samples (default 2).
+        max_step_px:       Max allowed change in crop_x per step (default 120).
+
+    Returns:
+        {
+            "timeline": [(t_seconds, crop_x), ...],   # empty → use center crop
+            "method":   "face_tracking" | "center",
+            "face_count": int,
+        }
+    """
+    try:
+        import cv2
+    except ImportError:
+        return {"timeline": [], "method": "center", "face_count": 0}
+
+    ffmpeg_bin = os.getenv("FFMPEG_BINARY", "ffmpeg")
+
+    # ── 1. Extract one frame per interval into a temp dir ────────────────────
+    with tempfile.TemporaryDirectory() as tmp:
+        frame_pattern = os.path.join(tmp, "f%04d.jpg")
+        cmd = [
+            ffmpeg_bin, "-y",
+            "-i", video_path,
+            "-vf", f"fps=1/{sample_interval_s},scale=-2:720",
+            "-q:v", "4",
+            frame_pattern,
+        ]
+        result = subprocess.run(cmd, capture_output=True)
+        if result.returncode != 0:
+            return {"timeline": [], "method": "center", "face_count": 0}
+
+        frame_files = sorted(Path(tmp).glob("f*.jpg"))
+        if not frame_files:
+            return {"timeline": [], "method": "center", "face_count": 0}
+
+        cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        face_cascade = cv2.CascadeClassifier(cascade_path)
+
+        # ── 2. Detect faces per frame ─────────────────────────────────────────
+        raw: list[tuple[float, int | None]] = []   # (t_seconds, crop_x | None)
+        src_w = src_h = None
+        total_faces = 0
+
+        for idx, fp in enumerate(frame_files):
+            t = idx * sample_interval_s
+            img = cv2.imread(str(fp))
+            if img is None:
+                raw.append((t, None))
+                continue
+            h, w = img.shape[:2]
+            if src_w is None:
+                src_w, src_h = w, h
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            faces = face_cascade.detectMultiScale(
+                gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30)
+            )
+            if len(faces) == 0:
+                raw.append((t, None))
+                continue
+
+            total_faces += len(faces)
+            scale = target_h / src_h
+            scaled_w = int(src_w * scale)
+            centers_x = [(fx + fw / 2) for (fx, fy, fw, fh) in faces]
+            avg_cx = (sum(centers_x) / len(centers_x)) * scale
+            cx = int(avg_cx - target_w / 2)
+            cx = max(0, min(cx, scaled_w - target_w))
+            raw.append((t, cx))
+
+    if total_faces == 0:
+        return {"timeline": [], "method": "center", "face_count": 0}
+
+    # ── 3. Fill None gaps: carry forward last known value (or center fallback) ─
+    if src_w is None or src_h is None:
+        return {"timeline": [], "method": "center", "face_count": 0}
+
+    scale = target_h / src_h
+    scaled_w = int(src_w * scale)
+    center_x = max(0, (scaled_w - target_w) // 2)
+
+    filled: list[tuple[float, int]] = []
+    last_cx = center_x
+    for (t, cx) in raw:
+        val = cx if cx is not None else last_cx
+        filled.append((t, val))
+        last_cx = val
+
+    # ── 4. Rolling median smoothing (window = 3) ─────────────────────────────
+    smoothed: list[tuple[float, int]] = []
+    for i, (t, _) in enumerate(filled):
+        window = [filled[j][1] for j in range(max(0, i - 1), min(len(filled), i + 2))]
+        smoothed.append((t, int(median(window))))
+
+    # ── 5. Cap per-step change to avoid jarring jumps ────────────────────────
+    capped: list[tuple[float, int]] = [smoothed[0]]
+    for i in range(1, len(smoothed)):
+        t, cx = smoothed[i]
+        prev_cx = capped[-1][1]
+        delta = cx - prev_cx
+        if abs(delta) > max_step_px:
+            cx = prev_cx + (max_step_px if delta > 0 else -max_step_px)
+        capped.append((t, cx))
+
+    return {"timeline": capped, "method": "face_tracking", "face_count": total_faces}

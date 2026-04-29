@@ -44,12 +44,13 @@ from aiplatform.skills.media.generate_chapters import generate_chapters
 from aiplatform.skills.media.score_clip_virality import score_clip_virality
 from aiplatform.skills.media.extract_video_segments import extract_video_segment
 from aiplatform.skills.media.transcode_video import transcode_video
-from aiplatform.skills.media.detect_crop_region import detect_crop_region
+from aiplatform.skills.media.detect_crop_region import detect_crop_timeline
 from aiplatform.skills.media.burn_captions import burn_captions, build_srt_for_clip
 from aiplatform.skills.media.add_watermark import add_watermark
 from aiplatform.skills.media.extract_video_frames import extract_video_frames
 from aiplatform.skills.media.score_thumbnail_frame import score_thumbnail_frame
 from aiplatform.skills.media.generate_thumbnail import generate_thumbnail
+from aiplatform.skills.media.generate_thumbnail_headline import generate_thumbnail_headline
 from aiplatform.skills.media.generate_clip_title import generate_clip_title
 from aiplatform.skills.media.generate_video_description import generate_video_description
 from aiplatform.skills.media.generate_show_notes import generate_show_notes
@@ -234,21 +235,15 @@ def run_repurposing_job_phase2(
                 output_path=str(clip_dir / "raw.mp4"),
             )
 
-            # Smart crop: detect faces in landscape frames to keep speakers in frame
-            landscape_frames = extract_video_frames(
-                seg_result["clip_path"],
-                n=8,
-                output_dir=str(clip_dir / "landscape_frames"),
-            )
-            crop_info = detect_crop_region(landscape_frames["frame_paths"])
-            crop_x = crop_info["crop_x"]   # None → center crop fallback
+            # Smart crop: build per-2s face timeline to track active speaker
+            crop_info = detect_crop_timeline(seg_result["clip_path"])
 
-            # Transcode to portrait with detected crop
+            # Transcode to portrait with dynamic crop timeline
             tc_result = transcode_video(
                 seg_result["clip_path"],
                 target_format=CLIP_TARGET_FORMAT,
                 output_path=str(clip_dir / "transcoded.mp4"),
-                crop_x=crop_x,
+                crop_timeline=crop_info["timeline"] or None,
             )
 
             # Burn captions (word_pop by default — configured via CR_CAPTION_STYLE)
@@ -279,12 +274,24 @@ def run_repurposing_job_phase2(
                 transcript_chunk=chunk,
                 anthropic_api_key=api_key,
             )
+            headline_result = generate_thumbnail_headline(
+                hook=hook or f"Clip {i+1}",
+                transcript_chunk=chunk,
+                show_name=order.get("show_name", ""),
+                guest_name=order.get("guest_name", ""),
+                host_name=order.get("host_name", ""),
+                anthropic_api_key=api_key,
+                model=CLAUDE_MODEL,
+                platform=primary_platform,
+            )
             thumb_result = generate_thumbnail(
                 frame_score["best_frame"],
-                title=hook[:80] or f"Clip {i+1}",
+                title=headline_result["headline"],
                 show_name=order.get("show_name", ""),
                 plan=plan,
                 output_path=str(clip_dir / "thumbnail.jpg"),
+                highlight_word=headline_result["highlight_word"],
+                platform=primary_platform,
             )
 
             # Title + description

@@ -42,18 +42,23 @@ Service B adds components not shared with other ventures (do not move to `/platf
 
 ### Venture F — Content Repurposing: Architecture Notes
 
-Content Repurposing is the unified replacement for the original text-only Service B and the planned video Service C. The operator uploads a source video to Google Drive, then submits the Drive file ID via planBadmin. The pipeline produces portrait 9:16 short clips, burned-in captions, Pillow-composed thumbnails, and text artifacts (show notes, blog, newsletter, captions) gated by plan tier.
+Content Repurposing is the unified replacement for the original text-only Service B and the planned video Service C. The operator uploads a video file directly via planBadmin (multipart upload → Drive). The pipeline produces portrait 9:16 short clips with smart crop, word-pop burned captions, Pillow-composed thumbnails, and text artifacts (show notes, blog, newsletter, captions) gated by plan tier.
+
+**Two-phase pipeline with chapter review gate:**
+- Phase 1 (`cr.run_job`): download → transcribe (Whisper) → generate chapters (Claude) → `chapter_review` pause. If `clip_instructions` is set on the order, Claude pre-selects matching chapters automatically.
+- Admin reviews chapters in planBadmin, selects which to clip from (or proceeds with full episode).
+- Phase 2 (`cr.resume_job`): score virality → filter clips to selected chapters → per-clip OpenCV face detection → smart portrait transcode → word-pop captions → thumbnail → text artifacts → `review_pending`.
 
 It adds these components not shared with other ventures (do not move to `/platform/skills/`):
-- `ventures/content_repurposing/clip_selector.py` — virality threshold filter + overlap dedup logic
-- `ventures/content_repurposing/config.py` — unified `PLANS` dict mapping tiers to clip counts + text_outputs
-- New `CRJob` and `CRClipAsset` SQLAlchemy models (Alembic migration `a2b3c4d5e6f7`)
-- `cr.run_job` Celery task (soft_time_limit=3600 — video processing is slow)
-- FastAPI router at `/api/ventures/content-repurposing/`
+- `ventures/content_repurposing/clip_selector.py` — virality threshold filter + overlap dedup + chapter-range filtering
+- `ventures/content_repurposing/config.py` — unified `PLANS` dict; `CAPTION_STYLE_TYPE` env var
+- `CRJob` and `CRClipAsset` SQLAlchemy models (migrations `a2b3c4d5e6f7` + `b3c4d5e6f7a8`)
+- `cr.run_job` + `cr.resume_job` Celery tasks (soft_time_limit=3600 each)
+- FastAPI router at `/api/ventures/content-repurposing/` (includes `/chapters/approve` endpoint)
 
-All 11 media processing skills added in Sprint CR-1 are venture-agnostic and live in `/aiplatform/skills/media/`. A `drive_download` alias was added to `drive_read.py` for clarity.
+All media processing skills (including `detect_crop_region`, `generate_chapters`, `burn_captions` word-pop style, `transcode_video` crop_x param) are venture-agnostic and live in `/aiplatform/skills/media/`.
 
-**Key constraint:** human review is always required — pipeline always ends at `review_pending`; never auto-approves.
+**Key constraints:** human review is required at two gates — chapter selection (`chapter_review`) and final delivery approval (`review_pending`). Neither auto-approves.
 
 ### Venture D — Security Audit: Architecture Notes
 

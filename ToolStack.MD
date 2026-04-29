@@ -98,6 +98,7 @@ Complete inventory of every third-party tool, service, API, and library used acr
 | **arabic-reshaper** (`arabic-reshaper>=3.0.0`) | Arabic text shaping | Correct rendering of Arabic characters in PDFs |
 | **python-bidi** (`python-bidi>=0.4.2`) | Bidirectional text | Right-to-left text layout for Hebrew and Arabic content in reports |
 | **FFmpeg** (system binary, apt-get in Dockerfile) | Video/audio processing | Extract audio from video (Content Studio Service B); full video pipeline for Content Repurposing (Venture F): stream-copy segment extraction, 9:16 portrait transcode, subtitle burn, watermark overlay, frame grab. Installed via `apt-get install ffmpeg` in Dockerfile (nixpacks.toml is not used — Railway build uses Dockerfile). |
+| **OpenCV** (`opencv-python-headless>=4.9.0`) | Computer vision | Face detection in landscape video frames (Content Repurposing) — Haar cascade locates speakers and computes portrait crop offset so subjects stay fully in frame. Headless variant (no GUI deps) for server deployment. |
 | **python-docx** (`python-docx>=1.1.0`) | Word document parsing | Extract text from DOCX/DOC files uploaded as RAG documents in Market Research |
 | **openpyxl** (`openpyxl>=3.1.0`) | Excel spreadsheet parsing | Extract cell data from XLSX/XLS files uploaded as RAG documents in Market Research |
 | **python-pptx** (`python-pptx>=0.6.23`) | PowerPoint parsing | Extract slide text from PPTX/PPT files uploaded as RAG documents in Market Research |
@@ -213,6 +214,6 @@ No code changes required to swap — set `active: true` in `skills.json`.
 | xAI Grok | `XAI_API_KEY` (or `GROK_API_KEY` or `X_AI_API_KEY`) |
 | Market Research Drive | `DRIVE_MARKET_RESEARCH_ID` |
 | Content Studio — Service B | `REPURPOSING_PACK_HUMAN_REVIEW_ALWAYS` (default true), `REPURPOSING_PACK_VIDEO_MAX_MB` (default 500), `FFMPEG_BINARY` (default ffmpeg), `FFPROBE_BINARY` (default ffprobe) |
-| Content Repurposing (Venture F) | `DRIVE_CR_ROOT_ID`, `CR_TEMP_DIR` (default /tmp), `CR_MAX_UPLOAD_MB` (default 2000), `CR_VIRALITY_THRESHOLD` (default 0.55), `CR_CAPTION_FONT_SIZE` (default 48), `CR_CAPTION_FONT_COLOR` (default white), `CR_CAPTION_BORDER_COLOR` (default black), `CR_CAPTION_BORDER_WIDTH` (default 2), `HUMAN_REVIEW_EMAIL` |
+| Content Repurposing (Venture F) | `DRIVE_CR_ROOT_ID`, `CR_TEMP_DIR` (default /tmp), `CR_MAX_UPLOAD_MB` (default 2000), `CR_VIRALITY_THRESHOLD` (default 0.55), `CR_CAPTION_FONT_SIZE` (default 64), `CR_CAPTION_FONT_COLOR` (default white), `CR_CAPTION_BORDER_COLOR` (default black), `CR_CAPTION_BORDER_WIDTH` (default 3), `CR_CAPTION_STYLE` (default word_pop — set to standard for phrase-level captions) |
 | Creatomate | `CREATOMATE_API_KEY`, `CREATOMATE_TEMPLATE_REEL` |
 | LangSmith *(planned)* | `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT`, `LANGCHAIN_TRACING_V2` |

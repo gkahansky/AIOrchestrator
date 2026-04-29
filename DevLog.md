@@ -185,3 +185,16 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-28 09:37 |  | 9ec5bd2 | fix: add ffmpeg to Dockerfile apt-get â€” nixpacks.toml not used (Dockerfile build) |
 | 2026-04-28 10:13 |  | 9e2a5bf | feat(content-repurposing): Sprint CR-1 â€” unified media+text repurposing pipeline |
 | 2026-04-28 10:16 |  | d9d12f8 | docs: update project docs post Sprint CR-1 â€” Content Repurposing venture |
+| 2026-04-28 17:29 |  | b6a8363 | fix(content-repurposing): planBadmin review queue, Drive folder layout, CR order form, Orders white screen |
+| 2026-04-28 17:35 |  | eb3de2c | fix(migration): make a2b3c4d5e6f7 idempotent â€” IF NOT EXISTS for cr_jobs + cr_clip_assets |
+| 2026-04-28 17:46 |  | e270746 | fix(content-studio): CR-only UI, auto format detect, fix jobs list |
+| 2026-04-28 17:50 |  | f74384d | fix(content-studio): auto-extract Drive file ID from pasted share URL |
+| 2026-04-28 17:53 |  | 2dbfe14 | feat(content-repurposing): switch to direct video file upload |
+| 2026-04-28 18:06 |  | b6e0f05 | fix(content-repurposing): virality max_tokens, dashboard, job details+retry |
+| 2026-04-28 18:16 |  | e4829cf | fix(media): replace deprecated -vsync with -fps_mode in extract_video_frames |
+| 2026-04-28 18:32 |  | 1ef37a0 | fix(content-repurposing): CR jobs in dashboard, retry collapses row, ffprobe duration fix |
+| 2026-04-28 21:34 |  | f5cfe33 | fix(content-repurposing): thumbnail distortion, subtitle overflow, JSON scoring recovery |
+| 2026-04-28 21:48 |  | 0a860b7 | feat(content-repurposing): CR job detail page + dashboard review queue + routing fixes |
+| 2026-04-29 00:20 |  | 40dcf3b | fix(build): resolve TypeScript errors blocking Cloudflare Pages build |
+| 2026-04-29 09:26 |  | 27bba98 | feat(content-repurposing): Sprint CR-2 â€” smart crop, word-pop captions, chapter review gate |
+| 2026-04-29 09:37 |  | ef1de56 | feat(content-repurposing): pre-select chapters from clip_instructions |

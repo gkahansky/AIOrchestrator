@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useParams, useNavigate, Link } from "react-router-dom"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { fetchCRJob, approveCRJob, retryCRJob, approveCRJobChapters } from "../api"
@@ -108,6 +108,13 @@ export default function CRJobDetail() {
       queryClient.invalidateQueries({ queryKey: ["crJobs"] })
     },
   })
+
+  // Pre-check chapters suggested by clip_instructions when job first reaches chapter_review
+  useEffect(() => {
+    if (job?.status === "chapter_review" && job.suggested_chapter_ids?.length) {
+      setSelectedChapterIds(new Set(job.suggested_chapter_ids))
+    }
+  }, [job?.status, job?.suggested_chapter_ids])
 
   const approveChapters = useMutation({
     mutationFn: (ids: number[] | null) => approveCRJobChapters(id!, ids),
@@ -279,9 +286,14 @@ export default function CRJobDetail() {
           {/* Chapter review panel — shown when status=chapter_review */}
           {isChapterReview && chapters.length > 0 && !actionDone && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl shadow-float overflow-hidden">
-              <div className="px-5 py-4 border-b border-amber-200 flex items-center gap-2">
+              <div className="px-5 py-4 border-b border-amber-200 flex items-center gap-2 flex-wrap">
                 <span className="material-symbols-outlined text-[18px] text-amber-600">rate_review</span>
                 <h2 className="font-headline font-bold text-sm text-amber-900">Select Chapters to Clip</h2>
+                {job.suggested_chapter_ids?.length ? (
+                  <span className="text-[11px] font-label px-2 py-0.5 bg-amber-200 text-amber-800 rounded-full">
+                    AI pre-selected {job.suggested_chapter_ids.length} from your instructions
+                  </span>
+                ) : null}
                 <span className="ml-auto text-xs font-label text-amber-700">
                   {selectedChapterIds.size > 0
                     ? `${selectedChapterIds.size} of ${chapters.length} selected`

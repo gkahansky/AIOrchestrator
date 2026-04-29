@@ -71,6 +71,7 @@ class CRJobDetail(BaseModel):
     completed_at: str | None
     clips: list[CRClipOut]
     chapters: list[CRChapterOut] | None = None
+    suggested_chapter_ids: list[int] | None = None
 
 
 class CRJobSummary(BaseModel):
@@ -131,6 +132,7 @@ def _job_to_detail(job: CRJob) -> CRJobDetail:
         completed_at=job.completed_at.isoformat() if job.completed_at else None,
         clips=clips,
         chapters=chapters,
+        suggested_chapter_ids=list(job.selected_chapter_ids) if job.selected_chapter_ids else None,
     )
 
 

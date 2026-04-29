@@ -114,6 +114,15 @@ def run_repurposing_job(job_id: str, order: dict) -> dict:
         chapters = chapter_result.get("chapters", [])
         _update_chapters(job_id, chapters)
 
+        # If the order includes clip instructions, pre-select matching chapters
+        clip_instructions = order.get("clip_instructions", "")
+        if clip_instructions and chapters:
+            suggested_ids = _match_chapters_to_instructions(
+                chapters, clip_instructions, api_key, CLAUDE_MODEL
+            )
+            if suggested_ids:
+                _update_selected_chapters(job_id, suggested_ids)
+
         _set_status(job_id, "chapter_review")
 
         return {"status": "chapter_review", "chapter_count": len(chapters)}
@@ -462,6 +471,56 @@ def _update_transcript(job_id: str, transcript: str, segments: list, duration_s:
             job.transcript       = transcript
             job.segments_json    = segments
             job.video_duration_s = duration_s
+            db.commit()
+
+
+def _match_chapters_to_instructions(
+    chapters: list[dict], instructions: str, api_key: str, model: str
+) -> list[int]:
+    """
+    Ask Claude which chapter indexes best match the user's clip_instructions.
+    Returns a list of matching chapter indexes (may be empty).
+    """
+    import json as _json
+    import re as _re
+    from anthropic import Anthropic
+
+    client = Anthropic(api_key=api_key)
+    chapter_list = "\n".join(
+        f"{ch['index']}. {ch['title']} "
+        f"({int(ch['start_s'] // 60)}:{int(ch['start_s'] % 60):02d}–"
+        f"{int(ch['end_s'] // 60)}:{int(ch['end_s'] % 60):02d}): {ch.get('summary', '')}"
+        for ch in chapters
+    )
+    prompt = (
+        f'The user wants clips from these parts of the episode:\n"{instructions}"\n\n'
+        f"Available chapters:\n{chapter_list}\n\n"
+        "Which chapter indexes best match the user's request? "
+        "Respond with ONLY a JSON array of integers, e.g. [0, 2]. "
+        "If nothing matches, respond with []."
+    )
+    try:
+        response = client.messages.create(
+            model=model,
+            max_tokens=100,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = response.content[0].text.strip()
+        m = _re.search(r"\[.*?\]", raw, _re.DOTALL)
+        if m:
+            return [int(x) for x in _json.loads(m.group())]
+    except Exception:
+        pass
+    return []
+
+
+def _update_selected_chapters(job_id: str, selected_ids: list[int]) -> None:
+    from aiplatform.database.session import SessionLocal
+    from aiplatform.database.models import CRJob
+    with SessionLocal() as db:
+        job = db.query(CRJob).filter(CRJob.id == job_id).first()
+        if job:
+            job.selected_chapter_ids = selected_ids
             db.commit()
 
 

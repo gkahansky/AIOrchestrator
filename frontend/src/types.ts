@@ -114,6 +114,7 @@ export interface CRJobDetail {
   completed_at: string | null
   clips: CRClipAsset[]
   chapters: CRChapter[] | null
+  suggested_chapter_ids: number[] | null
 }
 
 // ── Finance ───────────────────────────────────────────────────────────────────

@@ -95,7 +95,7 @@ def detect_crop_timeline(
     video_path: str,
     target_w: int = 1080,
     target_h: int = 1920,
-    sample_interval_s: float = 2.0,
+    sample_interval_s: float = 1.0,
     max_step_px: int = 120,
 ) -> dict:
     """
@@ -151,17 +151,19 @@ def detect_crop_timeline(
             cv2.data.haarcascades + "haarcascade_profileface.xml"
         )
 
-        # ── 2. Detect faces per frame ─────────────────────────────────────────
+        # ── 2. Detect faces per frame; track active speaker ──────────────────
         raw: list[tuple[float, int | None]] = []   # (t_seconds, crop_x | None)
         src_w = src_h = None
         total_faces = 0
         last_cx: int | None = None
+        prev_gray = None   # previous frame for motion-based speaker detection
 
         for idx, fp in enumerate(frame_files):
             t = idx * sample_interval_s
             img = cv2.imread(str(fp))
             if img is None:
                 raw.append((t, None))
+                prev_gray = None
                 continue
             h, w = img.shape[:2]
             if src_w is None:
@@ -179,26 +181,66 @@ def detect_crop_timeline(
 
             if len(faces) == 0:
                 raw.append((t, None))
+                prev_gray = gray
                 continue
 
             total_faces += len(faces)
             scale = target_h / src_h
             scaled_w = int(src_w * scale)
 
-            # Pick the face whose resulting crop_x keeps the most continuity with
-            # the previous frame — this tracks a single speaker across cuts and
-            # avoids averaging two faces onto the empty background between them.
-            best_cx = None
-            best_dist = float("inf")
-            for (fx, fy, fw, fh) in faces:
-                cx_candidate = int((fx + fw / 2) * scale - target_w / 2)
-                cx_candidate = max(0, min(cx_candidate, scaled_w - target_w))
-                dist = abs(cx_candidate - last_cx) if last_cx is not None else 0
-                if best_cx is None or dist < best_dist:
-                    best_cx = cx_candidate
-                    best_dist = dist
+            if len(faces) == 1:
+                # Single face — straightforward
+                fx, fy, fw, fh = faces[0]
+                best_cx = int((fx + fw / 2) * scale - target_w / 2)
+                best_cx = max(0, min(best_cx, scaled_w - target_w))
+
+            elif prev_gray is not None:
+                # Multiple faces: find the active speaker via motion.
+                # The speaking side of the frame shows more pixel change
+                # (mouth movement) than the listening side.
+                # Split the frame at the midpoint and compare motion per half.
+                mid = w // 2
+                diff = cv2.absdiff(gray, prev_gray).astype(float)
+                left_motion  = float(diff[:, :mid].mean())
+                right_motion = float(diff[:, mid:].mean())
+
+                # Sort faces left-to-right
+                sorted_faces = sorted(faces, key=lambda f: f[0])
+                left_face  = sorted_faces[0]
+                right_face = sorted_faces[-1]
+
+                # Clear winner threshold: one side must have 20% more motion
+                if left_motion > right_motion * 1.2:
+                    chosen = left_face
+                elif right_motion > left_motion * 1.2:
+                    chosen = right_face
+                else:
+                    # No clear speaker — prefer continuity with previous crop
+                    chosen = min(
+                        faces,
+                        key=lambda f: abs(
+                            int((f[0] + f[2] / 2) * scale - target_w / 2) - (last_cx or scaled_w // 2)
+                        ),
+                    )
+
+                fx, fy, fw, fh = chosen
+                best_cx = int((fx + fw / 2) * scale - target_w / 2)
+                best_cx = max(0, min(best_cx, scaled_w - target_w))
+
+            else:
+                # Multiple faces, no previous frame for motion: prefer continuity
+                chosen = min(
+                    faces,
+                    key=lambda f: abs(
+                        int((f[0] + f[2] / 2) * scale - target_w / 2) - (last_cx or scaled_w // 2)
+                    ),
+                )
+                fx, fy, fw, fh = chosen
+                best_cx = int((fx + fw / 2) * scale - target_w / 2)
+                best_cx = max(0, min(best_cx, scaled_w - target_w))
 
             last_cx = best_cx
+            prev_gray = gray
             raw.append((t, best_cx))
 
     if total_faces == 0:

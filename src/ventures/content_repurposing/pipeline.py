@@ -196,6 +196,7 @@ def run_repurposing_job_phase2(
             max_clips=max_candidates,
             anthropic_api_key=api_key,
             model=CLAUDE_MODEL,
+            chapters=chapters,
         )
         all_clips = select_clips(virality_result["clips"], plan, PLANS)
 

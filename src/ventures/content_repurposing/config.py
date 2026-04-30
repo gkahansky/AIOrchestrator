@@ -89,7 +89,7 @@ SUPPORTED_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
 MAX_UPLOAD_BYTES = int(os.getenv("CR_MAX_UPLOAD_MB", "2000")) * 1024 * 1024
 
 CLIP_MIN_S = 30
-CLIP_MAX_S = 90
+CLIP_MAX_S = 120
 VIRALITY_SCORE_THRESHOLD = float(os.getenv("CR_VIRALITY_THRESHOLD", "0.55"))
 
 CLIP_TARGET_FORMAT = "portrait_9_16"   # 1080×1920 — universal reel format

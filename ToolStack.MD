@@ -10,7 +10,7 @@ Complete inventory of every third-party tool, service, API, and library used acr
 |---|---|---|
 | **Anthropic Claude API** (`anthropic>=0.40.0`) | Primary LLM for all agent intelligence | Marketing audit report generation, Etsy listing copy, podcast show notes, theme research, SEO metadata, content scoring, market research decomposer/package-merge/stitch/critic |
 | **OpenAI API** (`openai>=1.30.0`) | Audio transcription + image generation + embeddings | Whisper for podcast audio → transcript; DALL-E 3 as primary image generator; `text-embedding-3-small` for RAG embeddings in market research |
-| **Google Gemini / Generative AI** (`google-genai`, `google-generativeai`) | Image generation + multimodal + research | Gemini Imagen 3 for AI-generated wall art (pending billing approval); `gemini-2.0-flash-001` as research committee member in Market Research |
+| **Google Gemini / Generative AI** (`google-genai`, `google-generativeai`) | Image generation + multimodal + research | `imagen-4.0-generate-001` for Content Repurposing thumbnail backgrounds (9:16 portrait, per-clip AI-generated scene) + Market Research PDF charts (4:3, business quality); `gemini-2.0-flash-001` as research committee member in Market Research |
 | **xAI Grok API** (OpenAI-compatible at `https://api.x.ai/v1`) | LLM research + critic | `grok-3-mini` participates in Market Research committee and as default critic/reflection model. Key aliases: `XAI_API_KEY`, `GROK_API_KEY`, `X_AI_API_KEY` |
 
 ---
@@ -214,6 +214,6 @@ No code changes required to swap — set `active: true` in `skills.json`.
 | xAI Grok | `XAI_API_KEY` (or `GROK_API_KEY` or `X_AI_API_KEY`) |
 | Market Research Drive | `DRIVE_MARKET_RESEARCH_ID` |
 | Content Studio — Service B | `REPURPOSING_PACK_HUMAN_REVIEW_ALWAYS` (default true), `REPURPOSING_PACK_VIDEO_MAX_MB` (default 500), `FFMPEG_BINARY` (default ffmpeg), `FFPROBE_BINARY` (default ffprobe) |
-| Content Repurposing (Venture F) | `DRIVE_CR_ROOT_ID`, `CR_TEMP_DIR` (default /tmp), `CR_MAX_UPLOAD_MB` (default 2000), `CR_VIRALITY_THRESHOLD` (default 0.55), `CR_CAPTION_FONT_SIZE` (default 64), `CR_CAPTION_FONT_COLOR` (default white), `CR_CAPTION_BORDER_COLOR` (default black), `CR_CAPTION_BORDER_WIDTH` (default 3), `CR_CAPTION_STYLE` (default word_pop — set to standard for phrase-level captions) |
+| Content Repurposing (Venture F) | `DRIVE_CR_ROOT_ID`, `CR_TEMP_DIR` (default /tmp), `CR_MAX_UPLOAD_MB` (default 2000), `CR_VIRALITY_THRESHOLD` (default 0.55), `CR_CAPTION_FONT_SIZE` (default 64), `CR_CAPTION_FONT_COLOR` (default white), `CR_CAPTION_BORDER_COLOR` (default black), `CR_CAPTION_BORDER_WIDTH` (default 3), `CR_CAPTION_STYLE` (default word_pop), `GOOGLE_AI_API_KEY` (Gemini Imagen thumbnail backgrounds — falls back to Pillow), `FFPROBE_BINARY` (default ffprobe — for caption sync via actual_start_s) |
 | Creatomate | `CREATOMATE_API_KEY`, `CREATOMATE_TEMPLATE_REEL` |
 | LangSmith *(planned)* | `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT`, `LANGCHAIN_TRACING_V2` |

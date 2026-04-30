@@ -256,6 +256,9 @@ Same as V2 — Qdrant-backed, injected into section prompts if documents uploade
 - V3 has no `reflecting` status — the per-section critic replaces the final-pass critic
 - The citations appendix is built from `[Source: ...]` regex matches — authors are instructed to use this exact format in all section prompts
 - PDF generation reads `final_report` which equals `merged_report` for V3 (same concatenated output)
+- **Styled tables:** `CROSS_MODULE_SYSTEM_PROMPT` instructs all LLMs to use Markdown table syntax (`| col | col |` with separator row). `_build_pdf()` uses `render_markdown.py` to convert Markdown tables to styled HTML `<table>` elements (blue `#1e3a5f` header, alternating rows, `break-inside: avoid`) — no ASCII art reaches the PDF.
+- **Visual content:** LLMs may embed `[SCREENSHOT: url | caption]` or `[GENERATE IMAGE: description | caption]` markers. At PDF build time, `_build_pdf()` scans for markers, captures each (Playwright screenshot or Gemini Imagen chart), base64-encodes as data URIs, and passes to `render_markdown.py` for `<figure>` embedding. Markers with failed captures are silently dropped.
+- `render_markdown.py` and `capture_visual.py` are venture-agnostic platform skills — they live in `/aiplatform/skills/media/` and are not Market Research-specific.
 
 ---
 
@@ -274,6 +277,8 @@ Same as V2 — Qdrant-backed, injected into section prompts if documents uploade
 | Section-level status UI | ✅ built | Cards with live status badges; word count; click to open SectionDetailPanel |
 | Citations tab | ✅ built | All citations grouped by section in drawer |
 | PDF generation | ✅ live | Playwright HTML→PDF |
+| Styled HTML tables in PDF | ✅ live | render_markdown.py converts Markdown tables to styled HTML; LLMs instructed to use Markdown table syntax |
+| Visual content in PDF | ✅ live | capture_visual.py (Playwright screenshots + Gemini Imagen charts); markers resolved to base64 data URIs at PDF build time |
 | Drive upload | ✅ live | `DRIVE_MARKET_RESEARCH_ID` folder |
 | Email delivery | ✅ live | Includes Drive link |
 | RAG document upload | ✅ live | Qdrant; Office formats; graceful degradation |

@@ -42,16 +42,16 @@ planBadmin.com → POST /api/ventures/content-repurposing/jobs
         ↓ (admin selects chapters or proceeds with all — planBadmin chapter review UI)
     → cr.resume_job Celery task (Phase 2):
         → re-download video from Drive
-        → score_clip_virality (Claude) → select_clips (filtered to selected chapters)
+        → score_clip_virality (Claude — Whisper-boundary snapped, 30–120s variable length) → select_clips
         → per clip:
-              extract_video_segment (landscape raw)
-              → detect_crop_timeline (OpenCV — per-2s face tracking → timeline of crop_x values)
-              → transcode_video (9:16 portrait, sendcmd dynamic crop via FFmpeg)
-              → burn_captions (word_pop style — 2-word TikTok chunks, yellow 90px)
+              extract_video_segment (landscape raw; returns actual_start_s via FFprobe)
+              → detect_crop_timeline (OpenCV — 1s samples → active speaker regions → stable crop_x per region)
+              → transcode_video (9:16 portrait, FFmpeg expression-based instant-cut crop)
+              → burn_captions (word_pop — actual_start_s used for accurate caption sync)
               → add_watermark (free plan)
               → extract_video_frames (portrait) → score_thumbnail_frame (Claude Vision)
-              → generate_thumbnail_headline (Claude — 4-7 word viral headline + highlight word)
-              → generate_thumbnail (Pillow / Creatomate — YouTube-style bold multi-color text)
+              → generate_thumbnail_headline (Claude — headline + highlight_word + bg_prompt)
+              → generate_thumbnail (Gemini Imagen AI background + video frame composite / Pillow fallback)
               → generate_clip_title → generate_video_description
               → drive_write (clip + thumbnail)
               → CRClipAsset row created
@@ -70,8 +70,10 @@ planBadmin.com → POST /api/ventures/content-repurposing/jobs
 | OpenAI Whisper | Transcription | All plans |
 | Claude API | Chapter generation, virality scoring, chapter-instruction matching, clip titles, descriptions, show notes, blog, newsletter | All plans |
 | Claude Vision | Thumbnail frame selection (base64 JPEG multimodal) | All plans |
-| OpenCV (`opencv-python-headless`) | Face detection in landscape frames for smart portrait crop | All plans |
-| Pillow | Thumbnail composition (gradient bar + title text) | Free / Starter / Pro |
+| OpenCV (`opencv-python-headless`) | Face detection; active speaker detection via frame differencing | All plans |
+| Pillow | Thumbnail fallback compositor (bold multi-color text, vignette) | All plans |
+| Gemini Imagen (`google-genai`) | AI-generated 9:16 background composited with real video frame | All plans (requires `GOOGLE_AI_API_KEY`) |
+| ffprobe | Probes actual first packet PTS of stream-copied segments for caption sync | All plans |
 | Creatomate API | Branded clip templates | Studio only |
 | Buffer API | Social post scheduling | Pro + Studio (planned) |
 | Google Drive | Output storage — clips, thumbnails, text docs | All plans |
@@ -89,15 +91,15 @@ src/ventures/content_repurposing/
 src/aiplatform/skills/media/
     score_clip_virality.py      — Claude API virality window scoring
     generate_chapters.py        — Claude API chapter segmentation (5-10 chapters with timestamps)
-    extract_video_segments.py   — FFmpeg stream-copy segment extraction
-    transcode_video.py          — FFmpeg 9:16 portrait re-encode; accepts crop_x for face-aware cropping
-    detect_crop_region.py       — OpenCV Haar cascade; detect_crop_region() (static, fallback) + detect_crop_timeline() (per-2s tracking → sendcmd timeline)
-    burn_captions.py            — FFmpeg ASS captions; style="word_pop" splits to 2-word TikTok chunks
+    extract_video_segments.py   — FFmpeg stream-copy segment extraction; FFprobe actual_start_s for caption sync
+    transcode_video.py          — FFmpeg 9:16 portrait re-encode; expression-based dynamic crop (instant-cut regions)
+    detect_crop_region.py       — OpenCV Haar + profile cascade; detect_crop_timeline() → stable speaker regions (300px threshold, ≥2s) with active speaker selection via frame differencing
+    burn_captions.py            — FFmpeg ASS captions; style="word_pop" splits to 2-word TikTok chunks; uses actual_start_s for accurate sync
     add_watermark.py            — FFmpeg drawtext overlay (free plan)
     extract_video_frames.py     — FFmpeg frame grab (n frames per clip)
     score_thumbnail_frame.py    — Claude Vision best-frame selection
-    generate_thumbnail_headline.py — NEW: Claude — 4-7 word viral headline + highlight_word for accent color
-    generate_thumbnail.py       — Pillow YouTube-style compositor (bold white/yellow text, black stroke, dynamic bar height, vignette) + Creatomate for Studio
+    generate_thumbnail_headline.py — Claude — 4-7 word viral headline + highlight_word + per-clip bg_prompt for Gemini Imagen
+    generate_thumbnail.py       — Gemini Imagen AI background composite (priority) / Pillow fallback; highlight_word in yellow; bg_prompt for unique per-clip visuals
     generate_clip_title.py      — Claude API platform-specific titles
     generate_video_description.py — Claude API platform-specific descriptions
     generate_show_notes.py      — Claude API structured show notes
@@ -123,7 +125,7 @@ alembic/versions/b3c4d5e6f7a8_cr_jobs_add_chapters.py
 | — | pending | Phase 2 dispatched after chapter approval |
 | 4 | downloading | re-download source video |
 | 5 | scoring | score_clip_virality → select_clips (filtered to selected chapters if set) |
-| 6 | processing | per-clip: detect_crop_timeline (per-2s OpenCV face tracking) → transcode (portrait, FFmpeg sendcmd dynamic crop) → word-pop captions → watermark → portrait frames → thumbnail headline (Claude) → YouTube-style thumbnail (Pillow) → title → description → drive_write |
+| 6 | processing | per-clip: detect_crop_timeline (1s samples → stable speaker regions) → transcode (portrait, FFmpeg expression crop) → word-pop captions (actual_start_s synced) → watermark → portrait frames → thumbnail headline + bg_prompt (Claude) → AI thumbnail (Gemini Imagen composite / Pillow fallback) → title → description → drive_write |
 | 7 | generating_text | show_notes / captions / blog / newsletter gated by plan |
 | 8 | packaging | write transcript.txt + text_artifacts.md to Drive job folder |
 | final | review_pending | Redis approval_gate:{job_id}=pending → planBadmin review queue |
@@ -207,8 +209,10 @@ All endpoints require planBadmin JWT (`Authorization: Bearer <token>`).
 | `CREATOMATE_API_KEY` | — | Studio plan — branded template rendering |
 | `CREATOMATE_TEMPLATE_REEL` | — | Creatomate template ID for branded clips |
 | `BUFFER_ACCESS_TOKEN` | — | Pro + Studio — social scheduling (planned) |
-| `ANTHROPIC_API_KEY` | — | Required — chapter gen, virality scoring, titles, descriptions, text artifacts |
+| `ANTHROPIC_API_KEY` | — | Required — chapter gen, virality scoring, thumbnail headline, titles, descriptions, text artifacts |
 | `OPENAI_API_KEY` | — | Required — Whisper transcription |
+| `GOOGLE_AI_API_KEY` | — | Optional — Gemini Imagen thumbnail backgrounds; falls back to Pillow if absent |
+| `FFPROBE_BINARY` | `ffprobe` | ffprobe path override; used to detect actual clip start for caption sync |
 
 ---
 
@@ -217,14 +221,15 @@ All endpoints require planBadmin JWT (`Authorization: Bearer <token>`).
 - Pipeline is two-phase with a human chapter-review gate between transcription and processing. Phase 1 ends at `chapter_review`; Phase 2 is dispatched by the `/chapters/approve` endpoint.
 - All temp files go in `{CR_TEMP_DIR}/cr_{job_id}/` (Phase 1) and `cr_{job_id}_p2/` (Phase 2); both cleaned in `finally` blocks.
 - Clip output is always portrait 9:16 (1080×1920) H.264/AAC.
-- Dynamic smart crop: `detect_crop_timeline()` samples one frame every 2 seconds, detects faces via OpenCV Haar cascade, applies rolling median smoothing (window=3) and a 120px max per-step cap to suppress jitter. Returns a timeline of `(t, crop_x)` pairs. `transcode_video()` converts this to an FFmpeg `sendcmd` filter file so the crop x-position updates dynamically throughout the clip — tracks alternating speakers in two-person podcasts. Falls back to center crop if no faces found.
+- Dynamic smart crop: `detect_crop_timeline()` samples 1 frame/second, runs frontal + profile Haar cascade face detection, and collapses results into stable speaker *regions* (crop_x shifts ≥300px sustained ≥2s = new region). Active speaker is selected via frame differencing when two faces are visible — the half of the frame with more pixel motion (mouth movement) wins. Returns one fixed `crop_x` per region. `transcode_video()` builds an FFmpeg `if(lt(t,...))` expression that produces instant cuts between regions. Compressed by `_compress_timeline()` (50px threshold) before expression build to prevent parser overflow on long clips. Falls back to center crop if no faces found.
+- Caption sync: `extract_video_segment()` uses fast input-side `-ss` (keyframe seek). After extraction, FFprobe reads the actual first packet PTS to get the real clip start (`actual_start_s`). `build_srt_for_clip()` uses `actual_start_s` (not the requested `start_s`) to zero caption timestamps — prevents the 0-5s early-caption offset caused by keyframe snapping.
 - Word-pop captions: each Whisper segment is split into 2-word chunks with evenly divided timing; 90px yellow text. Revert to `CR_CAPTION_STYLE=standard` for phrase-level captions.
-- Clip length: 30–90 seconds (`CLIP_MIN_S` / `CLIP_MAX_S`).
+- Clip length: 30–120 seconds (`CLIP_MIN_S` / `CLIP_MAX_S`). Claude determines the context-appropriate length; `score_clip_virality` snaps start/end to nearest Whisper segment boundary (±4s tolerance).
 - Chapter filtering: if admin selects chapters, only virality windows overlapping selected chapter time ranges are included. If filtering yields zero clips, falls back to top overall clips.
 - If `clip_instructions` is set on order, Claude runs a lightweight matching call to pre-select relevant chapters — the admin can still override before proceeding.
 - Human review is mandatory — pipeline always ends at `review_pending`; the `/approve` endpoint sets `delivered` and sends the delivery email. Never auto-approves.
-- Thumbnails are portrait 1080×1920, composed with Pillow `ImageOps.fit` (no distortion). A `generate_thumbnail_headline` Claude call precedes thumbnail generation — it returns a 4-7 word ALL-CAPS viral headline and a single `highlight_word` to render in yellow (`#FFE600`). The Pillow compositor draws bold white/yellow text with a 4px black stroke over a semi-transparent backing box; bar height is dynamic (measured via `textbbox()`; font steps down 90→80→70px to fit within 45% of frame height). A vignette darkens frame edges. Text block position (top or bottom) is chosen to avoid the face detected by Claude Vision.
-- Creatomate is Studio-only; falls back to Pillow if key absent.
+- Thumbnails are portrait 1080×1920. `generate_thumbnail_headline` (Claude) is called first — returns a 4-7 word ALL-CAPS headline, a single `highlight_word` (rendered in yellow `#FFE600`), and a 40-60 word `bg_prompt` unique to each clip's topic. When `GOOGLE_AI_API_KEY` is set, `generate_thumbnail` uses Gemini Imagen to generate a 9:16 cinematic background from `bg_prompt`, then composites the real video frame (top 70%, with soft fade 55%→70%) on top. Pillow draws the bold text overlay with 4px black stroke and vignette. Falls back to Pillow-only compositor if no Google key.
+- Creatomate is Studio-only; falls back to Gemini/Pillow if key absent.
 - Stuck job protection: Celery `task_reject_on_worker_lost=True` and `visibility_timeout=600s` prevent jobs from permanently sticking on worker restart/deploy. A `cr_pipeline_watchdog` Beat task runs every 10 min and re-queues any CR job stuck in an in-progress status for >30 min (`chapter_review` excluded — it is an intentional human gate).
 
 ---
@@ -233,24 +238,24 @@ All endpoints require planBadmin JWT (`Authorization: Bearer <token>`).
 
 | Feature | Status | Notes |
 |---|---|---|
-| score_clip_virality skill | ✅ done | Claude API window scoring |
-| extract_video_segments skill | ✅ done | FFmpeg stream copy |
-| transcode_video skill | ✅ done | 9:16 portrait re-encode; crop_x param for smart crop |
-| detect_crop_region skill | ✅ done | Static fallback (8-frame average). `detect_crop_timeline()` added — per-2s face tracking → FFmpeg sendcmd dynamic crop |
-| burn_captions skill | ✅ done | FFmpeg ASS captions; word_pop style (2-word TikTok chunks) |
+| score_clip_virality skill | ✅ done | Claude API; Whisper-boundary snapping (±4s); variable length 30–120s; chapter context passed |
+| extract_video_segments skill | ✅ done | FFmpeg stream copy; FFprobe actual_start_s for caption sync |
+| transcode_video skill | ✅ done | 9:16 portrait re-encode; FFmpeg expression-based instant-cut crop; _compress_timeline() safety |
+| detect_crop_region skill | ✅ done | Frontal + profile Haar cascade; active speaker via frame differencing; stable region detection (300px, ≥2s) |
+| burn_captions skill | ✅ done | FFmpeg ASS captions; word_pop style (2-word TikTok chunks); uses actual_start_s |
 | add_watermark skill | ✅ done | FFmpeg drawtext (free plan) |
 | extract_video_frames skill | ✅ done | FFmpeg frame grab |
 | score_thumbnail_frame skill | ✅ done | Claude Vision multimodal |
-| generate_thumbnail_headline skill | ✅ done | NEW — Claude viral headline + highlight_word for accent color |
-| generate_thumbnail skill | ✅ done | Pillow YouTube-style compositor (white/yellow bold text, black stroke, dynamic bar, vignette) + Creatomate fallback |
+| generate_thumbnail_headline skill | ✅ done | Claude — 4-7 word viral headline + highlight_word + per-clip bg_prompt for Gemini Imagen |
+| generate_thumbnail skill | ✅ done | Gemini Imagen AI background + video frame composite (priority); Pillow YouTube-style fallback |
 | generate_chapters skill | ✅ done | Claude API chapter segmentation with timestamps |
 | generate_clip_title skill | ✅ done | Claude API, 3 variants per platform |
 | generate_video_description skill | ✅ done | Claude API, platform caps enforced |
 | generate_show_notes skill | ✅ done | Claude API, structured sections |
 | clip_selector.py | ✅ done | Threshold + overlap dedup + top-N + chapter filtering |
-| config.py | ✅ done | Unified PLANS dict; CAPTION_STYLE_TYPE env var |
+| config.py | ✅ done | Unified PLANS dict; CLIP_MAX_S=120; CAPTION_STYLE_TYPE env var |
 | pipeline.py (Phase 1) | ✅ done | download → transcribe → chapters → chapter_review gate |
-| pipeline.py (Phase 2) | ✅ done | score → smart crop → process → text → review_pending |
+| pipeline.py (Phase 2) | ✅ done | score → stable-region crop → process → text → review_pending |
 | Chapter review gate UI | ✅ done | CRJobDetail.tsx — chapter checklist, pre-selection from clip_instructions |
 | clip_instructions order field | ✅ done | ContentStudio.tsx form + API + pipeline chapter pre-matching |
 | DB models (CRJob, CRClipAsset) | ✅ done | Migrations a2b3c4d5e6f7 + b3c4d5e6f7a8 |

@@ -81,6 +81,8 @@ The Market Research venture shares all platform components with existing venture
 - `aiplatform/skills/research/multi_llm_research.py` — parallel async LLM execution (Claude, OpenAI, Gemini, Grok); `max_tokens` param configurable per call
 - `aiplatform/skills/research/rag_store.py` — Qdrant-backed RAG for pre-uploaded documents; supports PDF, DOCX, XLSX, PPTX, TXT, CSV
 - `ventures/market_research/config.py` — `SECTION_LIBRARY` (8 modules + Final Synthesis), `CROSS_MODULE_SYSTEM_PROMPT`, section critic/summary prompts, legacy V1/V2 prompts
+- `aiplatform/skills/media/render_markdown.py` — Markdown → styled HTML converter; alignment-aware table parsing (`<thead>/<tbody>`); visual marker injection (`[SCREENSHOT:]` / `[GENERATE IMAGE:]` → `<figure>`); citation superscripts. Venture-agnostic.
+- `aiplatform/skills/media/capture_visual.py` — `screenshot_url()` (Playwright headless) + `generate_chart()` (Gemini Imagen 4:3 business charts). Resolves visual markers to base64 data URIs at PDF build time. Venture-agnostic.
 
 **V3 Section-Based Pipeline (default for new sessions):** User selects from a fixed section library (8 research modules + Final Synthesis). Each section is researched independently by all selected LLMs in parallel, Level-1 merged, then put through a 2-round author/critic loop. The critic checks: (a) all required items present, (b) every quantitative claim has an inline citation `[Source: Name, Year]`. After 2 failed rounds a disclaimer is appended. Completed sections contribute a 2-sentence reference summary to all subsequent sections. Final assembly is Python concatenation + citations appendix. Section-level status is visible in the UI and resumes on retry.
 

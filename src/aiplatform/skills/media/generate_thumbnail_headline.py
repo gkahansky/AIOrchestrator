@@ -58,18 +58,26 @@ def generate_thumbnail_headline(
     context_line = " | ".join(context_parts)
 
     prompt = (
-        "You are a YouTube thumbnail copywriter. Create a punchy thumbnail headline.\n\n"
+        "You are a YouTube thumbnail designer. Generate three things for a short video clip.\n\n"
         + (f"Context: {context_line}\n" if context_line else "")
         + f"Clip hook: {hook}\n"
         + (f"Transcript: {transcript_chunk[:300]}\n\n" if transcript_chunk else "\n")
-        + "Rules:\n"
-        "- 4 to 7 words, ALL CAPS\n"
-        "- Clickbait / curiosity-gap style — make the viewer NEED to watch\n"
-        "- No full sentences, no punctuation except one optional em-dash\n"
-        "- Pick ONE word from the headline that should be visually emphasised "
-        "(bold accent colour on the thumbnail)\n\n"
+        + "1. HEADLINE — 4 to 7 words, ALL CAPS, clickbait/curiosity-gap style.\n"
+        "   No full sentences, no punctuation except one optional em-dash.\n\n"
+        "2. HIGHLIGHT_WORD — ONE word from the headline to render in bold accent colour.\n\n"
+        "3. BG_PROMPT — 40-60 words describing a unique cinematic background image for Gemini Imagen.\n"
+        "   Rules for bg_prompt:\n"
+        "   - Visually represent the clip topic with SPECIFIC imagery (not generic podcast/studio)\n"
+        "   - Specify dominant colours, lighting mood, and one concrete visual metaphor\n"
+        "   - Abstract/environmental — no people, no faces, no readable text\n"
+        "   - Vary style dramatically: could be neon cityscape, deep space, stormy ocean, \n"
+        "     ancient ruins, molten lava, digital matrix, golden hour desert, etc.\n"
+        "   - Match the emotional tone: tense=dark/red, inspirational=warm/gold, \n"
+        "     tech=blue neon, nature=greens, luxury=black/gold\n"
+        "   - Always end with: 'Vertical portrait 9:16. No people. No text.'\n\n"
         "Respond with ONLY valid JSON:\n"
-        '{"headline": "YOUR HEADLINE HERE", "highlight_word": "WORD"}'
+        '{"headline": "YOUR HEADLINE HERE", "highlight_word": "WORD", '
+        '"bg_prompt": "Specific cinematic description... Vertical portrait 9:16. No people. No text."}'
     )
 
     response = client.messages.create(
@@ -80,25 +88,32 @@ def generate_thumbnail_headline(
     raw = response.content[0].text.strip()
 
     # Extract JSON robustly
-    match = re.search(r'\{[^{}]+\}', raw, re.DOTALL)
+    match = re.search(r'\{.*?\}', raw, re.DOTALL)
     if match:
         try:
             data = json.loads(match.group())
             headline = str(data.get("headline", hook[:50])).upper()
             highlight = str(data.get("highlight_word", "")).upper()
+            bg_prompt = str(data.get("bg_prompt", "")).strip()
             # Ensure highlight_word is actually in the headline
             if highlight not in headline:
                 words = headline.split()
                 highlight = words[-1] if words else ""
-            return {"headline": headline, "highlight_word": highlight, "platform": platform}
+            return {
+                "headline": headline,
+                "highlight_word": highlight,
+                "bg_prompt": bg_prompt,
+                "platform": platform,
+            }
         except (json.JSONDecodeError, KeyError):
             pass
 
-    # Fallback: truncate hook
+    # Fallback: truncate hook, no custom bg_prompt
     fallback = hook[:50].upper()
     words = fallback.split()
     return {
         "headline": fallback,
         "highlight_word": words[-1] if words else "",
+        "bg_prompt": "",
         "platform": platform,
     }

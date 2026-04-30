@@ -96,21 +96,21 @@ def detect_crop_timeline(
     target_w: int = 1080,
     target_h: int = 1920,
     sample_interval_s: float = 1.0,
-    max_step_px: int = 120,
 ) -> dict:
     """
     Build a per-timestamp crop_x timeline from a landscape video clip.
 
     Extracts one frame every sample_interval_s seconds using FFmpeg, detects
-    faces in each frame, smooths the crop_x values (rolling median, window=3),
-    and caps the per-step change to max_step_px to avoid jarring jumps.
+    faces in each frame, and collapses the data into stable speaker regions.
+    Each region has a single fixed crop_x; transitions are instant cuts (≥300px
+    shift sustained for ≥2s).  This produces clean jump-cuts between speakers
+    rather than a gradual pan across the frame.
 
     Args:
         video_path:        Path to landscape source video.
         target_w:          Portrait crop width (default 1080).
         target_h:          Portrait crop height (default 1920).
-        sample_interval_s: Seconds between face-detection samples (default 2).
-        max_step_px:       Max allowed change in crop_x per step (default 120).
+        sample_interval_s: Seconds between face-detection samples (default 1).
 
     Returns:
         {
@@ -267,14 +267,35 @@ def detect_crop_timeline(
         window = [filled[j][1] for j in range(max(0, i - 1), min(len(filled), i + 2))]
         smoothed.append((t, int(median(window))))
 
-    # ── 5. Cap per-step change to avoid jarring jumps ────────────────────────
-    capped: list[tuple[float, int]] = [smoothed[0]]
+    # ── 5. Collapse into stable speaker regions ───────────────────────────────
+    # A region ends when crop_x shifts by ≥300px (true speaker switch).
+    # Within a region all samples are averaged to a single fixed crop_x so the
+    # FFmpeg expression produces instant cuts, not a gradual pan.
+    # The 300px threshold tolerates normal head-movement jitter (~150px) while
+    # reliably catching left↔right speaker transitions (typically 800–1500px).
+    REGION_SHIFT = 300
+    MIN_REGION_FRAMES = max(1, int(2.0 / sample_interval_s))  # ≥2s before committing
+
+    regions: list[tuple[float, int]] = []   # (start_t, median_cx)
+    region_start_idx = 0
+    region_vals: list[int] = [smoothed[0][1]]
+
     for i in range(1, len(smoothed)):
         t, cx = smoothed[i]
-        prev_cx = capped[-1][1]
-        delta = cx - prev_cx
-        if abs(delta) > max_step_px:
-            cx = prev_cx + (max_step_px if delta > 0 else -max_step_px)
-        capped.append((t, cx))
+        current_median = int(median(region_vals))
+        if abs(cx - current_median) >= REGION_SHIFT:
+            # Commit current region only if it's long enough
+            if (i - region_start_idx) >= MIN_REGION_FRAMES:
+                regions.append((smoothed[region_start_idx][0], int(median(region_vals))))
+            else:
+                # Short region — merge into the new one by discarding it
+                pass
+            region_start_idx = i
+            region_vals = [cx]
+        else:
+            region_vals.append(cx)
 
-    return {"timeline": capped, "method": "face_tracking", "face_count": total_faces}
+    # Commit final region
+    regions.append((smoothed[region_start_idx][0], int(median(region_vals))))
+
+    return {"timeline": regions, "method": "face_tracking", "face_count": total_faces}

@@ -294,6 +294,7 @@ def run_repurposing_job_phase2(
                 highlight_word=headline_result["highlight_word"],
                 platform=primary_platform,
                 hook=hook,
+                bg_prompt=headline_result.get("bg_prompt", ""),
                 google_ai_api_key=os.getenv("GOOGLE_AI_API_KEY"),
             )
 

@@ -107,15 +107,15 @@ def transcode_video(
 
 def _compress_timeline(
     timeline: list[tuple[float, int]],
-    change_threshold: int = 120,
+    change_threshold: int = 50,
 ) -> list[tuple[float, int]]:
     """
     Drop timeline entries whose crop_x didn't change enough to matter.
 
-    Real speaker switches move 300-600px; per-frame jitter stays under ~80px.
-    Using 120px as threshold keeps genuine transitions while collapsing long
-    runs where the same speaker stays on screen, preventing FFmpeg expression
-    length overflows on long clips.
+    detect_crop_timeline already returns stable region boundaries (300px shift
+    threshold), so this is primarily a safety net against any residual duplicates.
+    The default 50px threshold removes genuine no-ops while keeping all speaker
+    transitions, preventing FFmpeg expression length overflows on long clips.
     """
     if not timeline:
         return timeline

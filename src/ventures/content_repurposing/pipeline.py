@@ -247,8 +247,12 @@ def run_repurposing_job_phase2(
                 crop_timeline=crop_info["timeline"] or None,
             )
 
-            # Burn captions (word_pop by default — configured via CR_CAPTION_STYLE)
-            srt = build_srt_for_clip(segments, start_s, end_s)
+            # Burn captions (word_pop by default — configured via CR_CAPTION_STYLE).
+            # Use actual_start_s (the real keyframe the stream-copy snapped to) so
+            # caption timestamps match the clip content — not the requested start_s
+            # which may differ by 0-5s due to keyframe alignment.
+            actual_start_s = seg_result.get("actual_start_s", start_s)
+            srt = build_srt_for_clip(segments, actual_start_s, actual_start_s + (end_s - start_s))
             cap_result = burn_captions(
                 tc_result["transcoded_path"],
                 srt_content=srt,

@@ -932,7 +932,7 @@ def run_market_research(research_id: str, db: Session) -> None:
         # Email delivery (optional, non-fatal)
         if record.client_email:
             _set_status(db, record, "delivering")
-            display_title = record.title or topic
+            display_title = (record.title or topic).replace("\n", " ").replace("\r", " ").strip()
             download_line = (
                 f'<p><a href="{record.drive_link}">Download your report (PDF)</a></p>'
                 if record.drive_link else ""

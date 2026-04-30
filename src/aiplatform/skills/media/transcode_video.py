@@ -105,17 +105,39 @@ def transcode_video(
     return {"transcoded_path": output_path, "width": w, "height": h}
 
 
+def _compress_timeline(
+    timeline: list[tuple[float, int]],
+    change_threshold: int = 120,
+) -> list[tuple[float, int]]:
+    """
+    Drop timeline entries whose crop_x didn't change enough to matter.
+
+    Real speaker switches move 300-600px; per-frame jitter stays under ~80px.
+    Using 120px as threshold keeps genuine transitions while collapsing long
+    runs where the same speaker stays on screen, preventing FFmpeg expression
+    length overflows on long clips.
+    """
+    if not timeline:
+        return timeline
+    compressed = [timeline[0]]
+    for t, cx in timeline[1:]:
+        if abs(cx - compressed[-1][1]) >= change_threshold:
+            compressed.append((t, cx))
+    return compressed
+
+
 def _build_crop_x_expr(timeline: list[tuple[float, int]]) -> str:
     """
     Build an FFmpeg crop x step-function expression from a crop timeline.
 
-    Produces a nested if(lt(t,T),CX,...) chain so FFmpeg evaluates the correct
-    crop_x at each frame timestamp.  Commas inside expressions are escaped as \\,
+    Compresses the timeline first (drops jitter-only keyframes) then produces a
+    nested if(lt(t,T),CX,...) chain.  Commas inside expressions are escaped as \\,
     (FFmpeg filter graph syntax — not shell escaping; subprocess handles quoting).
 
     Example for [(0,0),(2,100),(4,50)]:
       if(lt(t\\,2.000)\\,0\\,if(lt(t\\,4.000)\\,100\\,50))
     """
+    timeline = _compress_timeline(timeline)
     if len(timeline) == 1:
         return str(timeline[0][1])
     # Build right-to-left: innermost is the last crop_x value

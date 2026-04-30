@@ -1,19 +1,25 @@
 """
 Platform skill: generate_thumbnail
 
-Composites a thumbnail image from a video frame using Pillow.
-Free/Starter/Pro: YouTube-style bold multi-colour text overlay.
-Studio: Creatomate API branded template (falls back to Pillow if unconfigured).
+Composites a thumbnail image from a video frame.
+
+Priority routing:
+  1. Gemini Imagen (if GOOGLE_AI_API_KEY present) — AI-generated background composited
+     with the real video frame + YouTube-style bold text overlay.
+  2. Creatomate (Studio plan only, if CREATOMATE_API_KEY present) — branded template.
+  3. Pillow (fallback) — direct text overlay on video frame.
 
 Platform-aware: the `platform` parameter is threaded through all calls so that
-future per-platform layouts (e.g. YouTube 16:9, TikTok 9:16, Instagram 1:1)
-can be added by branching on it inside _pillow_thumbnail / _creatomate_thumbnail.
-Currently all platforms use the same 1080×1920 portrait compositor.
+future per-platform layouts (YouTube 16:9, TikTok 9:16, Instagram 1:1) can be
+added by branching inside the compositor functions.  Currently all platforms use
+the same 1080×1920 portrait format.
 
 Venture-agnostic.
 """
 
 import os
+import tempfile
+import uuid
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
@@ -27,8 +33,12 @@ _PADDING = 48
 _ACCENT_COLOUR = (255, 230, 0)    # yellow — highlight word
 _TEXT_COLOUR = (255, 255, 255)    # white — rest of headline
 _OUTLINE_WIDTH = 4
-_BOX_ALPHA = 160                  # backing box opacity (0-255)
+_BOX_ALPHA = 170                  # backing box opacity (0-255)
 _MAX_BAR_RATIO = 0.45             # text area never exceeds 45% of frame height
+
+# Portion of frame height occupied by the video frame composite (top section)
+_FRAME_TOP_RATIO = 0.70           # video frame fills top 70%
+_FRAME_FADE_START = 0.55          # fade-to-background begins at 55%
 
 
 def generate_thumbnail(
@@ -41,28 +51,33 @@ def generate_thumbnail(
     creatomate_template_id: str | None = None,
     highlight_word: str = "",
     platform: str = "default",
+    hook: str = "",
+    google_ai_api_key: str | None = None,
 ) -> dict:
     """
     Generate a thumbnail image from a selected video frame.
 
     Args:
         frame_path:              Path to the best frame JPEG.
-        title:                   Headline text to overlay (ideally from generate_thumbnail_headline).
-        show_name:               Show name (optional subtitle strip at very bottom).
+        title:                   Headline text (ideally from generate_thumbnail_headline).
+        show_name:               Show name for the bottom strip.
         plan:                    "free" | "starter" | "pro" | "studio".
         output_path:             Where to write the .jpg. Defaults to <frame_stem>_thumb.jpg.
-        creatomate_api_key:      Creatomate API key (Studio only; falls back to Pillow if absent).
-        creatomate_template_id:  Creatomate template ID (Studio only).
+        creatomate_api_key:      Studio only; falls back to Gemini/Pillow if absent.
+        creatomate_template_id:  Studio only.
         highlight_word:          Single word in title to render in accent colour (yellow).
         platform:                Target platform ("default" | "youtube" | "tiktok" | …).
-                                 Hook for future per-platform layout; currently all use portrait 9:16.
+        hook:                    One-line clip hook — used to theme the Gemini background.
+        google_ai_api_key:       Google AI API key for Gemini Imagen background generation.
 
     Returns:
-        {"thumbnail_path": str, "engine": str}  — engine is "pillow" or "creatomate".
+        {"thumbnail_path": str, "engine": str}
     """
     frame = Path(frame_path)
     if output_path is None:
         output_path = str(frame.parent / f"{frame.stem}_thumb.jpg")
+
+    api_key = google_ai_api_key or os.getenv("GOOGLE_AI_API_KEY")
 
     if (
         plan == "studio"
@@ -78,6 +93,19 @@ def generate_thumbnail(
         )
         return {"thumbnail_path": path, "engine": "creatomate"}
 
+    if api_key:
+        try:
+            path = _gemini_thumbnail(
+                frame_path, title, show_name, output_path,
+                api_key=api_key,
+                highlight_word=highlight_word,
+                hook=hook,
+                platform=platform,
+            )
+            return {"thumbnail_path": path, "engine": "gemini"}
+        except Exception:
+            pass  # fall through to Pillow
+
     path = _pillow_thumbnail(
         frame_path, title, show_name, output_path,
         highlight_word=highlight_word,
@@ -85,6 +113,98 @@ def generate_thumbnail(
     )
     return {"thumbnail_path": path, "engine": "pillow"}
 
+
+# ─── Gemini Imagen compositor ─────────────────────────────────────────────────
+
+def _gemini_thumbnail(
+    frame_path: str,
+    title: str,
+    show_name: str,
+    output_path: str,
+    api_key: str,
+    highlight_word: str = "",
+    hook: str = "",
+    platform: str = "default",
+) -> str:
+    """
+    Generate a dramatic AI background with Gemini Imagen, then composite:
+      - Full canvas: AI-generated background (9:16)
+      - Upper ~70%: real video frame with soft fade into the AI background
+      - Vignette + text overlay (same bold style as _pillow_thumbnail)
+
+    The AI background prompt is themed around the clip hook/headline so colours
+    and mood match the content.  No people or text are generated by the AI —
+    the real speaker face comes from the video frame composite.
+    """
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=api_key)
+
+    subject = hook or title or "podcast"
+    bg_prompt = (
+        f"Cinematic YouTube Shorts thumbnail background. "
+        f"Topic: \"{subject}\". "
+        f"Dramatic atmosphere, bold colors, dynamic lighting, "
+        f"energy effects, light rays, particle sparks, depth and motion blur. "
+        f"High contrast, broadcast quality. "
+        f"No faces, no people, no readable text. "
+        f"Abstract visual composition only. Vertical portrait 9:16."
+    )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        bg_path = os.path.join(tmp, f"bg_{uuid.uuid4().hex[:8]}.png")
+
+        response = client.models.generate_images(
+            model="imagen-4.0-generate-001",
+            prompt=bg_prompt,
+            config=types.GenerateImagesConfig(
+                number_of_images=1,
+                aspect_ratio="9:16",
+                output_mime_type="image/png",
+                safety_filter_level="BLOCK_LOW_AND_ABOVE",
+                person_generation="DONT_ALLOW",
+            ),
+        )
+
+        if not response.generated_images:
+            raise RuntimeError("Gemini Imagen returned no images")
+
+        Path(bg_path).write_bytes(response.generated_images[0].image.image_bytes)
+
+        # ── Build composite canvas ────────────────────────────────────────────
+        bg = Image.open(bg_path).convert("RGB")
+        bg = ImageOps.fit(bg, (_THUMB_W, _THUMB_H), Image.LANCZOS)
+
+        # Load video frame, fit to full canvas size
+        frame_img = Image.open(frame_path).convert("RGB")
+        frame_img = ImageOps.fit(frame_img, (_THUMB_W, _THUMB_H), Image.LANCZOS)
+
+        # Build alpha mask: full opacity at top, fades out between 55%→75% of height
+        mask = Image.new("L", (_THUMB_W, _THUMB_H), 0)
+        md = ImageDraw.Draw(mask)
+        fade_start_y = int(_THUMB_H * _FRAME_FADE_START)
+        fade_end_y = int(_THUMB_H * _FRAME_TOP_RATIO)
+        md.rectangle([(0, 0), (_THUMB_W, fade_start_y)], fill=255)
+        for y in range(fade_start_y, fade_end_y):
+            alpha = int(255 * (1 - (y - fade_start_y) / (fade_end_y - fade_start_y)))
+            md.rectangle([(0, y), (_THUMB_W, y + 1)], fill=alpha)
+
+        # Paste frame onto background using mask
+        canvas = bg.copy()
+        canvas.paste(frame_img, (0, 0), mask)
+
+    # ── Vignette ──────────────────────────────────────────────────────────────
+    canvas = _apply_vignette(canvas)
+
+    # ── Text overlay (same as _pillow_thumbnail) ──────────────────────────────
+    _render_text_overlay(canvas, title, show_name, highlight_word)
+
+    canvas.save(output_path, "JPEG", quality=92)
+    return output_path
+
+
+# ─── Pillow compositor (fallback) ─────────────────────────────────────────────
 
 def _pillow_thumbnail(
     frame_path: str,
@@ -95,50 +215,51 @@ def _pillow_thumbnail(
     platform: str = "default",
 ) -> str:
     """
-    YouTube-style thumbnail compositor.
-
-    Layout:
-    - Portrait 9:16 frame as background (smart-cropped via ImageOps.fit)
-    - Subtle vignette at edges for depth
-    - Text positioned at bottom (or top if face detected in lower half — heuristic)
-    - Semi-transparent dark backing box behind headline
-    - Bold headline: most words in white, highlight_word in yellow
-    - Each word rendered with black stroke outline for contrast on any background
-    - Smaller show_name strip at very bottom
+    YouTube-style thumbnail compositor — bold multi-colour text over video frame.
+    Used when Gemini Imagen is unavailable.
     """
     img = Image.open(frame_path).convert("RGB")
     img = ImageOps.fit(img, (_THUMB_W, _THUMB_H), Image.LANCZOS)
+    img = _apply_vignette(img)
+    _render_text_overlay(img, title, show_name, highlight_word)
+    img.save(output_path, "JPEG", quality=92)
+    return output_path
 
-    # ── Vignette: darken edges ────────────────────────────────────────────────
+
+# ─── Shared rendering helpers ─────────────────────────────────────────────────
+
+def _apply_vignette(img: Image.Image) -> Image.Image:
+    """Darken edges with a radial vignette for depth."""
     vignette = Image.new("RGBA", (_THUMB_W, _THUMB_H), (0, 0, 0, 0))
     vd = ImageDraw.Draw(vignette)
-    strength = 160
-    steps = 120
+    strength, steps = 160, 120
     for i in range(steps):
         alpha = int(strength * (1 - i / steps) ** 2)
         vd.rectangle(
             [(i, i), (_THUMB_W - i, _THUMB_H - i)],
             outline=(0, 0, 0, alpha),
         )
-    img.paste(Image.alpha_composite(img.convert("RGBA"), vignette).convert("RGB"))
+    result = Image.alpha_composite(img.convert("RGBA"), vignette).convert("RGB")
+    return result
 
+
+def _render_text_overlay(img: Image.Image, title: str, show_name: str, highlight_word: str) -> None:
+    """
+    Draw YouTube-style bold headline + show name strip onto img in-place.
+    Most words in white; highlight_word in yellow.  Black stroke on each word.
+    Bar height is dynamic (measured via textbbox); font steps down to fit.
+    """
     draw = ImageDraw.Draw(img, "RGBA")
+    usable_w = _THUMB_W - _PADDING * 2
 
-    # ── Font loading ──────────────────────────────────────────────────────────
     font_size = _FONT_SIZE_HEADLINE
-    font_headline = _load_font(font_size)
     font_show = _load_font(_FONT_SIZE_SHOW)
 
-    # ── Wrap title to fit within usable width (pixel-accurate) ───────────────
-    usable_w = _THUMB_W - _PADDING * 2  # stay off the edges
-
-    # Measure total text block height; shrink font if needed
-    for attempt in range(3):
+    for _attempt in range(3):
         font_headline = _load_font(font_size)
         lines = _pixel_wrap(draw, title, font_headline, usable_w)
         line_h = draw.textbbox((0, 0), "Ag", font=font_headline)[3]
         text_block_h = line_h * len(lines) + 10 * (len(lines) - 1)
-
         show_strip_h = (_FONT_SIZE_SHOW + _PADDING) if show_name else 0
         bar_h = text_block_h + _PADDING * 2 + show_strip_h
         if bar_h <= _THUMB_H * _MAX_BAR_RATIO:
@@ -148,10 +269,8 @@ def _pillow_thumbnail(
     bar_h = min(bar_h, int(_THUMB_H * _MAX_BAR_RATIO))
     bar_top = _THUMB_H - bar_h
 
-    # ── Semi-transparent backing box ──────────────────────────────────────────
+    # Semi-transparent backing box
     draw.rectangle([(0, bar_top), (_THUMB_W, _THUMB_H)], fill=(0, 0, 0, _BOX_ALPHA))
-
-    # Gradient fade from transparent to box colour at the top of the box
     fade_h = min(60, bar_h // 3)
     for y in range(fade_h):
         alpha = int(_BOX_ALPHA * (y / fade_h))
@@ -160,13 +279,13 @@ def _pillow_thumbnail(
             fill=(0, 0, 0, alpha),
         )
 
-    # ── Render headline words with per-word colour ────────────────────────────
+    # Render each word with per-word colour and black stroke
     highlight_upper = highlight_word.upper().strip()
     text_y = bar_top + _PADDING
+    font_headline = _load_font(font_size)
 
     for line in lines:
         words = line.split()
-        # Measure actual line pixel width for centering (no trailing space on last word)
         line_width = sum(draw.textlength(w + " ", font=font_headline) for w in words[:-1])
         line_width += draw.textlength(words[-1], font=font_headline) if words else 0
         x = max(_PADDING, (_THUMB_W - line_width) // 2)
@@ -186,7 +305,6 @@ def _pillow_thumbnail(
         _, _, _, lh = draw.textbbox((0, 0), line, font=font_headline)
         text_y += lh + 10
 
-    # ── Show name strip ───────────────────────────────────────────────────────
     if show_name:
         show_y = _THUMB_H - _FONT_SIZE_SHOW - _PADDING // 2
         draw.text(
@@ -196,9 +314,6 @@ def _pillow_thumbnail(
             stroke_fill=(0, 0, 0, 180),
         )
 
-    img.save(output_path, "JPEG", quality=92)
-    return output_path
-
 
 def _pixel_wrap(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> list[str]:
     """Wrap text so each line fits within max_width pixels (actual glyph measurement)."""
@@ -207,7 +322,6 @@ def _pixel_wrap(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> l
     current: list[str] = []
     current_w = 0.0
     for word in words:
-        # Measure word + space (space is free on last word of line — conservative)
         ww = draw.textlength(word + " ", font=font)
         if current and current_w + ww > max_width:
             lines.append(" ".join(current))
@@ -237,6 +351,8 @@ def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
+# ─── Creatomate (Studio plan) ─────────────────────────────────────────────────
+
 def _creatomate_thumbnail(
     frame_path: str,
     title: str,
@@ -247,7 +363,7 @@ def _creatomate_thumbnail(
     highlight_word: str = "",
     platform: str = "default",
 ) -> str:
-    """Call Creatomate API to render a branded thumbnail. Falls back to Pillow on error."""
+    """Call Creatomate API to render a branded thumbnail. Falls back to Gemini/Pillow on error."""
     import base64
     try:
         import requests  # type: ignore
@@ -258,7 +374,6 @@ def _creatomate_thumbnail(
         )
 
     img_b64 = base64.b64encode(Path(frame_path).read_bytes()).decode()
-
     payload = {
         "template_id": template_id,
         "modifications": {

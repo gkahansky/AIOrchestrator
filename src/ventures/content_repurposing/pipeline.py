@@ -292,6 +292,8 @@ def run_repurposing_job_phase2(
                 output_path=str(clip_dir / "thumbnail.jpg"),
                 highlight_word=headline_result["highlight_word"],
                 platform=primary_platform,
+                hook=hook,
+                google_ai_api_key=os.getenv("GOOGLE_AI_API_KEY"),
             )
 
             # Title + description

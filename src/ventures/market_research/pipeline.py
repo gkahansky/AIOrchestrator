@@ -665,71 +665,200 @@ def _run_v3(
 # ── PDF generation ─────────────────────────────────────────────────────────────
 
 def _build_pdf(record: MarketResearch, output_path: str) -> str:
-    topic = record.topic
+    import base64
+    import tempfile
+
+    from aiplatform.skills.media.capture_visual import generate_chart, screenshot_url
+    from aiplatform.skills.media.render_markdown import extract_visual_markers, markdown_to_html
+
+    topic  = record.topic
     report = record.final_report or record.merged_report or ""
     critic = record.critic_feedback or ""
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    now    = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    def _to_html(text: str) -> str:
-        lines = []
-        for line in text.split("\n"):
-            stripped = line.strip()
-            if not stripped:
-                continue
-            if stripped.startswith("### "):
-                lines.append(f"<h3>{stripped[4:]}</h3>")
-            elif stripped.startswith("## "):
-                lines.append(f"<h2>{stripped[3:]}</h2>")
-            elif stripped.startswith("# "):
-                lines.append(f"<h1>{stripped[2:]}</h1>")
-            elif stripped.startswith("- ") or stripped.startswith("* "):
-                lines.append(f"<li>{stripped[2:]}</li>")
-            else:
-                lines.append(f"<p>{stripped}</p>")
-        return "\n".join(lines)
+    # ── Resolve visual markers embedded in the report ─────────────────────────
+    # Claude places [SCREENSHOT: url | caption] or [GENERATE IMAGE: desc | caption]
+    # markers in the text.  We capture each and convert to a base64 data URI so
+    # Playwright can embed them directly in the PDF without external network calls.
+    visuals: dict[str, str] = {}   # {full_marker_text: "data:image/png;base64,..."}
+    markers = extract_visual_markers(report)
+
+    if markers:
+        with tempfile.TemporaryDirectory() as vis_tmp:
+            for marker_text, marker_type, content, caption in markers:
+                img_path = os.path.join(vis_tmp, f"vis_{len(visuals)}.png")
+                if marker_type == "SCREENSHOT":
+                    result = screenshot_url(content, img_path)
+                else:  # GENERATE IMAGE
+                    result = generate_chart(content, img_path)
+
+                if result.get("success") and Path(img_path).exists():
+                    b64 = base64.b64encode(Path(img_path).read_bytes()).decode()
+                    visuals[marker_text] = f"data:image/png;base64,{b64}"
+
+    # ── Convert markdown to HTML ───────────────────────────────────────────────
+    body_html   = markdown_to_html(report, visuals=visuals)
+    critic_html = markdown_to_html(critic) if critic else ""
 
     html = f"""<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <style>
-  body {{ font-family: Georgia, serif; margin: 40px; color: #1a1a1a; line-height: 1.7; }}
-  h1 {{ color: #0f172a; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; }}
-  h2 {{ color: #1e3a5f; margin-top: 32px; }}
-  h3 {{ color: #374151; }}
-  p  {{ margin: 0.6em 0; }}
+  /* ── Base typography ────────────────────────────────────────────────────── */
+  body {{
+    font-family: Georgia, serif;
+    margin: 0;
+    color: #1a1a1a;
+    line-height: 1.75;
+    font-size: 11pt;
+  }}
+  h1 {{
+    color: #0f172a;
+    border-bottom: 3px solid #3b82f6;
+    padding-bottom: 10px;
+    margin-top: 0;
+    font-size: 1.9em;
+  }}
+  h2 {{
+    color: #1e3a5f;
+    margin-top: 2em;
+    margin-bottom: 0.4em;
+    font-size: 1.35em;
+    border-bottom: 1px solid #dbeafe;
+    padding-bottom: 4px;
+  }}
+  h3 {{ color: #374151; margin-top: 1.4em; font-size: 1.1em; }}
+  h4 {{ color: #4b5563; margin-top: 1.2em; font-size: 1em; font-style: italic; }}
+  p  {{ margin: 0.55em 0; }}
+  ul, ol {{ margin: 0.4em 0 0.4em 1.4em; padding: 0; }}
   li {{ margin: 0.3em 0; }}
-  .meta {{ color: #6b7280; font-size: 0.9em; margin-bottom: 24px; }}
-  .critic {{ background: #f0fdf4; border-left: 4px solid #22c55e; padding: 12px 16px;
-             margin: 24px 0; border-radius: 4px; font-size: 0.92em; }}
-  .critic h3 {{ margin: 0 0 8px; color: #15803d; }}
-  footer {{ margin-top: 48px; padding-top: 16px; border-top: 1px solid #e5e7eb;
-            color: #9ca3af; font-size: 0.85em; text-align: center; }}
+  blockquote {{
+    margin: 1em 0;
+    padding: 8px 16px;
+    border-left: 4px solid #93c5fd;
+    background: #eff6ff;
+    color: #1e3a5f;
+    font-style: italic;
+  }}
+  code {{
+    background: #f1f5f9;
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-family: monospace;
+    font-size: 0.88em;
+  }}
+  hr {{ border: none; border-top: 1px solid #e5e7eb; margin: 1.5em 0; }}
+  sup.citation {{
+    font-size: 0.72em;
+    color: #6b7280;
+    vertical-align: super;
+  }}
+
+  /* ── Tables ─────────────────────────────────────────────────────────────── */
+  table {{
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1.4em 0;
+    font-size: 0.91em;
+    break-inside: avoid;
+  }}
+  thead tr {{
+    background: #1e3a5f;
+    color: #ffffff;
+  }}
+  thead th {{
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    font-family: Helvetica, Arial, sans-serif;
+    letter-spacing: 0.02em;
+    font-size: 0.92em;
+  }}
+  tbody tr:nth-child(even)  {{ background: #f8fafc; }}
+  tbody tr:nth-child(odd)   {{ background: #ffffff; }}
+  tbody td {{
+    padding: 9px 14px;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+  }}
+
+  /* ── Figures (screenshots + generated charts) ────────────────────────────── */
+  figure {{
+    margin: 1.8em 0;
+    text-align: center;
+    break-inside: avoid;
+  }}
+  figure img {{
+    max-width: 100%;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.10);
+  }}
+  figcaption {{
+    margin-top: 8px;
+    color: #6b7280;
+    font-size: 0.85em;
+    font-style: italic;
+  }}
+
+  /* ── Page chrome ─────────────────────────────────────────────────────────── */
+  .meta {{
+    color: #6b7280;
+    font-size: 0.9em;
+    margin-bottom: 28px;
+    font-family: Helvetica, Arial, sans-serif;
+  }}
+  .critic-section {{
+    background: #f0fdf4;
+    border-left: 4px solid #22c55e;
+    padding: 14px 18px;
+    margin: 28px 0;
+    border-radius: 4px;
+    font-size: 0.92em;
+  }}
+  .critic-section h3 {{ margin: 0 0 8px; color: #15803d; }}
+  footer {{
+    margin-top: 52px;
+    padding-top: 16px;
+    border-top: 1px solid #e5e7eb;
+    color: #9ca3af;
+    font-size: 0.82em;
+    text-align: center;
+    font-family: Helvetica, Arial, sans-serif;
+  }}
 </style>
 </head>
 <body>
 <h1>Market Research Report</h1>
-<div class="meta">Topic: <strong>{topic}</strong> &nbsp;|&nbsp; Generated: {now}</div>
-{_to_html(report)}
-<div class="critic">
-<h3>Critic Review</h3>
-{_to_html(critic)}
+<div class="meta">
+  Topic: <strong>{topic}</strong> &nbsp;|&nbsp; Generated: {now}
 </div>
+{body_html}
+{"<div class='critic-section'><h3>Critic Review</h3>" + critic_html + "</div>" if critic_html else ""}
 <footer>Confidential &mdash; Generated by Plan B AI Platform</footer>
 </body>
 </html>"""
 
     from pathlib import Path
     from playwright.sync_api import sync_playwright
+
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--disable-dev-shm-usage", "--no-sandbox"])
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--disable-dev-shm-usage", "--no-sandbox"],
+        )
         page = browser.new_page()
         page.set_content(html, wait_until="networkidle")
-        page.pdf(path=str(out), print_background=True, format="A4",
-                 margin={"top": "0.6in", "bottom": "0.6in", "left": "0.5in", "right": "0.5in"})
+        page.pdf(
+            path=str(out),
+            print_background=True,
+            format="A4",
+            margin={"top": "0.65in", "bottom": "0.65in", "left": "0.55in", "right": "0.55in"},
+        )
         browser.close()
 
     return str(out)

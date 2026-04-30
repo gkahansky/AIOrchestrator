@@ -74,7 +74,17 @@ CROSS_MODULE_SYSTEM_PROMPT = (
     "Always reference insights from previous modules where relevant. "
     "Avoid contradictions with earlier findings. "
     "Build cumulative insights — each module should deepen the overall picture. "
-    "Highlight confirmations or conflicts between modules explicitly."
+    "Highlight confirmations or conflicts between modules explicitly.\n\n"
+    "TABLES: When presenting comparative or quantitative data, always use Markdown table syntax "
+    "(| col | col | with a |---|---| separator row). Tables will be rendered as styled HTML — "
+    "do not use ASCII art or plain-text column alignment.\n\n"
+    "VISUAL CONTENT: When your research identifies specific visual content that would "
+    "meaningfully strengthen the report — such as a competitor's landing page, an ad creative, "
+    "or a chart that is better seen than described — embed a visual marker on its own line:\n"
+    "  [SCREENSHOT: https://full-url-here.com | Brief caption describing what this shows]\n"
+    "  [GENERATE IMAGE: Detailed description of chart or diagram to generate | Caption]\n"
+    "Use visuals sparingly and only when they genuinely add value that text cannot provide. "
+    "Always include the caption after the | separator."
 )
 
 # The section library. Each entry is the default template; users can enable/disable

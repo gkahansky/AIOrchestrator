@@ -688,13 +688,18 @@ def _build_pdf(record: MarketResearch, output_path: str) -> str:
             for marker_text, marker_type, content, caption in markers:
                 img_path = os.path.join(vis_tmp, f"vis_{len(visuals)}.png")
                 if marker_type == "SCREENSHOT":
-                    result = screenshot_url(content, img_path)
+                    result = screenshot_url(content.strip(), img_path)
                 else:  # GENERATE IMAGE
-                    result = generate_chart(content, img_path)
+                    result = generate_chart(content.strip(), img_path)
 
                 if result.get("success") and Path(img_path).exists():
                     b64 = base64.b64encode(Path(img_path).read_bytes()).decode()
                     visuals[marker_text] = f"data:image/png;base64,{b64}"
+                else:
+                    logger.warning(
+                        "Visual capture failed for %s marker — %s: %s",
+                        marker_type, content[:80], result.get("error", "unknown"),
+                    )
 
     # ── Convert markdown to HTML ───────────────────────────────────────────────
     body_html   = markdown_to_html(report, visuals=visuals)

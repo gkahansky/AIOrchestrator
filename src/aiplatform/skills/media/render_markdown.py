@@ -79,19 +79,35 @@ def markdown_to_html(text: str, visuals: Optional[dict] = None) -> str:
             i += 1
             continue
 
-        # ── Visual marker (whole line) ────────────────────────────────────────
-        if MARKER_RE.fullmatch(line) and visuals is not None:
+        # ── Visual marker (whole line or inline) ─────────────────────────────
+        # Handle markers both when they occupy the entire line AND when they
+        # are embedded inline within other text (LLMs often do the latter).
+        if visuals is not None and MARKER_RE.search(line):
             close_all_lists()
-            m = MARKER_RE.fullmatch(line)
-            data_uri = visuals.get(line, "")
-            caption = (m.group(3) or m.group(2)).strip()
-            if data_uri:
-                output.append(
-                    f'<figure>'
-                    f'<img src="{data_uri}" alt="{_html.escape(caption)}">'
-                    f'<figcaption>{_html.escape(caption)}</figcaption>'
-                    f'</figure>'
-                )
+            frags: list[str] = []
+            last_end = 0
+            for vm in MARKER_RE.finditer(line):
+                # Text before the marker → render as inline HTML
+                before = line[last_end:vm.start()]
+                if before.strip():
+                    frags.append(f"<p>{_inline(before)}</p>")
+                # Resolve the marker
+                data_uri = visuals.get(vm.group(0), "")
+                caption = (vm.group(3) or vm.group(2)).strip()
+                if data_uri:
+                    frags.append(
+                        f'<figure>'
+                        f'<img src="{data_uri}" alt="{_html.escape(caption)}">'
+                        f'<figcaption>{_html.escape(caption)}</figcaption>'
+                        f'</figure>'
+                    )
+                # markers with no resolved image are silently dropped
+                last_end = vm.end()
+            # Text after the last marker
+            after = line[last_end:]
+            if after.strip():
+                frags.append(f"<p>{_inline(after)}</p>")
+            output.extend(frags)
             i += 1
             continue
 
@@ -230,6 +246,10 @@ def _parse_table(lines: list[str]) -> str:
 
 def _inline(text: str) -> str:
     """Apply inline Markdown formatting: bold, italic, code, links, HTML-escape."""
+    # Strip any visual markers that were not resolved to images — they should
+    # never appear as raw text in rendered output.
+    text = MARKER_RE.sub("", text)
+
     # Escape HTML entities first (before we add our own tags)
     text = _html.escape(text)
 

@@ -79,18 +79,17 @@ def generate_chart(
     description: str,
     output_path: str,
     google_ai_api_key: str | None = None,
+    mode: str = "chart",
 ) -> dict:
     """
-    Generate a professional chart or diagram image using Gemini Imagen.
-
-    Optimised for data-visualisation prompts: bar charts, market maps,
-    funnel diagrams, comparison matrices, etc.  White background, minimal
-    style, high contrast — suitable for business PDF reports.
+    Generate an image using Gemini Imagen.
 
     Args:
-        description:       Natural-language description of the chart to generate.
+        description:       Natural-language description of what to generate.
         output_path:       Where to save the PNG.
         google_ai_api_key: GOOGLE_AI_API_KEY override; falls back to env var.
+        mode:              "chart"  — data visualisation (bar charts, funnels, matrices).
+                           "ui"     — website/app UI mockup (used as screenshot fallback).
 
     Returns:
         {"image_path": str, "success": bool, "error": str | None}
@@ -109,13 +108,22 @@ def generate_chart(
 
         client = genai.Client(api_key=api_key)
 
-        prompt = (
-            f"Professional data visualization for a business market research report. "
-            f"{description}. "
-            f"Clean, minimal design. White background. High contrast colours suitable "
-            f"for print. Clearly labelled axes and legends. No decorative elements. "
-            f"Business presentation quality. No watermarks."
-        )
+        if mode == "ui":
+            prompt = (
+                f"Realistic mockup of a website or web application UI for a business "
+                f"market research report. {description}. "
+                f"Clean, modern design. Desktop browser viewport. Crisp text and UI "
+                f"elements. Professional SaaS or marketing website aesthetic. "
+                f"No browser chrome. No watermarks."
+            )
+        else:
+            prompt = (
+                f"Professional data visualization for a business market research report. "
+                f"{description}. "
+                f"Clean, minimal design. White background. High contrast colours suitable "
+                f"for print. Clearly labelled axes and legends. No decorative elements. "
+                f"Business presentation quality. No watermarks."
+            )
 
         response = client.models.generate_images(
             model="imagen-4.0-generate-001",

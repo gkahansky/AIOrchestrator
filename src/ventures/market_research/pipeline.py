@@ -689,6 +689,19 @@ def _build_pdf(record: MarketResearch, output_path: str) -> str:
                 img_path = os.path.join(vis_tmp, f"vis_{len(visuals)}.png")
                 if marker_type == "SCREENSHOT":
                     result = screenshot_url(content.strip(), img_path)
+                    if not result.get("success"):
+                        # Screenshot failed (auth-gated, bot-blocked, or unreachable).
+                        # Fall back to a Gemini-generated UI mockup using the caption
+                        # and URL as context so the visual slot is never left empty.
+                        logger.info(
+                            "Screenshot failed for %s (%s) — falling back to generated UI mockup",
+                            content[:80], result.get("error", "unknown"),
+                        )
+                        fallback_desc = (
+                            f"{caption}. "
+                            f"This is a representation of the page at: {content.strip()}."
+                        )
+                        result = generate_chart(fallback_desc, img_path, mode="ui")
                 else:  # GENERATE IMAGE
                     result = generate_chart(content.strip(), img_path)
 
@@ -697,7 +710,7 @@ def _build_pdf(record: MarketResearch, output_path: str) -> str:
                     visuals[marker_text] = f"data:image/png;base64,{b64}"
                 else:
                     logger.warning(
-                        "Visual capture failed for %s marker — %s: %s",
+                        "Visual capture failed for %s marker (including fallback) — %s: %s",
                         marker_type, content[:80], result.get("error", "unknown"),
                     )
 

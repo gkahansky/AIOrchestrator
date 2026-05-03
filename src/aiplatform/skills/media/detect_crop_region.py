@@ -102,9 +102,12 @@ def detect_crop_timeline(
 
     Extracts one frame every sample_interval_s seconds using FFmpeg, detects
     faces in each frame, and collapses the data into stable speaker regions.
-    Each region has a single fixed crop_x; transitions are instant cuts (≥300px
-    shift sustained for ≥2s).  This produces clean jump-cuts between speakers
-    rather than a gradual pan across the frame.
+    Each region has a single fixed crop_x; transitions use a short linear pan
+    (applied in transcode_video).
+
+    Detection is tiered: frontal face → profile face → upper-body Haar cascade →
+    HOG full-person detector.  This ensures the subject stays in frame even when
+    the face is turned away or occluded.
 
     Args:
         video_path:        Path to landscape source video.
@@ -150,8 +153,24 @@ def detect_crop_timeline(
         profile_cascade = cv2.CascadeClassifier(
             cv2.data.haarcascades + "haarcascade_profileface.xml"
         )
+        upper_body_cascade = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_upperbody.xml"
+        )
 
-        # ── 2. Detect faces per frame; track active speaker ──────────────────
+        # HOG person detector — initialised once, used only as last-resort fallback
+        _hog: "cv2.HOGDescriptor | None" = None
+
+        def _hog_detect(img):
+            nonlocal _hog
+            if _hog is None:
+                _hog = cv2.HOGDescriptor()
+                _hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+            bodies, _ = _hog.detectMultiScale(
+                img, winStride=(16, 16), padding=(8, 8), scale=1.05
+            )
+            return bodies if len(bodies) > 0 else []
+
+        # ── 2. Detect subject per frame; track active speaker ────────────────
         raw: list[tuple[float, int | None]] = []   # (t_seconds, crop_x | None)
         src_w = src_h = None
         total_faces = 0
@@ -170,14 +189,32 @@ def detect_crop_timeline(
                 src_w, src_h = w, h
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-            # Try frontal first; fall back to profile cascade if nothing found
+            # ── Tiered detection: frontal → profile → upper-body → HOG ──────
             faces = frontal_cascade.detectMultiScale(
                 gray, scaleFactor=1.1, minNeighbors=3, minSize=(30, 30)
             )
+            detection_type = "face"
+
             if len(faces) == 0:
                 faces = profile_cascade.detectMultiScale(
                     gray, scaleFactor=1.1, minNeighbors=3, minSize=(30, 30)
                 )
+
+            if len(faces) == 0:
+                # Upper-body cascade: catches head+shoulders when face is angled
+                faces = upper_body_cascade.detectMultiScale(
+                    gray, scaleFactor=1.05, minNeighbors=2, minSize=(60, 60)
+                )
+                if len(faces) > 0:
+                    detection_type = "upper_body"
+
+            if len(faces) == 0:
+                # HOG full-person detector: slowest fallback, only fires when
+                # all Haar cascades fail (profile, hats, distance, low contrast)
+                bodies = _hog_detect(img)
+                if len(bodies) > 0:
+                    faces = bodies
+                    detection_type = "hog"
 
             if len(faces) == 0:
                 raw.append((t, None))
@@ -189,27 +226,24 @@ def detect_crop_timeline(
             scaled_w = int(src_w * scale)
 
             if len(faces) == 1:
-                # Single face — straightforward
+                # Single subject — straightforward center on their bounding box
                 fx, fy, fw, fh = faces[0]
                 best_cx = int((fx + fw / 2) * scale - target_w / 2)
                 best_cx = max(0, min(best_cx, scaled_w - target_w))
 
-            elif prev_gray is not None:
+            elif prev_gray is not None and detection_type == "face":
                 # Multiple faces: find the active speaker via motion.
                 # The speaking side of the frame shows more pixel change
                 # (mouth movement) than the listening side.
-                # Split the frame at the midpoint and compare motion per half.
                 mid = w // 2
                 diff = cv2.absdiff(gray, prev_gray).astype(float)
                 left_motion  = float(diff[:, :mid].mean())
                 right_motion = float(diff[:, mid:].mean())
 
-                # Sort faces left-to-right
                 sorted_faces = sorted(faces, key=lambda f: f[0])
                 left_face  = sorted_faces[0]
                 right_face = sorted_faces[-1]
 
-                # Clear winner threshold: one side must have 20% more motion
                 if left_motion > right_motion * 1.2:
                     chosen = left_face
                 elif right_motion > left_motion * 1.2:
@@ -228,13 +262,8 @@ def detect_crop_timeline(
                 best_cx = max(0, min(best_cx, scaled_w - target_w))
 
             else:
-                # Multiple faces, no previous frame for motion: prefer continuity
-                chosen = min(
-                    faces,
-                    key=lambda f: abs(
-                        int((f[0] + f[2] / 2) * scale - target_w / 2) - (last_cx or scaled_w // 2)
-                    ),
-                )
+                # Multiple detections or non-face fallback: prefer continuity
+                chosen = max(faces, key=lambda f: f[2] * f[3])  # largest bounding box
                 fx, fy, fw, fh = chosen
                 best_cx = int((fx + fw / 2) * scale - target_w / 2)
                 best_cx = max(0, min(best_cx, scaled_w - target_w))
@@ -261,16 +290,16 @@ def detect_crop_timeline(
         filled.append((t, val))
         last_cx = val
 
-    # ── 4. Rolling median smoothing (window = 3) ─────────────────────────────
+    # ── 4. Rolling median smoothing (window = 5) ─────────────────────────────
+    # 5-frame window suppresses single or double-frame detection glitches
+    # (e.g. momentary face-miss on head turn) without lagging on real switches.
     smoothed: list[tuple[float, int]] = []
     for i, (t, _) in enumerate(filled):
-        window = [filled[j][1] for j in range(max(0, i - 1), min(len(filled), i + 2))]
+        window = [filled[j][1] for j in range(max(0, i - 2), min(len(filled), i + 3))]
         smoothed.append((t, int(median(window))))
 
     # ── 5. Collapse into stable speaker regions ───────────────────────────────
     # A region ends when crop_x shifts by ≥300px (true speaker switch).
-    # Within a region all samples are averaged to a single fixed crop_x so the
-    # FFmpeg expression produces instant cuts, not a gradual pan.
     # The 300px threshold tolerates normal head-movement jitter (~150px) while
     # reliably catching left↔right speaker transitions (typically 800–1500px).
     REGION_SHIFT = 300
@@ -284,12 +313,10 @@ def detect_crop_timeline(
         t, cx = smoothed[i]
         current_median = int(median(region_vals))
         if abs(cx - current_median) >= REGION_SHIFT:
-            # Commit current region only if it's long enough
             if (i - region_start_idx) >= MIN_REGION_FRAMES:
                 regions.append((smoothed[region_start_idx][0], int(median(region_vals))))
             else:
-                # Short region — merge into the new one by discarding it
-                pass
+                pass  # short region — merge into the new one by discarding it
             region_start_idx = i
             region_vals = [cx]
         else:
@@ -297,5 +324,18 @@ def detect_crop_timeline(
 
     # Commit final region
     regions.append((smoothed[region_start_idx][0], int(median(region_vals))))
+
+    # ── 6. Merge adjacent near-identical regions ──────────────────────────────
+    # When two consecutive regions differ by <150px the subject barely moved —
+    # fold them together to avoid an unnecessary pan transition.
+    MERGE_THRESHOLD = 150
+
+    merged: list[tuple[float, int]] = [regions[0]]
+    for t, cx in regions[1:]:
+        if abs(cx - merged[-1][1]) < MERGE_THRESHOLD:
+            pass  # same zone — keep current region's crop_x
+        else:
+            merged.append((t, cx))
+    regions = merged
 
     return {"timeline": regions, "method": "face_tracking", "face_count": total_faces}

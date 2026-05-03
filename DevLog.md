@@ -203,3 +203,4 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-04-29 15:18 |  | bd0e98c | feat(content-repurposing): dynamic smart crop + YouTube-style thumbnails |
 | 2026-04-29 15:55 |  | 0acd1bd | fix(content-studio): Details link navigates to job detail page instead of inline accordion |
 | 2026-04-29 16:20 |  | c550f96 | feat(market-research): add job history panel with prompts, timing, files, and PDF link |
+| 2026-05-03 00:00 |  | 61bf43f | fix(content-repurposing): tiered subject detection (upper-body + HOG fallback) + 5-frame smoothing + region merge + linear crop pan — keeps humans in frame when face detection fails and eliminates jarring crop jump cuts |

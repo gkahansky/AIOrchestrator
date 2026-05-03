@@ -126,24 +126,48 @@ def _compress_timeline(
     return compressed
 
 
+_PAN_DURATION_S = 0.4  # seconds for the linear crop pan at each speaker transition
+
+
 def _build_crop_x_expr(timeline: list[tuple[float, int]]) -> str:
     """
-    Build an FFmpeg crop x step-function expression from a crop timeline.
+    Build an FFmpeg crop x expression from a crop timeline.
 
-    Compresses the timeline first (drops jitter-only keyframes) then produces a
-    nested if(lt(t,T),CX,...) chain.  Commas inside expressions are escaped as \\,
-    (FFmpeg filter graph syntax — not shell escaping; subprocess handles quoting).
+    Compresses the timeline first, then produces a nested if(lt(t,T),CX,...) chain
+    with a short linear ramp at each speaker transition instead of an instant step cut.
+    The ramp runs for _PAN_DURATION_S (0.4 s) or half the gap to the next switch,
+    whichever is shorter, keeping subjects smoothly in frame rather than jumping.
 
-    Example for [(0,0),(2,100),(4,50)]:
-      if(lt(t\\,2.000)\\,0\\,if(lt(t\\,4.000)\\,100\\,50))
+    Commas inside expressions are escaped as \\, (FFmpeg filter graph syntax).
     """
     timeline = _compress_timeline(timeline)
     if len(timeline) == 1:
         return str(timeline[0][1])
-    # Build right-to-left: innermost is the last crop_x value
+
+    # Build right-to-left: innermost expression is the final crop_x value
     expr = str(timeline[-1][1])
     for i in range(len(timeline) - 2, -1, -1):
-        t_switch = timeline[i + 1][0]   # time at which we leave cx[i]
-        cx = timeline[i][1]
-        expr = f"if(lt(t\\,{t_switch:.3f})\\,{cx}\\,{expr})"
+        t_switch = timeline[i + 1][0]
+        cx_from  = timeline[i][1]
+        cx_to    = timeline[i + 1][1]
+
+        # Cap pan at half the gap to the following transition (if any)
+        if i + 2 < len(timeline):
+            gap = timeline[i + 2][0] - t_switch
+        else:
+            gap = _PAN_DURATION_S * 4
+        pan = min(_PAN_DURATION_S, gap / 2)
+        t_end = t_switch + pan
+
+        if pan < 0.05 or cx_from == cx_to:
+            # Trivially short gap or no movement — use a plain step
+            expr = f"if(lt(t\\,{t_switch:.3f})\\,{cx_from}\\,{expr})"
+        else:
+            delta = cx_to - cx_from
+            # Linear interpolation: cx_from + delta*(t-t_switch)/pan
+            lerp = f"({cx_from}+({delta})*(t-{t_switch:.3f})/{pan:.3f})"
+            expr = (
+                f"if(lt(t\\,{t_switch:.3f})\\,{cx_from}\\,"
+                f"if(lt(t\\,{t_end:.3f})\\,{lerp}\\,{expr}))"
+            )
     return expr

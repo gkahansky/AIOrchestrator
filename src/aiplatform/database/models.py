@@ -347,8 +347,12 @@ class Lead(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
+    context        = Column(Text, nullable=True)          # raw post/query text that surfaced this lead
+    matched_persona = Column(String(100), nullable=True)  # which persona name this lead matches
+
     campaign = relationship("OutreachCampaign", back_populates="leads")
     sends    = relationship("OutreachSend", back_populates="lead", cascade="all, delete-orphan")
+    drafts   = relationship("LeadDraft", back_populates="lead", cascade="all, delete-orphan")
 
 
 class OutreachCampaign(Base):
@@ -378,9 +382,21 @@ class OutreachCampaign(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
+    # Persona-driven search fields
+    personas                 = Column(JSONB, nullable=True)            # [{name, description}] up to 5
+    target_prompt            = Column(Text, nullable=True)             # product/audience context for AI
+    user_search_instructions = Column(Text, nullable=True)             # optional user-supplied search guidance
+    auto_search_enabled      = Column(Boolean, nullable=False, default=False, server_default="false")
+    search_interval_hours    = Column(Integer, nullable=True)          # 6 | 24 | 168 | …
+    next_search_at           = Column(DateTime(timezone=True), nullable=True)
+    last_search_at           = Column(DateTime(timezone=True), nullable=True)
+
     leads     = relationship("Lead", back_populates="campaign")
     templates = relationship("OutreachTemplate", back_populates="campaign", cascade="all, delete-orphan")
     sends     = relationship("OutreachSend", back_populates="campaign", cascade="all, delete-orphan")
+    sources   = relationship("CampaignSource", back_populates="campaign", cascade="all, delete-orphan",
+                             order_by="CampaignSource.created_at")
+    drafts    = relationship("LeadDraft", back_populates="campaign", cascade="all, delete-orphan")
 
 
 class OutreachTemplate(Base):
@@ -522,6 +538,76 @@ class ContactMessage(Base):
     sent_at     = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     contact     = relationship("Contact", backref="messages")
+
+
+# ── Campaign Sources ───────────────────────────────────────────────────────────
+
+class CampaignSource(Base):
+    """
+    A single search source attached to an outreach campaign.
+
+    One campaign has many sources — each represents one platform/venue to watch.
+    platform controls which handler runs; keywords drives what to search;
+    config holds platform-specific extras (e.g. subreddits list, group_urls).
+
+    Examples:
+      reddit:       config={subreddits:["smallbusiness","entrepreneur"]}, keywords=[...]
+      facebook:     config={group_urls:["facebook.com/groups/abc"]},      keywords=[...]
+      google:       config={},                                            keywords=[...]
+      hackernews:   config={post_type:"ask"},                             keywords=[...]
+      linkedin:     config={use_apify:true},                              keywords=[...]
+    """
+    __tablename__ = "campaign_sources"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    campaign_id = Column(UUID(as_uuid=True), ForeignKey("outreach_campaigns.id", ondelete="CASCADE"),
+                         nullable=False, index=True)
+    platform    = Column(String(50), nullable=False)    # reddit | google | linkedin | facebook | …
+    name        = Column(String(255), nullable=False)   # user label, e.g. "r/smallbusiness"
+    keywords    = Column(JSONB, nullable=False, default=list)   # list of search terms / queries
+    config      = Column(JSONB, nullable=True)          # platform-specific extras
+    enabled     = Column(Boolean, nullable=False, default=True, server_default="true")
+
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
+
+    campaign = relationship("OutreachCampaign", back_populates="sources")
+
+
+# ── Lead Drafts ────────────────────────────────────────────────────────────────
+
+class LeadDraft(Base):
+    """
+    A personalized outreach message drafted by Claude for one specific lead.
+
+    Replaces the A/B template model for persona-driven campaigns: instead of
+    one template sent to everyone, each lead gets one draft written specifically
+    for them based on their post context and matched persona.
+
+    Status flow: pending_review → approved | rejected → sent
+    """
+    __tablename__ = "lead_drafts"
+
+    id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    lead_id      = Column(UUID(as_uuid=True), ForeignKey("leads.id", ondelete="CASCADE"),
+                          nullable=False, index=True)
+    campaign_id  = Column(UUID(as_uuid=True), ForeignKey("outreach_campaigns.id", ondelete="CASCADE"),
+                          nullable=False, index=True)
+    subject      = Column(String(500), nullable=True)   # email platform only
+    message_body = Column(Text, nullable=False)
+    context_used = Column(Text, nullable=True)          # snapshot of lead context at compose time
+    status       = Column(String(20), nullable=False, default="pending_review", index=True)
+    # pending_review | approved | rejected | sent
+
+    generated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    reviewed_at  = Column(DateTime(timezone=True), nullable=True)
+    sent_at      = Column(DateTime(timezone=True), nullable=True)
+    send_record_id = Column(UUID(as_uuid=True), ForeignKey("outreach_sends.id", ondelete="SET NULL"),
+                            nullable=True)
+
+    lead     = relationship("Lead", back_populates="drafts")
+    campaign = relationship("OutreachCampaign", back_populates="drafts")
 
 
 # ── Security Audit ─────────────────────────────────────────────────────────────

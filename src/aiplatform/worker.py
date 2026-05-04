@@ -127,6 +127,12 @@ celery_app.conf.update(
             "schedule": 600,
             "options": {"expires": 300},
         },
+        # Every 30 min — trigger find_leads + compose_pending for scheduled outreach campaigns
+        "outreach-scheduled-searches": {
+            "task": "outreach.run_scheduled_searches",
+            "schedule": 1800,            # 30 minutes
+            "options": {"expires": 600},
+        },
         # Hourly — fetch spend from vendor APIs; auto-pause campaigns that hit 100% budget
         "campaign-budget-monitor": {
             "task": "platform.monitor_campaign_budgets",
@@ -1087,22 +1093,35 @@ def purge_old_security_audits() -> dict:
 # ── Outreach tasks ─────────────────────────────────────────────────────────────
 
 @celery_app.task(bind=True, name="outreach.find_leads", max_retries=1)
-def run_find_leads(self, campaign_id: str, venture: str, max_leads: int = 20, channels: list | None = None, search_prompt: str | None = None) -> dict:
+def run_find_leads(
+    self,
+    campaign_id: str,
+    venture: str,
+    max_leads: int = 20,
+    sources: list | None = None,
+    search_prompt: str | None = None,
+    personas: list | None = None,
+) -> dict:
     """
-    Search configured channels for potential customers and persist them as leads.
-    Skips duplicates by checking existing lead source_url in this campaign.
-    search_prompt: user-reviewed AI criteria prompt that guides Claude qualification.
+    Search configured sources for potential customers and persist them as leads.
+    sources: list of CampaignSource dicts {platform, name, keywords, config, enabled}.
+    Falls back to VENTURE_DEFAULT_SOURCES[venture] when sources is empty.
     """
     from aiplatform.skills.research.find_leads import find_leads
-    from aiplatform.database.models import Lead, OutreachCampaign
+    from aiplatform.database.models import Lead
     from aiplatform.database.session import SessionLocal
     import uuid
 
     db = SessionLocal()
     try:
-        raw_leads = find_leads(venture, max_leads=max_leads, channels=channels, search_prompt=search_prompt)
+        raw_leads = find_leads(
+            sources=sources or [],
+            max_leads=max_leads,
+            search_prompt=search_prompt,
+            personas=personas or [],
+            venture=venture,
+        )
 
-        # Deduplicate against existing leads in DB (by source_url)
         campaign_uuid = uuid.UUID(campaign_id)
         existing_urls = {
             row[0] for row in db.query(Lead.source_url).filter(
@@ -1115,19 +1134,21 @@ def run_find_leads(self, campaign_id: str, venture: str, max_leads: int = 20, ch
         for lead_data in raw_leads:
             if lead_data.get("source_url") in existing_urls:
                 continue
-            l = Lead(
+            db.add(Lead(
                 venture=lead_data["venture"],
                 source_channel=lead_data["source_channel"],
                 source_url=lead_data.get("source_url"),
                 name=lead_data.get("name"),
                 email=lead_data.get("email"),
+                platform_username=lead_data.get("platform_username"),
                 website_url=lead_data.get("website_url"),
                 company=lead_data.get("company"),
                 notes=lead_data.get("notes"),
+                context=lead_data.get("context"),
+                matched_persona=lead_data.get("matched_persona"),
                 status="new",
                 campaign_id=campaign_uuid,
-            )
-            db.add(l)
+            ))
             new_count += 1
 
         db.commit()
@@ -1137,6 +1158,240 @@ def run_find_leads(self, campaign_id: str, venture: str, max_leads: int = 20, ch
         if self.request.retries < self.max_retries:
             raise self.retry(exc=exc, countdown=60)
         raise
+    finally:
+        db.close()
+
+
+@celery_app.task(bind=True, name="outreach.compose_pending", max_retries=1)
+def run_compose_pending(self, campaign_id: str) -> dict:
+    """
+    Generate personalized drafts for all leads in 'new' status that don't
+    have a pending_review draft yet. Runs inline (not chunked) — kept small
+    by max_leads caps on find_leads.
+    """
+    from aiplatform.skills.comms.compose_personalized import compose_for_lead
+    from aiplatform.database.models import Lead, LeadDraft, OutreachCampaign
+    from aiplatform.database.session import SessionLocal
+    from aiplatform.webapp.routers.outreach import _campaign_to_dict, _lead_to_dict
+    import uuid
+
+    db = SessionLocal()
+    try:
+        campaign_uuid = uuid.UUID(campaign_id)
+        campaign = db.get(OutreachCampaign, campaign_uuid)
+        if not campaign:
+            raise ValueError(f"Campaign {campaign_id} not found")
+
+        # Leads without a pending draft
+        drafted_lead_ids = {
+            row[0] for row in db.query(LeadDraft.lead_id).filter(
+                LeadDraft.campaign_id == campaign_uuid,
+                LeadDraft.status == "pending_review",
+            ).all()
+        }
+        leads = db.query(Lead).filter(
+            Lead.campaign_id == campaign_uuid,
+            Lead.status == "new",
+            Lead.id.notin_(drafted_lead_ids),
+        ).all()
+
+        campaign_dict = _campaign_to_dict(campaign, db)
+        composed_count = 0
+        errors = 0
+
+        for lead in leads:
+            try:
+                result = compose_for_lead(_lead_to_dict(lead), campaign_dict)
+                db.add(LeadDraft(
+                    lead_id=lead.id,
+                    campaign_id=campaign_uuid,
+                    subject=result.get("subject"),
+                    message_body=result["message_body"],
+                    context_used=result.get("context_used"),
+                    status="pending_review",
+                ))
+                composed_count += 1
+            except Exception as e:
+                log.warning("compose_pending: failed for lead %s: %s", lead.id, e)
+                errors += 1
+
+        db.commit()
+        return {"campaign_id": campaign_id, "composed": composed_count, "errors": errors}
+
+    except Exception as exc:
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=60)
+        raise
+    finally:
+        db.close()
+
+
+@celery_app.task(bind=True, name="outreach.send_approved_drafts", max_retries=1)
+def run_send_approved_drafts(self, campaign_id: str) -> dict:
+    """
+    Send all approved LeadDraft records via Resend (email platform) or log
+    the send event for non-email platforms (Reddit, LinkedIn, etc.).
+    Enforces the same cross-venture spam guard as run_send_outreach.
+    """
+    from aiplatform.skills.comms.send_email import send_email
+    from aiplatform.database.models import (
+        Contact, Lead, LeadDraft, OutreachCampaign, OutreachSend,
+    )
+    from aiplatform.database.session import SessionLocal
+    from datetime import timedelta
+    import uuid, os
+
+    db = SessionLocal()
+    try:
+        campaign_uuid = uuid.UUID(campaign_id)
+        campaign = db.get(OutreachCampaign, campaign_uuid)
+        if not campaign:
+            raise ValueError(f"Campaign {campaign_id} not found")
+
+        drafts = db.query(LeadDraft).filter(
+            LeadDraft.campaign_id == campaign_uuid,
+            LeadDraft.status == "approved",
+        ).all()
+
+        base_url = os.environ.get("RAILWAY_PUBLIC_URL", "https://api.planbadmin.com")
+        cooldown_days = 30
+        now = datetime.now(timezone.utc)
+        sent_count = 0
+        skipped_spam = 0
+
+        for draft in drafts:
+            lead = db.get(Lead, draft.lead_id)
+            if not lead:
+                continue
+
+            # Spam guard (email platform only)
+            if campaign.platform == "email":
+                if not lead.email:
+                    continue
+                contact = db.query(Contact).filter(Contact.email == lead.email).first()
+                if contact:
+                    if contact.status == "unsubscribed":
+                        lead.status = "unsubscribed"
+                        skipped_spam += 1
+                        continue
+                    if contact.last_activity_at and (now - contact.last_activity_at).days < cooldown_days:
+                        skipped_spam += 1
+                        continue
+
+            send_id = str(uuid.uuid4())
+
+            if campaign.platform == "email" and lead.email:
+                pixel_url = f"{base_url}/api/outreach/track/open/{send_id}"
+                unsub_url = f"{base_url}/api/outreach/unsubscribe/{send_id}"
+                body_text = draft.message_body.replace("{{UNSUBSCRIBE_URL}}", unsub_url)
+                body_html = (
+                    f"<p>{draft.message_body.replace(chr(10), '<br>')}</p>"
+                    f'\n<p style="font-size:11px;color:#999;"><a href="{unsub_url}">Unsubscribe</a></p>'
+                    f'\n<img src="{pixel_url}" width="1" height="1" style="display:none" alt="" />'
+                )
+                result = send_email(
+                    to=lead.email,
+                    subject=draft.subject or f"Quick question about your {campaign.venture.replace('_', ' ')}",
+                    body_html=body_html,
+                    body_text=body_text,
+                )
+                if result.get("error"):
+                    continue
+                message_id = result.get("message_id", "")
+            else:
+                # Non-email platforms: create a send record as a dispatch log
+                message_id = ""
+
+            send_record = OutreachSend(
+                id=uuid.UUID(send_id),
+                lead_id=lead.id,
+                template_id=None,      # draft-based send — no template
+                campaign_id=campaign_uuid,
+                message_id=message_id,
+                status="sent",
+            )
+            db.add(send_record)
+            draft.status = "sent"
+            draft.sent_at = now
+            draft.send_record_id = uuid.UUID(send_id)
+            lead.status = "email_sent"
+            sent_count += 1
+
+            # Upsert Contact
+            if lead.email:
+                contact = db.query(Contact).filter(Contact.email == lead.email).first()
+                if contact:
+                    contact.last_activity_at = now
+                    ventures = list(contact.ventures_approached or [])
+                    if campaign.venture not in ventures:
+                        ventures.append(campaign.venture)
+                        contact.ventures_approached = ventures
+                    if contact.status not in ("unsubscribed", "purchased", "inquired"):
+                        contact.status = "approached"
+                else:
+                    db.add(Contact(
+                        email=lead.email, name=lead.name, company=lead.company,
+                        website_url=lead.website_url, status="approached",
+                        ventures_approached=[campaign.venture],
+                        last_activity_at=now,
+                    ))
+
+        db.commit()
+        return {"campaign_id": campaign_id, "sent": sent_count,
+                "skipped_spam_or_cooldown": skipped_spam, "total_drafts": len(drafts)}
+
+    except Exception as exc:
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=60)
+        raise
+    finally:
+        db.close()
+
+
+@celery_app.task(name="outreach.run_scheduled_searches")
+def run_scheduled_searches() -> dict:
+    """
+    Beat task — runs every 30 minutes.
+    Finds campaigns with auto_search_enabled=True and next_search_at <= now,
+    triggers find_leads + compose_pending for each, and advances next_search_at.
+    """
+    from aiplatform.database.models import OutreachCampaign, CampaignSource
+    from aiplatform.database.session import SessionLocal
+    from datetime import timedelta
+
+    db = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+        due = db.query(OutreachCampaign).filter(
+            OutreachCampaign.auto_search_enabled.is_(True),
+            OutreachCampaign.next_search_at <= now,
+        ).all()
+
+        triggered = []
+        for c in due:
+            sources = [
+                {
+                    "platform": s.platform, "name": s.name,
+                    "keywords": s.keywords or [], "config": s.config or {},
+                    "enabled": s.enabled,
+                }
+                for s in db.query(CampaignSource).filter(
+                    CampaignSource.campaign_id == c.id,
+                    CampaignSource.enabled.is_(True),
+                ).all()
+            ]
+            run_find_leads.delay(
+                str(c.id), c.venture, 20, sources, None, c.personas or [],
+            )
+            run_compose_pending.delay(str(c.id))
+
+            c.last_search_at = now
+            interval = c.search_interval_hours or 24
+            c.next_search_at = now + timedelta(hours=interval)
+            triggered.append(str(c.id))
+
+        db.commit()
+        return {"triggered": triggered, "count": len(triggered)}
     finally:
         db.close()
 

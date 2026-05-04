@@ -4,13 +4,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 const API = import.meta.env.VITE_API_URL || "https://api.planbadmin.com"
 const authHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("api_token")}` })
 
+// ── Constants ──────────────────────────────────────────────────────────────────
+
 const VENTURES = [
-  { id: "marketing_audit",     label: "Marketing Audit",     icon: "search" },
-  { id: "content_studio",      label: "Podcast Show Notes",  icon: "mic" },
-  { id: "accessibility_audit", label: "Accessibility Audit", icon: "accessibility_new" },
+  { id: "marketing_audit",     label: "Marketing Audit",    icon: "search" },
+  { id: "content_studio",      label: "Podcast Show Notes", icon: "mic" },
+  { id: "accessibility_audit", label: "Accessibility Audit",icon: "accessibility_new" },
 ]
 
-const PLATFORMS = [
+const OUTREACH_PLATFORMS = [
   { id: "email",     label: "Email",     icon: "mail" },
   { id: "fiverr",    label: "Fiverr",    icon: "work" },
   { id: "reddit",    label: "Reddit",    icon: "forum" },
@@ -19,15 +21,23 @@ const PLATFORMS = [
   { id: "instagram", label: "Instagram", icon: "photo_camera" },
 ]
 
-function PlatformBadge({ platform }: { platform: string }) {
-  const p = PLATFORMS.find(x => x.id === platform)
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">
-      <span className="material-symbols-outlined text-[12px]">{p?.icon ?? "send"}</span>
-      {p?.label ?? platform}
-    </span>
-  )
-}
+const SOURCE_PLATFORMS = [
+  { id: "reddit",       label: "Reddit",        icon: "forum" },
+  { id: "google",       label: "Google",         icon: "search" },
+  { id: "linkedin",     label: "LinkedIn",       icon: "person_search" },
+  { id: "facebook",     label: "Facebook",       icon: "groups" },
+  { id: "hackernews",   label: "Hacker News",    icon: "code" },
+  { id: "indiehackers", label: "IndieHackers",   icon: "rocket_launch" },
+  { id: "fiverr",       label: "Fiverr",         icon: "work" },
+  { id: "listennotes",  label: "Listen Notes",   icon: "headphones" },
+]
+
+const SEARCH_INTERVALS = [
+  { value: null,  label: "Manual only" },
+  { value: 6,     label: "Every 6 hours" },
+  { value: 24,    label: "Daily" },
+  { value: 168,   label: "Weekly" },
+]
 
 const STATUS_COLORS: Record<string, string> = {
   new:            "bg-surface-container text-on-surface-variant",
@@ -41,9 +51,10 @@ const STATUS_COLORS: Record<string, string> = {
   active:         "bg-primary/10 text-primary",
   paused:         "bg-amber-100 text-amber-700",
   completed:      "bg-emerald-100 text-emerald-700",
-  pending:        "bg-amber-100 text-amber-700",
+  pending_review: "bg-amber-100 text-amber-700",
   approved:       "bg-emerald-100 text-emerald-700",
   rejected:       "bg-error/10 text-error",
+  sent:           "bg-primary/10 text-primary",
   approached:     "bg-primary/10 text-primary",
   inquired:       "bg-tertiary/10 text-tertiary",
   purchased:      "bg-emerald-600 text-white",
@@ -53,6 +64,17 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${STATUS_COLORS[status] ?? "bg-surface-container text-on-surface-variant"}`}>
       {status.replace(/_/g, " ")}
+    </span>
+  )
+}
+
+function PlatformBadge({ platform, small }: { platform: string; small?: boolean }) {
+  const p = OUTREACH_PLATFORMS.find(x => x.id === platform)
+    ?? SOURCE_PLATFORMS.find(x => x.id === platform)
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-bold uppercase tracking-wider ${small ? "text-[10px]" : "text-[11px]"}`}>
+      <span className={`material-symbols-outlined ${small ? "text-[11px]" : "text-[13px]"}`}>{p?.icon ?? "send"}</span>
+      {p?.label ?? platform}
     </span>
   )
 }
@@ -95,12 +117,14 @@ function useLeads(campaignId: string | null, polling = false) {
   })
 }
 
-function useStats(campaignId: string | null) {
+function useDrafts(campaignId: string | null, statusFilter?: string) {
   return useQuery({
-    queryKey: ["campaign-stats", campaignId],
+    queryKey: ["drafts", campaignId, statusFilter],
     enabled: !!campaignId,
     queryFn: async () => {
-      const r = await fetch(`${API}/api/outreach/campaigns/${campaignId}/stats`, { headers: authHeader() })
+      const params = new URLSearchParams()
+      if (statusFilter) params.set("status", statusFilter)
+      const r = await fetch(`${API}/api/outreach/campaigns/${campaignId}/drafts?${params}`, { headers: authHeader() })
       if (!r.ok) throw new Error(r.statusText)
       return r.json()
     },
@@ -121,26 +145,264 @@ function useContacts(page: number, search: string, statusFilter: string) {
   })
 }
 
-// ── Find Leads modal with AI-generated prompt ─────────────────────────────────
+// ── Persona editor ─────────────────────────────────────────────────────────────
 
-function FindLeadsModal({
-  campaignId, onClose, onTriggered,
-}: { campaignId: string; onClose: () => void; onTriggered: () => void }) {
+function PersonaEditor({ personas, onChange }: {
+  personas: { name: string; description: string }[]
+  onChange: (p: { name: string; description: string }[]) => void
+}) {
+  function add() {
+    if (personas.length >= 5) return
+    onChange([...personas, { name: "", description: "" }])
+  }
+  function update(i: number, field: "name" | "description", val: string) {
+    const next = personas.map((p, idx) => idx === i ? { ...p, [field]: val } : p)
+    onChange(next)
+  }
+  function remove(i: number) {
+    onChange(personas.filter((_, idx) => idx !== i))
+  }
+
+  return (
+    <div className="space-y-3">
+      {personas.map((p, i) => (
+        <div key={i} className="bg-surface-container-low rounded-lg border border-outline-variant/20 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <input
+              value={p.name}
+              onChange={e => update(i, "name", e.target.value)}
+              placeholder={`Persona ${i + 1} name (e.g. "Solo podcaster")`}
+              className="flex-1 px-3 py-1.5 text-sm font-label bg-surface-container-lowest rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface"
+            />
+            <button onClick={() => remove(i)} className="text-on-surface-variant hover:text-error transition-colors">
+              <span className="material-symbols-outlined text-[18px]">close</span>
+            </button>
+          </div>
+          <textarea
+            value={p.description}
+            onChange={e => update(i, "description", e.target.value)}
+            placeholder="Describe this persona — their role, pain points, what they're usually trying to solve…"
+            rows={2}
+            className="w-full px-3 py-1.5 text-sm font-label bg-surface-container-lowest rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface resize-none"
+          />
+        </div>
+      ))}
+      {personas.length < 5 && (
+        <button onClick={add}
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-dashed border-outline-variant/40 text-on-surface-variant hover:border-primary/30 hover:text-on-surface rounded-lg text-xs font-label font-semibold transition-colors">
+          <span className="material-symbols-outlined text-[14px]">add</span>Add Persona
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ── Source row ─────────────────────────────────────────────────────────────────
+
+function SourceRow({ source, onSave, onDelete }: {
+  source: any
+  onSave: (id: string, patch: any) => void
+  onDelete: (id: string) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [keywords, setKeywords] = useState((source.keywords || []).join(", "))
+  const [saving, setSaving] = useState(false)
+
+  async function save() {
+    setSaving(true)
+    await onSave(source.id, {
+      keywords: keywords.split(",").map((k: string) => k.trim()).filter(Boolean),
+    })
+    setSaving(false)
+    setExpanded(false)
+  }
+
+  return (
+    <div className="bg-surface-container-lowest rounded-lg border border-outline-variant/20 overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-2.5">
+        <PlatformBadge platform={source.platform} small />
+        <span className="flex-1 text-sm font-label text-on-surface">{source.name}</span>
+        <span className="text-xs text-on-surface-variant">{(source.keywords || []).length} keywords</span>
+        <button
+          onClick={() => onSave(source.id, { enabled: !source.enabled })}
+          className={`text-xs font-label font-semibold px-2 py-0.5 rounded transition-colors ${source.enabled ? "bg-emerald-100 text-emerald-700" : "bg-surface-dim text-on-surface-variant"}`}
+        >
+          {source.enabled ? "ON" : "OFF"}
+        </button>
+        <button onClick={() => setExpanded(e => !e)} className="text-on-surface-variant hover:text-on-surface">
+          <span className="material-symbols-outlined text-[18px]">{expanded ? "expand_less" : "expand_more"}</span>
+        </button>
+        <button onClick={() => onDelete(source.id)} className="text-on-surface-variant hover:text-error transition-colors">
+          <span className="material-symbols-outlined text-[16px]">delete</span>
+        </button>
+      </div>
+
+      {expanded && (
+        <div className="px-4 pb-3 border-t border-outline-variant/10 pt-3 space-y-2">
+          <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">
+            Keywords / Queries (comma-separated)
+          </label>
+          <textarea
+            value={keywords}
+            onChange={e => setKeywords(e.target.value)}
+            rows={3}
+            className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface resize-none"
+          />
+          {source.platform === "reddit" && (
+            <p className="text-[10px] text-on-surface-variant">
+              Subreddits: {(source.config?.subreddits || []).join(", ") || "none configured"}
+            </p>
+          )}
+          {source.platform === "facebook" && (
+            <p className="text-[10px] text-on-surface-variant">
+              Groups: {(source.config?.group_urls || []).join(", ") || "generic search"}
+            </p>
+          )}
+          <div className="flex gap-2 pt-1">
+            <button onClick={save} disabled={saving}
+              className="px-3 py-1.5 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg disabled:opacity-50">
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button onClick={() => setExpanded(false)}
+              className="px-3 py-1.5 bg-surface-container text-on-surface-variant text-xs font-label font-semibold rounded-lg">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Add source modal ───────────────────────────────────────────────────────────
+
+function AddSourceModal({ campaignId, onClose, onAdded }: {
+  campaignId: string
+  onClose: () => void
+  onAdded: () => void
+}) {
+  const [platform, setPlatform] = useState("reddit")
+  const [name, setName] = useState("")
+  const [keywords, setKeywords] = useState("")
+  const [groupUrls, setGroupUrls] = useState("")
+  const [subreddits, setSubreddits] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
+
+  const platformInfo = SOURCE_PLATFORMS.find(p => p.id === platform)
+
+  async function save() {
+    if (!name.trim() || !keywords.trim()) { setError("Name and keywords are required."); return }
+    setSaving(true)
+    const config: Record<string, any> = {}
+    if (platform === "reddit" && subreddits.trim()) {
+      config.subreddits = subreddits.split(",").map(s => s.trim()).filter(Boolean)
+    }
+    if (platform === "facebook" && groupUrls.trim()) {
+      config.group_urls = groupUrls.split(",").map(u => u.trim()).filter(Boolean)
+    }
+    const r = await fetch(`${API}/api/outreach/campaigns/${campaignId}/sources`, {
+      method: "POST",
+      headers: { ...authHeader(), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        platform, name: name.trim(),
+        keywords: keywords.split(",").map(k => k.trim()).filter(Boolean),
+        config, enabled: true,
+      }),
+    })
+    setSaving(false)
+    if (r.ok) { onAdded(); onClose() } else { setError("Failed to add source.") }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-float w-full max-w-lg">
+        <div className="px-6 py-4 border-b border-outline-variant/10 flex items-center justify-between">
+          <h3 className="font-headline font-bold text-base text-on-surface">Add Search Source</h3>
+          <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface">
+            <span className="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Platform</label>
+            <div className="flex flex-wrap gap-2">
+              {SOURCE_PLATFORMS.map(p => (
+                <button key={p.id} onClick={() => setPlatform(p.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-label font-semibold border transition-colors ${platform === p.id ? "border-primary bg-primary/5 text-primary" : "border-outline-variant/20 text-on-surface-variant hover:border-primary/30"}`}>
+                  <span className="material-symbols-outlined text-[13px]">{p.icon}</span>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Source Name</label>
+            <input value={name} onChange={e => setName(e.target.value)}
+              placeholder={platform === "reddit" ? "e.g. r/smallbusiness" : platform === "facebook" ? "e.g. SaaS Founders Group" : `${platformInfo?.label} search`}
+              className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface" />
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Keywords (comma-separated)</label>
+            <textarea value={keywords} onChange={e => setKeywords(e.target.value)}
+              placeholder="website not converting, seo help, marketing strategy"
+              rows={3}
+              className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface resize-none" />
+          </div>
+
+          {platform === "reddit" && (
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Subreddits (comma-separated)</label>
+              <input value={subreddits} onChange={e => setSubreddits(e.target.value)}
+                placeholder="entrepreneur, smallbusiness, startups"
+                className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface" />
+            </div>
+          )}
+
+          {platform === "facebook" && (
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Group URLs (comma-separated)</label>
+              <input value={groupUrls} onChange={e => setGroupUrls(e.target.value)}
+                placeholder="https://www.facebook.com/groups/smallbizowners"
+                className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface" />
+              <p className="text-[10px] text-on-surface-variant mt-1">Requires APIFY_API_TOKEN. Falls back to Google signals if not set.</p>
+            </div>
+          )}
+
+          {error && <p className="text-xs text-error">{error}</p>}
+        </div>
+        <div className="px-6 py-4 border-t border-outline-variant/10 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 bg-surface-container text-on-surface-variant text-xs font-label font-semibold rounded-lg">Cancel</button>
+          <button onClick={save} disabled={saving}
+            className="flex items-center gap-1.5 px-4 py-2 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg disabled:opacity-50">
+            {saving ? "Adding…" : "Add Source"}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Find Leads modal ───────────────────────────────────────────────────────────
+
+function FindLeadsModal({ campaignId, onClose, onTriggered }: {
+  campaignId: string; onClose: () => void; onTriggered: () => void
+}) {
   const [step, setStep] = useState<"generating" | "review" | "searching">("generating")
   const [prompt, setPrompt] = useState("")
   const [maxLeads, setMaxLeads] = useState(20)
   const [error, setError] = useState("")
 
-  // Generate prompt on mount
-  useState(() => {
+  useEffect(() => {
     fetch(`${API}/api/outreach/campaigns/${campaignId}/generate-prompt`, {
-      method: "POST",
-      headers: authHeader(),
+      method: "POST", headers: authHeader(),
     })
       .then(r => r.json())
       .then(d => { setPrompt(d.prompt || ""); setStep("review") })
-      .catch(() => { setError("Failed to generate prompt. You can write your own."); setStep("review") })
-  })
+      .catch(() => { setError("Could not auto-generate. Write your own criteria."); setStep("review") })
+  }, [campaignId])
 
   async function startSearch() {
     setStep("searching")
@@ -152,10 +414,7 @@ function FindLeadsModal({
       })
       onTriggered()
       onClose()
-    } catch {
-      setError("Failed to start search.")
-      setStep("review")
-    }
+    } catch { setError("Failed to start search."); setStep("review") }
   }
 
   return (
@@ -167,66 +426,45 @@ function FindLeadsModal({
             <span className="material-symbols-outlined text-[20px]">close</span>
           </button>
         </div>
-
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {step === "generating" && (
             <div className="flex items-center gap-3 text-sm text-on-surface-variant">
               <span className="material-symbols-outlined text-[20px] animate-spin">progress_activity</span>
-              Generating search criteria based on your campaign…
+              Generating search criteria from your personas and campaign context…
             </div>
           )}
-
           {(step === "review" || step === "searching") && (
             <>
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
-                  Search Criteria Prompt
+                  AI-Generated Search Criteria
                 </label>
                 <p className="text-xs text-on-surface-variant mb-2">
-                  This prompt guides the AI when searching and qualifying leads. Review and adjust it before searching.
+                  Claude generated this from your personas and campaign goal. Review and adjust before searching.
                 </p>
-                <textarea
-                  value={prompt}
-                  onChange={e => setPrompt(e.target.value)}
-                  rows={14}
-                  className="w-full px-3 py-2.5 text-sm font-mono bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface resize-none leading-relaxed"
-                />
+                <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={14}
+                  className="w-full px-3 py-2.5 text-sm font-mono bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface resize-none leading-relaxed" />
               </div>
-
-              <div className="flex items-center gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Max Leads</label>
-                  <input
-                    type="number"
-                    value={maxLeads}
-                    onChange={e => setMaxLeads(Number(e.target.value))}
-                    min={5} max={50}
-                    className="w-24 px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface"
-                  />
-                </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Max Leads</label>
+                <input type="number" value={maxLeads} onChange={e => setMaxLeads(Number(e.target.value))} min={5} max={50}
+                  className="w-24 px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface" />
               </div>
-
               {error && <p className="text-xs text-error">{error}</p>}
             </>
           )}
         </div>
-
         <div className="px-6 py-4 border-t border-outline-variant/10 flex justify-end gap-2">
-          <button onClick={onClose}
-            className="px-4 py-2 bg-surface-container text-on-surface-variant text-xs font-label font-semibold rounded-lg">
-            Cancel
-          </button>
-          {(step === "review") && (
+          <button onClick={onClose} className="px-4 py-2 bg-surface-container text-on-surface-variant text-xs font-label font-semibold rounded-lg">Cancel</button>
+          {step === "review" && (
             <button onClick={startSearch} disabled={!prompt.trim()}
               className="flex items-center gap-1.5 px-4 py-2 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg disabled:opacity-50">
-              <span className="material-symbols-outlined text-[14px]">search</span>
-              Start Search
+              <span className="material-symbols-outlined text-[14px]">search</span>Start Search
             </button>
           )}
           {step === "searching" && (
             <button disabled className="flex items-center gap-1.5 px-4 py-2 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg opacity-70">
-              <span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>
-              Queuing…
+              <span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>Queuing…
             </button>
           )}
         </div>
@@ -235,145 +473,144 @@ function FindLeadsModal({
   )
 }
 
-// ── Template card ─────────────────────────────────────────────────────────────
+// ── Draft card ─────────────────────────────────────────────────────────────────
 
-function TemplateCard({
-  template, campaignId, platform, onSaved,
-}: { template: any; campaignId: string; platform: string; onSaved: () => void }) {
-  const qc = useQueryClient()
+function DraftCard({ draft, onUpdate }: { draft: any; onUpdate: () => void }) {
   const [editing, setEditing] = useState(false)
-  const [subject, setSubject] = useState(template.subject)
-  const [body, setBody] = useState(template.body_text || "")
+  const [body, setBody] = useState(draft.message_body || "")
+  const [subject, setSubject] = useState(draft.subject || "")
   const [saving, setSaving] = useState(false)
-  const [approving, setApproving] = useState(false)
-  const isEmail = platform === "email"
 
-  async function save() {
+  const lead = draft.lead || {}
+  const isEmail = draft.subject !== null && draft.subject !== undefined
+
+  async function patch(patch: any) {
     setSaving(true)
-    await fetch(`${API}/api/outreach/templates/${template.id}`, {
+    await fetch(`${API}/api/outreach/drafts/${draft.id}`, {
       method: "PATCH",
       headers: { ...authHeader(), "Content-Type": "application/json" },
-      body: JSON.stringify({ subject, body_text: body }),
+      body: JSON.stringify(patch),
     })
     setSaving(false)
+    onUpdate()
+  }
+
+  async function saveEdit() {
+    await patch({ subject: isEmail ? subject : undefined, message_body: body })
     setEditing(false)
-    qc.invalidateQueries({ queryKey: ["campaign", campaignId] })
-    onSaved()
   }
 
-  async function setApproval(val: string) {
-    setApproving(true)
-    await fetch(`${API}/api/outreach/templates/${template.id}`, {
-      method: "PATCH",
-      headers: { ...authHeader(), "Content-Type": "application/json" },
-      body: JSON.stringify({ approved: val }),
-    })
-    setApproving(false)
-    qc.invalidateQueries({ queryKey: ["campaign", campaignId] })
-    onSaved()
-  }
-
-  const variantColors: Record<string, string> = {
-    A: "bg-primary/10 text-primary",
-    B: "bg-tertiary/10 text-tertiary",
-    C: "bg-secondary-container text-on-secondary-container",
-  }
+  const statusColor = draft.status === "approved" ? "border-emerald-300 bg-emerald-50/50"
+    : draft.status === "rejected" ? "border-error/20 bg-error/5"
+    : "border-outline-variant/20"
 
   return (
-    <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 overflow-hidden">
-      <div className="px-5 py-3 border-b border-outline-variant/10 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${variantColors[template.variant] ?? ""}`}>
-            Variant {template.variant}
-          </span>
-          <StatusBadge status={template.approved} />
+    <div className={`bg-surface-container-lowest rounded-xl border overflow-hidden ${statusColor}`}>
+      {/* Lead context header */}
+      <div className="px-5 py-3 border-b border-outline-variant/10 bg-surface-container-low/60">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-sm font-label font-semibold text-on-surface">
+                {lead.name || lead.platform_username || "Unknown"}
+              </span>
+              {lead.source_channel && <PlatformBadge platform={lead.source_channel} small />}
+              {lead.matched_persona && (
+                <span className="text-[10px] px-2 py-0.5 rounded bg-tertiary/10 text-tertiary font-bold uppercase">
+                  {lead.matched_persona}
+                </span>
+              )}
+              <StatusBadge status={draft.status} />
+            </div>
+            {lead.company && <p className="text-xs text-on-surface-variant">{lead.company}</p>}
+            {lead.source_url && (
+              <a href={lead.source_url} target="_blank" rel="noopener noreferrer"
+                className="text-[11px] text-primary hover:underline truncate block max-w-xs">
+                {lead.source_url.replace(/^https?:\/\//, "").slice(0, 60)}
+              </a>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-xs text-on-surface-variant font-label">
-          <span>{template.sends} sent</span>
-          <span>{template.open_rate}% open</span>
-          <span>{template.reply_rate}% reply</span>
-        </div>
+
+        {/* Their post context */}
+        {lead.context && (
+          <div className="mt-2 px-3 py-2 bg-surface-container rounded-lg">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Their post</p>
+            <p className="text-xs text-on-surface-variant leading-relaxed line-clamp-3">{lead.context}</p>
+          </div>
+        )}
       </div>
 
-      <div className="p-5 space-y-3">
+      {/* AI-written message */}
+      <div className="p-5">
         {editing ? (
-          <>
+          <div className="space-y-3">
             {isEmail && (
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Subject</label>
-                <input
-                  value={subject}
-                  onChange={e => setSubject(e.target.value)}
-                  className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface"
-                />
+                <input value={subject} onChange={e => setSubject(e.target.value)}
+                  className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface" />
               </div>
             )}
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Message</label>
-              <textarea
-                value={body}
-                onChange={e => setBody(e.target.value)}
-                rows={10}
-                className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface resize-none leading-relaxed"
-              />
+              <textarea value={body} onChange={e => setBody(e.target.value)} rows={8}
+                className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface resize-none leading-relaxed" />
             </div>
             <div className="flex gap-2">
-              <button onClick={save} disabled={saving}
+              <button onClick={saveEdit} disabled={saving}
                 className="px-4 py-1.5 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg disabled:opacity-50">
                 {saving ? "Saving…" : "Save"}
               </button>
-              <button onClick={() => { setEditing(false); setSubject(template.subject); setBody(template.body_text || "") }}
+              <button onClick={() => { setEditing(false); setBody(draft.message_body); setSubject(draft.subject || "") }}
                 className="px-4 py-1.5 bg-surface-container text-on-surface-variant text-xs font-label font-semibold rounded-lg">
                 Cancel
               </button>
             </div>
-          </>
+          </div>
         ) : (
-          <>
-            {isEmail && template.subject && (
+          <div className="space-y-3">
+            {isEmail && draft.subject && (
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Subject</p>
-                <p className="text-sm font-label text-on-surface">{template.subject}</p>
-              </div>
-            )}
-            {template.tone_notes && (
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Tone & Angle</p>
-                <p className="text-xs text-on-surface-variant italic">{template.tone_notes}</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-0.5">Subject</p>
+                <p className="text-sm font-label text-on-surface">{draft.subject}</p>
               </div>
             )}
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Body</p>
-              <pre className="text-sm font-label text-on-surface whitespace-pre-wrap leading-relaxed">{template.body_text}</pre>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Message</p>
+              <pre className="text-sm font-label text-on-surface whitespace-pre-wrap leading-relaxed">{draft.message_body}</pre>
             </div>
-            <div className="flex flex-wrap gap-2 pt-1">
-              <button onClick={() => setEditing(true)}
-                className="flex items-center gap-1 px-3 py-1.5 bg-surface-container text-on-surface-variant text-xs font-label font-semibold rounded-lg hover:bg-surface-dim transition-colors">
-                <span className="material-symbols-outlined text-[14px]">edit</span>Edit
-              </button>
-              {template.approved !== "approved" && (
-                <button onClick={() => setApproval("approved")} disabled={approving}
+            {draft.status === "pending_review" && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button onClick={() => setEditing(true)}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-surface-container text-on-surface-variant text-xs font-label font-semibold rounded-lg hover:bg-surface-dim transition-colors">
+                  <span className="material-symbols-outlined text-[13px]">edit</span>Edit
+                </button>
+                <button onClick={() => patch({ status: "approved" })} disabled={saving}
                   className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white text-xs font-label font-semibold rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50">
-                  <span className="material-symbols-outlined text-[14px]">check_circle</span>Approve
+                  <span className="material-symbols-outlined text-[13px]">check_circle</span>Approve
                 </button>
-              )}
-              {template.approved !== "rejected" && (
-                <button onClick={() => setApproval("rejected")} disabled={approving}
+                <button onClick={() => patch({ status: "rejected" })} disabled={saving}
                   className="flex items-center gap-1 px-3 py-1.5 border border-error/30 text-error text-xs font-label font-semibold rounded-lg hover:bg-error-container transition-colors disabled:opacity-50">
-                  <span className="material-symbols-outlined text-[14px]">cancel</span>Reject
+                  <span className="material-symbols-outlined text-[13px]">cancel</span>Reject
                 </button>
-              )}
-            </div>
-          </>
+              </div>
+            )}
+            {draft.status === "approved" && (
+              <div className="flex items-center gap-2 text-xs text-emerald-700">
+                <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                Approved — queued to send
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>
   )
 }
 
-// ── Campaign detail ───────────────────────────────────────────────────────────
+// ── Campaign detail ────────────────────────────────────────────────────────────
 
-// Poll timeout: stop automatically after 2 minutes (Celery task won't run longer)
 const SEARCH_TIMEOUT_MS = 120_000
 
 function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDeleted: () => void }) {
@@ -381,25 +618,24 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
   const { data: campaign, isLoading } = useCampaign(campaignId)
   const [searchingLeads, setSearchingLeads] = useState(false)
   const { data: leadsData } = useLeads(campaignId, searchingLeads)
-  const { data: stats, refetch: refetchStats } = useStats(campaignId)
-  const [activeTab, setActiveTab] = useState<"templates" | "leads" | "stats">("templates")
+  const [activeTab, setActiveTab] = useState<"leads" | "drafts" | "sources">("leads")
+  const [draftStatusFilter, setDraftStatusFilter] = useState("pending_review")
+  const { data: draftsData, refetch: refetchDrafts } = useDrafts(campaignId, draftStatusFilter)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [showFindLeads, setShowFindLeads] = useState(false)
+  const [showAddSource, setShowAddSource] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevLeadCountRef = useRef<number>(0)
   const stableCountSinceRef = useRef<number | null>(null)
 
-  // Auto-stop polling when lead count stops growing for 12s, or after hard timeout
   useEffect(() => {
     if (!searchingLeads) return
     const currentCount = leadsData?.total ?? 0
-
     if (currentCount !== prevLeadCountRef.current) {
       prevLeadCountRef.current = currentCount
       stableCountSinceRef.current = Date.now()
     } else if (stableCountSinceRef.current && Date.now() - stableCountSinceRef.current > 12_000 && currentCount > 0) {
-      // Count hasn't changed for 12s and we have at least one lead — likely done
       setSearchingLeads(false)
     }
   }, [leadsData?.total, searchingLeads])
@@ -426,94 +662,121 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
       qc.invalidateQueries({ queryKey: ["campaigns"] })
       qc.invalidateQueries({ queryKey: ["campaign", campaignId] })
       qc.invalidateQueries({ queryKey: ["leads", campaignId] })
-    } finally {
-      setActionLoading(null)
-    }
+      qc.invalidateQueries({ queryKey: ["drafts", campaignId] })
+    } finally { setActionLoading(null) }
   }
 
   async function deleteCampaign() {
-    if (!confirm(`Delete campaign "${campaign?.name}"? This will also delete all leads, templates, and send records. This cannot be undone.`)) return
+    if (!confirm(`Delete campaign "${campaign?.name}"? All leads, sources, and drafts will be deleted. This cannot be undone.`)) return
     setDeleting(true)
-    await fetch(`${API}/api/outreach/campaigns/${campaignId}`, {
-      method: "DELETE",
-      headers: authHeader(),
-    })
+    await fetch(`${API}/api/outreach/campaigns/${campaignId}`, { method: "DELETE", headers: authHeader() })
     qc.invalidateQueries({ queryKey: ["campaigns"] })
     onDeleted()
+  }
+
+  async function patchSource(id: string, patch: any) {
+    await fetch(`${API}/api/outreach/sources/${id}`, {
+      method: "PATCH",
+      headers: { ...authHeader(), "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    })
+    qc.invalidateQueries({ queryKey: ["campaign", campaignId] })
+  }
+
+  async function deleteSource(id: string) {
+    if (!confirm("Remove this source?")) return
+    await fetch(`${API}/api/outreach/sources/${id}`, { method: "DELETE", headers: authHeader() })
+    qc.invalidateQueries({ queryKey: ["campaign", campaignId] })
+  }
+
+  async function approveAllDrafts() {
+    const pending = (draftsData?.items || []).filter((d: any) => d.status === "pending_review")
+    for (const d of pending) {
+      await fetch(`${API}/api/outreach/drafts/${d.id}`, {
+        method: "PATCH",
+        headers: { ...authHeader(), "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "approved" }),
+      })
+    }
+    qc.invalidateQueries({ queryKey: ["drafts", campaignId] })
   }
 
   if (isLoading) return <div className="p-8 text-center text-sm text-on-surface-variant">Loading…</div>
   if (!campaign) return null
 
-  const campaignPlatform = campaign.platform || "email"
-  const isEmailCampaign = campaignPlatform === "email"
+  const sources = campaign.sources || []
+  const platform = campaign.platform || "email"
+  const drafts = draftsData?.items || []
+  const pendingDrafts = (draftsData?.items || []).filter((d: any) => d.status === "pending_review").length
+
+  const scheduleLabel = campaign.auto_search_enabled
+    ? campaign.next_search_at
+      ? `Next: ${new Date(campaign.next_search_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`
+      : "Scheduled"
+    : "Manual"
 
   const tabs = [
-    { id: "templates", label: "Message Templates", icon: "mail" },
-    { id: "leads",     label: `Leads (${leadsData?.total ?? 0})`, icon: "group" },
-    { id: "stats",     label: "A/B Results", icon: "bar_chart" },
+    { id: "leads",   label: `Leads (${leadsData?.total ?? 0})`, icon: "group" },
+    { id: "drafts",  label: `Drafts${pendingDrafts > 0 ? ` (${pendingDrafts})` : ""}`, icon: "mail" },
+    { id: "sources", label: `Sources (${sources.length})`, icon: "travel_explore" },
   ]
 
   return (
     <>
       {showFindLeads && (
-        <FindLeadsModal
-          campaignId={campaignId}
-          onClose={() => setShowFindLeads(false)}
+        <FindLeadsModal campaignId={campaignId} onClose={() => setShowFindLeads(false)}
           onTriggered={() => {
             startSearchPolling()
             qc.invalidateQueries({ queryKey: ["leads", campaignId] })
-            qc.invalidateQueries({ queryKey: ["campaign", campaignId] })
-          }}
-        />
+          }} />
+      )}
+      {showAddSource && (
+        <AddSourceModal campaignId={campaignId} onClose={() => setShowAddSource(false)}
+          onAdded={() => qc.invalidateQueries({ queryKey: ["campaign", campaignId] })} />
       )}
 
-      <div className="space-y-6">
+      <div className="space-y-5">
         {/* Campaign header */}
         <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-5">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-3 mb-2">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
                 <h2 className="font-headline font-bold text-lg text-on-surface">{campaign.name}</h2>
                 <StatusBadge status={campaign.status} />
-                <PlatformBadge platform={campaignPlatform} />
+                <PlatformBadge platform={platform} />
+                <span className={`text-[10px] font-label font-semibold px-2 py-0.5 rounded ${campaign.auto_search_enabled ? "bg-primary/10 text-primary" : "bg-surface-container text-on-surface-variant"}`}>
+                  <span className="material-symbols-outlined text-[10px] mr-0.5">schedule</span>
+                  {scheduleLabel}
+                </span>
               </div>
-              {campaign.goal && (
-                <p className="text-sm text-on-surface-variant leading-relaxed">{campaign.goal}</p>
+              {campaign.goal && <p className="text-sm text-on-surface-variant leading-relaxed">{campaign.goal}</p>}
+              {campaign.personas?.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {campaign.personas.map((p: any, i: number) => (
+                    <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-tertiary/10 text-tertiary font-bold uppercase">
+                      {p.name}
+                    </span>
+                  ))}
+                </div>
               )}
             </div>
             <div className="flex flex-wrap items-start gap-2">
-              <button
-                onClick={() => setShowFindLeads(true)}
-                disabled={!!actionLoading}
-                className="flex items-center gap-1.5 px-3 py-2 bg-surface-container text-on-surface text-xs font-label font-semibold rounded-lg hover:bg-surface-dim disabled:opacity-50 transition-colors"
-              >
+              <button onClick={() => setShowFindLeads(true)} disabled={!!actionLoading}
+                className="flex items-center gap-1.5 px-3 py-2 bg-surface-container text-on-surface text-xs font-label font-semibold rounded-lg hover:bg-surface-dim disabled:opacity-50 transition-colors">
                 <span className="material-symbols-outlined text-[14px]">search</span>Find Leads
               </button>
-              <button
-                onClick={() => triggerAction("compose", {}, "compose")}
-                disabled={!!actionLoading}
-                className="flex items-center gap-1.5 px-3 py-2 bg-surface-container text-on-surface text-xs font-label font-semibold rounded-lg hover:bg-surface-dim disabled:opacity-50 transition-colors"
-              >
+              <button onClick={() => triggerAction("compose-pending", {}, "compose")} disabled={!!actionLoading}
+                className="flex items-center gap-1.5 px-3 py-2 bg-surface-container text-on-surface text-xs font-label font-semibold rounded-lg hover:bg-surface-dim disabled:opacity-50 transition-colors">
                 <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
-                {actionLoading === "compose" ? "Composing…" : "Compose Messages"}
+                {actionLoading === "compose" ? "Drafting…" : "Generate Drafts"}
               </button>
-              {isEmailCampaign && (
-              <button
-                onClick={() => triggerAction("send", {}, "send")}
-                disabled={!!actionLoading}
-                className="flex items-center gap-1.5 px-3 py-2 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
-              >
+              <button onClick={() => triggerAction("send-approved", {}, "send")} disabled={!!actionLoading}
+                className="flex items-center gap-1.5 px-3 py-2 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity">
                 <span className="material-symbols-outlined text-[14px]">send</span>
                 {actionLoading === "send" ? "Sending…" : "Send Approved"}
               </button>
-              )}
-              <button
-                onClick={deleteCampaign}
-                disabled={deleting}
-                className="flex items-center gap-1.5 px-3 py-2 border border-error/30 text-error text-xs font-label font-semibold rounded-lg hover:bg-error-container disabled:opacity-50 transition-colors"
-                title="Delete campaign"
-              >
+              <button onClick={deleteCampaign} disabled={deleting}
+                className="flex items-center gap-1.5 px-3 py-2 border border-error/30 text-error text-xs font-label font-semibold rounded-lg hover:bg-error-container disabled:opacity-50 transition-colors">
                 <span className="material-symbols-outlined text-[14px]">delete</span>
                 {deleting ? "Deleting…" : "Delete"}
               </button>
@@ -523,23 +786,19 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
           {/* Stats bar */}
           <div className="flex items-center gap-6 mt-4 pt-4 border-t border-outline-variant/10 text-xs font-label text-on-surface-variant">
             <span><strong className="text-on-surface">{campaign.leads_count}</strong> leads</span>
+            <span><strong className="text-on-surface">{campaign.drafts_pending}</strong> drafts pending</span>
             <span><strong className="text-on-surface">{campaign.total_sends}</strong> sent</span>
-            <span><strong className="text-on-surface">{campaign.open_rate}%</strong> open rate</span>
-            <span><strong className="text-on-surface">{campaign.reply_rate}%</strong> reply rate</span>
+            {campaign.total_sends > 0 && <span><strong className="text-on-surface">{campaign.reply_rate}%</strong> reply rate</span>}
           </div>
 
-          {/* Search-in-progress banner */}
+          {/* Search banner */}
           {searchingLeads && (
             <div className="flex items-center justify-between gap-3 mt-3 px-3 py-2.5 bg-primary/8 border border-primary/20 rounded-lg">
               <div className="flex items-center gap-2 text-xs font-label text-primary">
                 <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
-                Searching for leads in the background — {leadsData?.total ?? 0} found so far. This page updates automatically.
+                Searching across all sources — {leadsData?.total ?? 0} leads found so far.
               </div>
-              <button
-                onClick={() => setSearchingLeads(false)}
-                className="text-primary/60 hover:text-primary transition-colors"
-                title="Dismiss (search continues in background)"
-              >
+              <button onClick={() => setSearchingLeads(false)} className="text-primary/60 hover:text-primary">
                 <span className="material-symbols-outlined text-[16px]">close</span>
               </button>
             </div>
@@ -550,32 +809,12 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
         <div className="flex gap-1 bg-surface-container-low p-1 rounded-xl w-fit">
           {tabs.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id as any)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-label font-semibold transition-colors ${
-                activeTab === t.id ? "bg-surface-container-lowest text-on-surface shadow-float" : "text-on-surface-variant hover:text-on-surface"
-              }`}>
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-label font-semibold transition-colors ${activeTab === t.id ? "bg-surface-container-lowest text-on-surface shadow-float" : "text-on-surface-variant hover:text-on-surface"}`}>
               <span className="material-symbols-outlined text-[14px]">{t.icon}</span>
               {t.label}
             </button>
           ))}
         </div>
-
-        {/* Templates tab */}
-        {activeTab === "templates" && (
-          <div className="space-y-4">
-            {!campaign.templates?.length ? (
-              <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-8 text-center">
-                <span className="material-symbols-outlined text-[40px] text-on-surface-variant/30 block mb-3">mail_outline</span>
-                <p className="text-sm text-on-surface-variant">No message templates yet.</p>
-                <p className="text-xs text-on-surface-variant mt-1">Click "Compose Messages" to create A/B/C variants using Claude.</p>
-              </div>
-            ) : (
-              campaign.templates.map((t: any) => (
-                <TemplateCard key={t.id} template={t} campaignId={campaignId} platform={campaignPlatform}
-                  onSaved={() => qc.invalidateQueries({ queryKey: ["campaign", campaignId] })} />
-              ))
-            )}
-          </div>
-        )}
 
         {/* Leads tab */}
         {activeTab === "leads" && (
@@ -583,15 +822,15 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
             {!leadsData?.items?.length ? (
               <div className="p-8 text-center">
                 <span className="material-symbols-outlined text-[40px] text-on-surface-variant/30 block mb-3">group</span>
-                <p className="text-sm text-on-surface-variant">No leads found yet.</p>
-                <p className="text-xs text-on-surface-variant mt-1">Click "Find Leads" to search Reddit and the web for potential customers.</p>
+                <p className="text-sm text-on-surface-variant">No leads yet.</p>
+                <p className="text-xs text-on-surface-variant mt-1">Click "Find Leads" to search across your configured sources.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-surface-container-low border-b border-outline-variant/10">
-                      {["Name", "Email / Handle", "Channel", "Source URL", "Company / Website", "Notes", "Status"].map(h => (
+                      {["Name", "Channel", "Their Post", "Persona", "Company / Website", "Status"].map(h => (
                         <th key={h} className="px-4 py-2.5 text-left text-[10px] font-label font-semibold uppercase tracking-wider text-on-surface-variant whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -599,29 +838,26 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
                   <tbody className="divide-y divide-outline-variant/10">
                     {leadsData.items.map((l: any) => (
                       <tr key={l.id} className="hover:bg-surface-container-low/40 transition-colors">
-                        <td className="px-4 py-3 text-sm font-label text-on-surface whitespace-nowrap">{l.name || "—"}</td>
-                        <td className="px-4 py-3 text-xs font-label text-primary">
-                          {l.email
-                            ? <a href={`mailto:${l.email}`} className="hover:underline">{l.email}</a>
-                            : l.platform_username
-                            ? <span className="text-on-surface-variant">{l.platform_username}</span>
-                            : "—"}
+                        <td className="px-4 py-3 text-sm font-label text-on-surface whitespace-nowrap">
+                          {l.name || l.platform_username || "—"}
                         </td>
                         <td className="px-4 py-3">
-                          <span className="text-xs font-label text-on-surface-variant">{l.source_channel}</span>
-                        </td>
-                        <td className="px-4 py-3 text-xs font-label text-on-surface-variant max-w-[160px]">
                           {l.source_url
-                            ? <a href={l.source_url} target="_blank" rel="noopener noreferrer"
-                                className="text-primary hover:underline truncate block"
-                                title={l.source_url}>{l.source_url.replace(/^https?:\/\//, "").slice(0, 40)}</a>
-                            : "—"}
+                            ? <a href={l.source_url} target="_blank" rel="noopener noreferrer">
+                                <PlatformBadge platform={l.source_channel} small />
+                              </a>
+                            : <PlatformBadge platform={l.source_channel} small />}
                         </td>
-                        <td className="px-4 py-3 text-xs font-label text-on-surface-variant max-w-[140px] truncate">
+                        <td className="px-4 py-3 text-xs text-on-surface-variant max-w-[240px]">
+                          <span className="line-clamp-2">{l.context || l.notes || "—"}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {l.matched_persona
+                            ? <span className="text-[10px] px-2 py-0.5 rounded bg-tertiary/10 text-tertiary font-bold uppercase">{l.matched_persona}</span>
+                            : <span className="text-xs text-on-surface-variant">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-on-surface-variant max-w-[140px] truncate">
                           {l.company || l.website_url || "—"}
-                        </td>
-                        <td className="px-4 py-3 text-xs text-on-surface-variant max-w-[220px]">
-                          <span className="line-clamp-2">{l.notes || "—"}</span>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={l.status} /></td>
                       </tr>
@@ -633,74 +869,73 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
           </div>
         )}
 
-        {/* A/B Stats tab */}
-        {activeTab === "stats" && (
-          <div className="space-y-6">
-            <button onClick={() => refetchStats()}
-              className="flex items-center gap-1.5 px-3 py-2 bg-surface-container text-on-surface-variant text-xs font-label font-semibold rounded-lg hover:bg-surface-dim transition-colors">
-              <span className="material-symbols-outlined text-[14px]">refresh</span>Run Analysis
-            </button>
+        {/* Drafts tab */}
+        {activeTab === "drafts" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex gap-1 bg-surface-container-low p-1 rounded-lg">
+                {[
+                  { id: "pending_review", label: "Pending" },
+                  { id: "approved", label: "Approved" },
+                  { id: "rejected", label: "Rejected" },
+                  { id: "", label: "All" },
+                ].map(f => (
+                  <button key={f.id} onClick={() => setDraftStatusFilter(f.id)}
+                    className={`px-3 py-1.5 rounded text-xs font-label font-semibold transition-colors ${draftStatusFilter === f.id ? "bg-surface-container-lowest text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"}`}>
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              {draftStatusFilter === "pending_review" && drafts.length > 1 && (
+                <button onClick={approveAllDrafts}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-xs font-label font-semibold rounded-lg hover:bg-emerald-700 transition-colors">
+                  <span className="material-symbols-outlined text-[13px]">done_all</span>Approve All
+                </button>
+              )}
+            </div>
 
-            {stats && (
-              <>
-                {stats.variants?.length > 0 && (
-                  <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 overflow-hidden">
-                    <div className="px-5 py-4 border-b border-outline-variant/10">
-                      <h3 className="font-headline font-bold text-sm text-on-surface">Variant Performance</h3>
-                      <p className="text-xs text-on-surface-variant mt-0.5">
-                        Variants are assigned to leads based on their profile and context — not randomly.
-                      </p>
-                    </div>
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-surface-container-low border-b border-outline-variant/10">
-                          {["Variant", "Subject", "Sent", "Opens", "Replies", "Open %", "Reply %"].map(h => (
-                            <th key={h} className="px-4 py-2.5 text-left text-[10px] font-label font-semibold uppercase tracking-wider text-on-surface-variant">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-outline-variant/10">
-                        {stats.variants.map((v: any) => (
-                          <tr key={v.variant} className={stats.winner === v.variant ? "bg-emerald-50" : ""}>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2">
-                                <span className="font-black text-on-surface">{v.variant}</span>
-                                {stats.winner === v.variant && <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-bold">Winner</span>}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-xs text-on-surface-variant max-w-[200px] truncate">{v.subject}</td>
-                            <td className="px-4 py-3 text-sm text-on-surface">{v.sends}</td>
-                            <td className="px-4 py-3 text-sm text-on-surface">{v.opens}</td>
-                            <td className="px-4 py-3 text-sm text-on-surface">{v.replies}</td>
-                            <td className="px-4 py-3 text-sm font-semibold text-primary">{v.open_rate}%</td>
-                            <td className="px-4 py-3 text-sm font-semibold text-emerald-600">{v.reply_rate}%</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+            {!drafts.length ? (
+              <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-8 text-center">
+                <span className="material-symbols-outlined text-[40px] text-on-surface-variant/30 block mb-3">mail_outline</span>
+                <p className="text-sm text-on-surface-variant">
+                  {draftStatusFilter === "pending_review" ? "No drafts awaiting review." : `No ${draftStatusFilter.replace("_", " ")} drafts.`}
+                </p>
+                {draftStatusFilter === "pending_review" && (
+                  <p className="text-xs text-on-surface-variant mt-1">Click "Generate Drafts" to write personalized messages for your leads.</p>
                 )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {drafts.map((d: any) => (
+                  <DraftCard key={d.id} draft={d}
+                    onUpdate={() => { refetchDrafts(); qc.invalidateQueries({ queryKey: ["campaign", campaignId] }) }} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
-                {stats.analysis && (
-                  <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-5 space-y-4">
-                    <h3 className="font-headline font-bold text-sm text-on-surface">AI Analysis</h3>
-                    <p className="text-sm text-on-surface-variant leading-relaxed">{stats.analysis}</p>
-                    {stats.recommendations?.length > 0 && (
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">Recommendations</p>
-                        <ul className="space-y-2">
-                          {stats.recommendations.map((rec: string, i: number) => (
-                            <li key={i} className="flex items-start gap-2 text-sm text-on-surface">
-                              <span className="material-symbols-outlined text-[16px] text-primary mt-0.5 shrink-0">arrow_forward</span>
-                              {rec}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </>
+        {/* Sources tab */}
+        {activeTab === "sources" && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-on-surface-variant">
+                Each source is searched when you run "Find Leads" or on the scheduled interval.
+              </p>
+              <button onClick={() => setShowAddSource(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg hover:opacity-90 transition-opacity">
+                <span className="material-symbols-outlined text-[14px]">add</span>Add Source
+              </button>
+            </div>
+            {!sources.length ? (
+              <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-8 text-center">
+                <p className="text-sm text-on-surface-variant">No sources configured.</p>
+              </div>
+            ) : (
+              sources.map((s: any) => (
+                <SourceRow key={s.id} source={s}
+                  onSave={patchSource} onDelete={deleteSource} />
+              ))
             )}
           </div>
         )}
@@ -709,7 +944,7 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
   )
 }
 
-// ── Contacts section ──────────────────────────────────────────────────────────
+// ── Contacts section ───────────────────────────────────────────────────────────
 
 function ContactsSection() {
   const [page, setPage] = useState(1)
@@ -720,46 +955,33 @@ function ContactsSection() {
   const qc = useQueryClient()
 
   async function updateContact(id: string, is_test_user: boolean) {
-    try {
-      await fetch(`${API}/api/outreach/contacts/${id}`, {
-        method: "PATCH",
-        headers: { ...authHeader(), "Content-Type": "application/json" },
-        body: JSON.stringify({ is_test_user }),
-      })
-      qc.invalidateQueries({ queryKey: ["contacts"] })
-    } catch (e) {
-      console.error("Failed to update contact:", e)
-    }
+    await fetch(`${API}/api/outreach/contacts/${id}`, {
+      method: "PATCH",
+      headers: { ...authHeader(), "Content-Type": "application/json" },
+      body: JSON.stringify({ is_test_user }),
+    })
+    qc.invalidateQueries({ queryKey: ["contacts"] })
   }
 
   return (
     <div className="space-y-4">
-      {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">
         <div className="flex items-center gap-2 bg-surface-container-lowest rounded-lg border border-outline-variant/20 px-3 py-2">
           <span className="material-symbols-outlined text-[16px] text-on-surface-variant">search</span>
-          <input
-            value={searchInput}
-            onChange={e => setSearchInput(e.target.value)}
+          <input value={searchInput} onChange={e => setSearchInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") { setSearch(searchInput); setPage(1) } }}
             placeholder="Search email, name, company…"
-            className="text-sm font-label text-on-surface bg-transparent outline-none w-56"
-          />
+            className="text-sm font-label text-on-surface bg-transparent outline-none w-56" />
         </div>
-        <select
-          value={statusFilter}
-          onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
-          className="px-3 py-2 text-sm font-label bg-surface-container-lowest rounded-lg border border-outline-variant/20 text-on-surface"
-        >
+        <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
+          className="px-3 py-2 text-sm font-label bg-surface-container-lowest rounded-lg border border-outline-variant/20 text-on-surface">
           <option value="">All statuses</option>
           <option value="approached">Approached</option>
           <option value="inquired">Inquired</option>
           <option value="purchased">Purchased</option>
           <option value="unsubscribed">Unsubscribed</option>
         </select>
-        <span className="text-xs text-on-surface-variant font-label">
-          {data ? `${data.total} contacts` : ""}
-        </span>
+        <span className="text-xs text-on-surface-variant font-label">{data ? `${data.total} contacts` : ""}</span>
       </div>
 
       <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 overflow-hidden">
@@ -769,14 +991,14 @@ function ContactsSection() {
           <div className="p-8 text-center">
             <span className="material-symbols-outlined text-[40px] text-on-surface-variant/30 block mb-3">contacts</span>
             <p className="text-sm text-on-surface-variant">No contacts yet.</p>
-            <p className="text-xs text-on-surface-variant mt-1">Contacts are created automatically when leads are emailed.</p>
+            <p className="text-xs text-on-surface-variant mt-1">Contacts are created when leads are emailed.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-surface-container-low border-b border-outline-variant/10">
-                    {["Name", "Email", "Company", "Status", "Test User", "Ventures", "Last Activity"].map(h => (
+                  {["Name", "Email", "Company", "Status", "Test", "Ventures", "Last Activity"].map(h => (
                     <th key={h} className="px-4 py-2.5 text-left text-[10px] font-label font-semibold uppercase tracking-wider text-on-surface-variant whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -789,14 +1011,13 @@ function ContactsSection() {
                       <a href={`mailto:${c.email}`} className="hover:underline">{c.email}</a>
                     </td>
                     <td className="px-4 py-3 text-xs text-on-surface-variant">{c.company || "—"}</td>
-                    <td className="px-4 py-3"><StatusBadge status={c.status} /></td>                      <td className="px-4 py-3 text-center">
-                        <input
-                          type="checkbox"
-                          defaultChecked={c.is_test_user}
-                          onChange={(e) => updateContact(c.id, e.target.checked)}
-                          className="h-4 w-4 bg-surface-container border-outline-variant/30 rounded text-primary focus:ring-primary"
-                        />
-                      </td>                    <td className="px-4 py-3 text-xs text-on-surface-variant">
+                    <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
+                    <td className="px-4 py-3 text-center">
+                      <input type="checkbox" defaultChecked={c.is_test_user}
+                        onChange={e => updateContact(c.id, e.target.checked)}
+                        className="h-4 w-4 bg-surface-container border-outline-variant/30 rounded text-primary focus:ring-primary" />
+                    </td>
+                    <td className="px-4 py-3 text-xs text-on-surface-variant">
                       {(c.ventures_approached || []).join(", ").replace(/_/g, " ") || "—"}
                     </td>
                     <td className="px-4 py-3 text-xs text-on-surface-variant whitespace-nowrap">
@@ -810,7 +1031,6 @@ function ContactsSection() {
         )}
       </div>
 
-      {/* Pagination */}
       {data && data.total > 50 && (
         <div className="flex items-center justify-center gap-2">
           <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
@@ -824,111 +1044,212 @@ function ContactsSection() {
   )
 }
 
-// ── Campaign sidebar card ─────────────────────────────────────────────────────
+// ── Campaign sidebar card ──────────────────────────────────────────────────────
 
 function CampaignCard({ campaign, selected, onClick }: { campaign: any; selected: boolean; onClick: () => void }) {
   return (
     <button onClick={onClick}
-      className={`w-full text-left p-4 rounded-xl border transition-all ${
-        selected
-          ? "border-primary bg-primary/5 shadow-float"
-          : "border-outline-variant/20 bg-surface-container-lowest hover:border-primary/30"
-      }`}>
+      className={`w-full text-left p-4 rounded-xl border transition-all ${selected ? "border-primary bg-primary/5 shadow-float" : "border-outline-variant/20 bg-surface-container-lowest hover:border-primary/30"}`}>
       <div className="flex items-start justify-between gap-2 mb-2">
         <p className="text-sm font-label font-semibold text-on-surface leading-tight">{campaign.name}</p>
         <StatusBadge status={campaign.status} />
       </div>
       <div className="flex items-center gap-2 mb-2">
-        <PlatformBadge platform={campaign.platform || "email"} />
+        <PlatformBadge platform={campaign.platform || "email"} small />
+        {campaign.auto_search_enabled && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-bold uppercase">Auto</span>
+        )}
       </div>
-      <div className="flex items-center gap-4 text-xs font-label text-on-surface-variant">
+      {campaign.personas?.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-2">
+          {campaign.personas.slice(0, 2).map((p: any, i: number) => (
+            <span key={i} className="text-[9px] px-1.5 py-0.5 rounded bg-tertiary/10 text-tertiary font-bold uppercase">{p.name}</span>
+          ))}
+          {campaign.personas.length > 2 && (
+            <span className="text-[9px] text-on-surface-variant">+{campaign.personas.length - 2}</span>
+          )}
+        </div>
+      )}
+      <div className="flex items-center gap-3 text-xs font-label text-on-surface-variant">
         <span>{campaign.leads_count} leads</span>
-        <span>{campaign.total_sends} sent</span>
+        {campaign.drafts_pending > 0 && (
+          <span className="text-amber-600 font-semibold">{campaign.drafts_pending} pending</span>
+        )}
         {campaign.total_sends > 0 && <span>{campaign.reply_rate}% reply</span>}
       </div>
     </button>
   )
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── New Campaign form ──────────────────────────────────────────────────────────
 
-type MainTab = "campaigns" | "contacts"
+function NewCampaignForm({ venture, onCreated, onCancel }: {
+  venture: string; onCreated: (id: string) => void; onCancel: () => void
+}) {
+  const [name, setName] = useState("")
+  const [goal, setGoal] = useState("")
+  const [platform, setPlatform] = useState("email")
+  const [targetPrompt, setTargetPrompt] = useState("")
+  const [userInstructions, setUserInstructions] = useState("")
+  const [personas, setPersonas] = useState<{ name: string; description: string }[]>([])
+  const [intervalHours, setIntervalHours] = useState<number | null>(null)
+  const [creating, setCreating] = useState(false)
 
-export default function Marketing() {
-  const [mainTab, setMainTab]         = useState<MainTab>("campaigns")
-  const [activeVenture, setActiveVenture] = useState(VENTURES[0].id)
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null)
-  const [showNewCampaign, setShowNewCampaign] = useState(false)
-  const [newName, setNewName]         = useState("")
-  const [newGoal, setNewGoal]         = useState("")
-  const [newPlatform, setNewPlatform] = useState("email")
-  const [creating, setCreating]       = useState(false)
-  const qc = useQueryClient()
-
-  const { data: campaignsData, isLoading: campaignsLoading } = useCampaigns(activeVenture)
-
-  async function createCampaign() {
-    if (!newName.trim()) return
+  async function create() {
+    if (!name.trim()) return
     setCreating(true)
     const r = await fetch(`${API}/api/outreach/campaigns`, {
       method: "POST",
       headers: { ...authHeader(), "Content-Type": "application/json" },
-      body: JSON.stringify({ venture: activeVenture, name: newName.trim(), goal: newGoal.trim() || null, platform: newPlatform }),
+      body: JSON.stringify({
+        venture, name: name.trim(), goal: goal.trim() || null, platform,
+        personas: personas.filter(p => p.name.trim()),
+        target_prompt: targetPrompt.trim() || null,
+        user_search_instructions: userInstructions.trim() || null,
+        auto_search_enabled: intervalHours !== null,
+        search_interval_hours: intervalHours,
+      }),
     })
+    setCreating(false)
     if (r.ok) {
       const created = await r.json()
-      setNewName("")
-      setNewGoal("")
-      setNewPlatform("email")
-      setShowNewCampaign(false)
-      qc.invalidateQueries({ queryKey: ["campaigns", activeVenture] })
-      setSelectedCampaignId(created.id)
+      onCreated(created.id)
     }
-    setCreating(false)
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-4 space-y-4">
+      {/* Name + platform */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Campaign Name</label>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Reddit Q2 Outreach"
+            className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface" />
+        </div>
+        <div>
+          <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Outreach Platform</label>
+          <select value={platform} onChange={e => setPlatform(e.target.value)}
+            className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface">
+            {OUTREACH_PLATFORMS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Goal */}
       <div>
-        <h1 className="font-headline font-bold text-2xl text-on-surface">Marketing</h1>
-        <p className="text-sm font-body text-on-surface-variant mt-0.5">
-          Cold outreach campaigns — find leads, compose A/B emails, track results
+        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Campaign Goal</label>
+        <textarea value={goal} onChange={e => setGoal(e.target.value)}
+          placeholder="What outcome do you want? (e.g. drive trial sign-ups for the free marketing audit)"
+          rows={2}
+          className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface resize-none" />
+      </div>
+
+      {/* Target prompt */}
+      <div>
+        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">
+          Product & Audience Context
+          <span className="ml-1 text-on-surface-variant/60 normal-case font-normal">(feeds AI search + message writing)</span>
+        </label>
+        <textarea value={targetPrompt} onChange={e => setTargetPrompt(e.target.value)}
+          placeholder="Describe what we're selling, who the ideal buyer is, what pain point we solve, and what makes us different. Claude uses this when searching for leads and writing personalized messages."
+          rows={4}
+          className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface resize-none leading-relaxed" />
+      </div>
+
+      {/* Personas */}
+      <div>
+        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+          Customer Personas
+          <span className="ml-1 text-on-surface-variant/60 normal-case font-normal">(up to 5 — used to qualify and match leads)</span>
+        </label>
+        <PersonaEditor personas={personas} onChange={setPersonas} />
+      </div>
+
+      {/* Search instructions */}
+      <div>
+        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">
+          Search Instructions
+          <span className="ml-1 text-on-surface-variant/60 normal-case font-normal">(optional — specific guidance or exclusions)</span>
+        </label>
+        <textarea value={userInstructions} onChange={e => setUserInstructions(e.target.value)}
+          placeholder="e.g. Focus on bootstrapped founders only. Exclude enterprise companies. Skip posts from agencies."
+          rows={2}
+          className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface resize-none" />
+      </div>
+
+      {/* Search schedule */}
+      <div>
+        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Search Schedule</label>
+        <div className="flex gap-2">
+          {SEARCH_INTERVALS.map(opt => (
+            <button key={String(opt.value)} onClick={() => setIntervalHours(opt.value)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-label font-semibold border transition-colors ${intervalHours === opt.value ? "border-primary bg-primary/5 text-primary" : "border-outline-variant/20 text-on-surface-variant hover:border-primary/30"}`}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] text-on-surface-variant mt-1">
+          {intervalHours ? `Automatically searches and drafts messages every ${intervalHours}h.` : "Search manually using the Find Leads button."}
         </p>
       </div>
 
-      {/* Main tabs: Campaigns / Contacts */}
+      <div className="flex gap-2 pt-1">
+        <button onClick={create} disabled={creating || !name.trim()}
+          className="px-4 py-1.5 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg disabled:opacity-50">
+          {creating ? "Creating…" : "Create Campaign"}
+        </button>
+        <button onClick={onCancel} className="px-4 py-1.5 bg-surface-container text-on-surface-variant text-xs font-label font-semibold rounded-lg">
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
+
+type MainTab = "campaigns" | "contacts"
+
+export default function Marketing() {
+  const [mainTab, setMainTab] = useState<MainTab>("campaigns")
+  const [activeVenture, setActiveVenture] = useState(VENTURES[0].id)
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null)
+  const [showNewCampaign, setShowNewCampaign] = useState(false)
+  const qc = useQueryClient()
+
+  const { data: campaignsData, isLoading: campaignsLoading } = useCampaigns(activeVenture)
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="font-headline font-bold text-2xl text-on-surface">Marketing</h1>
+        <p className="text-sm font-body text-on-surface-variant mt-0.5">
+          Persona-driven outreach — find leads, write personalized messages, review before sending
+        </p>
+      </div>
+
       <div className="flex gap-1 bg-surface-container-low p-1 rounded-xl w-fit">
         {([
           { id: "campaigns", label: "Campaigns", icon: "campaign" },
           { id: "contacts",  label: "Contacts",  icon: "contacts" },
         ] as { id: MainTab; label: string; icon: string }[]).map(t => (
           <button key={t.id} onClick={() => setMainTab(t.id)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-label font-semibold transition-colors ${
-              mainTab === t.id ? "bg-surface-container-lowest text-on-surface shadow-float" : "text-on-surface-variant hover:text-on-surface"
-            }`}>
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-label font-semibold transition-colors ${mainTab === t.id ? "bg-surface-container-lowest text-on-surface shadow-float" : "text-on-surface-variant hover:text-on-surface"}`}>
             <span className="material-symbols-outlined text-[14px]">{t.icon}</span>
             {t.label}
           </button>
         ))}
       </div>
 
-      {/* Contacts tab */}
       {mainTab === "contacts" && <ContactsSection />}
 
-      {/* Campaigns tab */}
       {mainTab === "campaigns" && (
         <>
-          {/* Venture filter tabs */}
           <div className="flex gap-1 bg-surface-container-low p-1 rounded-xl w-fit">
             {VENTURES.map(v => (
               <button key={v.id}
-                onClick={() => { setActiveVenture(v.id); setSelectedCampaignId(null) }}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-label font-semibold transition-colors ${
-                  activeVenture === v.id
-                    ? "bg-surface-container-lowest text-on-surface shadow-float"
-                    : "text-on-surface-variant hover:text-on-surface"
-                }`}>
+                onClick={() => { setActiveVenture(v.id); setSelectedCampaignId(null); setShowNewCampaign(false) }}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-label font-semibold transition-colors ${activeVenture === v.id ? "bg-surface-container-lowest text-on-surface shadow-float" : "text-on-surface-variant hover:text-on-surface"}`}>
                 <span className="material-symbols-outlined text-[14px]">{v.icon}</span>
                 {v.label}
               </button>
@@ -936,89 +1257,49 @@ export default function Marketing() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Campaign list sidebar */}
+            {/* Sidebar */}
             <div className="lg:col-span-4 space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="font-headline font-bold text-sm text-on-surface">Campaigns</h2>
-                <button onClick={() => setShowNewCampaign(true)}
+                <button onClick={() => { setShowNewCampaign(true); setSelectedCampaignId(null) }}
                   className="flex items-center gap-1 px-3 py-1.5 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg hover:opacity-90 transition-opacity">
                   <span className="material-symbols-outlined text-[14px]">add</span>New
                 </button>
               </div>
 
               {showNewCampaign && (
-                <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-4 space-y-3">
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Campaign Name</label>
-                    <input
-                      value={newName}
-                      onChange={e => setNewName(e.target.value)}
-                      placeholder="e.g. Reddit Q2 Outreach"
-                      className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Platform</label>
-                    <select
-                      value={newPlatform}
-                      onChange={e => setNewPlatform(e.target.value)}
-                      className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface"
-                    >
-                      {PLATFORMS.map(p => (
-                        <option key={p.id} value={p.id}>{p.label}</option>
-                      ))}
-                    </select>
-                    <p className="text-[10px] text-on-surface-variant mt-1">Controls message format, tone rules, and character limits.</p>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Campaign Goal</label>
-                    <textarea
-                      value={newGoal}
-                      onChange={e => setNewGoal(e.target.value)}
-                      placeholder="Describe the goal in detail — who we're targeting, what we want them to do, and any specific context that should inform lead search and message composition."
-                      rows={4}
-                      className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface resize-none leading-relaxed"
-                    />
-                    <p className="text-[10px] text-on-surface-variant mt-1">This is used by Claude when generating search criteria and composing messages.</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={createCampaign} disabled={creating || !newName.trim()}
-                      className="px-4 py-1.5 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg disabled:opacity-50">
-                      {creating ? "Creating…" : "Create Campaign"}
-                    </button>
-                    <button onClick={() => setShowNewCampaign(false)}
-                      className="px-4 py-1.5 bg-surface-container text-on-surface-variant text-xs font-label font-semibold rounded-lg">
-                      Cancel
-                    </button>
-                  </div>
-                </div>
+                <NewCampaignForm
+                  venture={activeVenture}
+                  onCreated={id => {
+                    setShowNewCampaign(false)
+                    qc.invalidateQueries({ queryKey: ["campaigns", activeVenture] })
+                    setSelectedCampaignId(id)
+                  }}
+                  onCancel={() => setShowNewCampaign(false)}
+                />
               )}
 
-              {campaignsLoading ? (
-                Array(3).fill(null).map((_, i) => (
-                  <div key={i} className="h-20 bg-surface-container-lowest rounded-xl animate-pulse" />
-                ))
-              ) : campaignsData?.items?.length ? (
-                campaignsData.items.map((c: any) => (
-                  <CampaignCard key={c.id} campaign={c}
-                    selected={selectedCampaignId === c.id}
-                    onClick={() => setSelectedCampaignId(c.id)} />
-                ))
-              ) : (
-                <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-6 text-center">
-                  <p className="text-sm text-on-surface-variant">No campaigns yet.</p>
-                  <p className="text-xs text-on-surface-variant mt-1">Create one to start reaching out.</p>
-                </div>
-              )}
+              {campaignsLoading
+                ? Array(3).fill(null).map((_, i) => <div key={i} className="h-20 bg-surface-container-lowest rounded-xl animate-pulse" />)
+                : campaignsData?.items?.length
+                ? campaignsData.items.map((c: any) => (
+                    <CampaignCard key={c.id} campaign={c}
+                      selected={selectedCampaignId === c.id}
+                      onClick={() => { setSelectedCampaignId(c.id); setShowNewCampaign(false) }} />
+                  ))
+                : (
+                  <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-6 text-center">
+                    <p className="text-sm text-on-surface-variant">No campaigns yet.</p>
+                    <p className="text-xs text-on-surface-variant mt-1">Create one to start reaching out.</p>
+                  </div>
+                )
+              }
             </div>
 
-            {/* Campaign detail */}
+            {/* Detail */}
             <div className="lg:col-span-8">
               {selectedCampaignId ? (
-                <CampaignDetail
-                  campaignId={selectedCampaignId}
-                  onDeleted={() => setSelectedCampaignId(null)}
-                />
+                <CampaignDetail campaignId={selectedCampaignId} onDeleted={() => setSelectedCampaignId(null)} />
               ) : (
                 <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-12 text-center">
                   <span className="material-symbols-outlined text-[48px] text-on-surface-variant/20 block mb-4">campaign</span>

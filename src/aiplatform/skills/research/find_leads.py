@@ -1,419 +1,196 @@
 """
 Skill: find_leads
-Search for potential customers across multiple channels per venture.
+Search for potential customers across configured sources and qualify them with Claude.
 
-Channels:
-  reddit        — Public subreddit search (no API key needed)
-  google        — Broad buying-intent Google searches via SerpAPI
-  linkedin      — Public LinkedIn posts via Google site: filter (SerpAPI)
-  hackernews    — Algolia HN API — Ask HN and Show HN posts (no key needed)
-  indiehackers  — IndieHackers posts via SerpAPI (no key needed beyond SerpAPI)
-  fiverr        — Fiverr buyer requests via session cookie scrape;
-                  falls back to Google signals if FIVERR_SESSION_COOKIE not set
-  listennotes   — Listen Notes podcast discovery API (content_studio only)
+Entry point:
+    find_leads(sources, max_leads, search_prompt, personas) -> list[dict]
+
+Each source is a dict matching the CampaignSource model:
+    {platform, name, keywords, config, enabled}
+
+If no sources are provided, falls back to VENTURE_DEFAULT_SOURCES[venture].
 
 Required env vars:
-  ANTHROPIC_API_KEY     — Claude Haiku for lead qualification
-  SERPAPI_KEY           — Google/LinkedIn/IndieHackers/Fiverr signal searches
-  LISTENNOTES_API_KEY   — Optional; Listen Notes free tier (content_studio)
-  FIVERR_SESSION_COOKIE — Optional; Fiverr buyer requests (sellers only)
-
-Returns list of lead dicts ready for DB insertion.
+    ANTHROPIC_API_KEY     — Claude Haiku for lead qualification
+    SERPAPI_KEY           — Google / LinkedIn / IndieHackers / Fiverr signal searches
+    APIFY_API_TOKEN       — Optional; Apify actors for LinkedIn + Facebook Groups
+    LISTENNOTES_API_KEY   — Optional; Listen Notes podcast discovery
+    FIVERR_SESSION_COOKIE — Optional; Fiverr buyer requests scrape
 """
-
 from __future__ import annotations
 
 import json
 import logging
 import os
 import re
-import time
-from typing import Any
 
-import requests
+from aiplatform.skills.research.sources import HANDLERS
 
 log = logging.getLogger(__name__)
 
-# ── Channel config per venture ─────────────────────────────────────────────────
-# Each entry names a channel and its search parameters.
-# All channels are attempted in order; results are pooled and Claude-qualified.
 
-VENTURE_CHANNELS: dict[str, list[dict]] = {
+# ── Default sources per venture ────────────────────────────────────────────────
+# Used when a campaign has no CampaignSource rows yet (e.g. legacy campaigns).
+# Also used to seed default sources when a new campaign is created.
+
+VENTURE_DEFAULT_SOURCES: dict[str, list[dict]] = {
     "marketing_audit": [
         {
-            "channel": "reddit",
-            "subreddits": ["smallbusiness", "entrepreneur", "startups", "digital_marketing", "SEO", "ecommerce"],
+            "platform": "reddit",
+            "name": "Marketing subreddits",
             "keywords": [
-                "website not converting", "website help", "marketing audit",
-                "website feedback", "seo help", "website traffic",
+                "website not converting", "seo help", "website traffic",
                 "marketing strategy", "website redesign", "landing page help",
             ],
+            "config": {"subreddits": ["smallbusiness", "entrepreneur", "startups",
+                                      "digital_marketing", "SEO", "ecommerce"]},
         },
         {
-            "channel": "google",
-            "queries": [
+            "platform": "google",
+            "name": "Google — buying intent",
+            "keywords": [
                 "\"need help with\" \"website\" OR \"marketing\" site:reddit.com OR site:indiehackers.com",
                 "\"looking for\" \"marketing consultant\" OR \"website audit\" freelancer 2025 OR 2026",
                 "\"my website\" \"not converting\" OR \"no traffic\" OR \"bounce rate\" help",
-                "\"website audit\" OR \"marketing audit\" \"anyone recommend\" -fiverr",
             ],
+            "config": {},
         },
         {
-            "channel": "linkedin",
-            "queries": [
+            "platform": "linkedin",
+            "name": "LinkedIn posts",
+            "keywords": [
                 "website not converting looking for marketing help",
                 "small business marketing struggles website traffic",
-                "looking for website feedback conversion rate",
             ],
+            "config": {},
         },
         {
-            "channel": "hackernews",
-            "queries": ["marketing website landing page seo", "website conversion startup"],
-            "post_type": "ask",
+            "platform": "hackernews",
+            "name": "Hacker News Ask HN",
+            "keywords": ["marketing website landing page seo", "website conversion startup"],
+            "config": {"post_type": "ask"},
         },
         {
-            "channel": "indiehackers",
-            "queries": [
-                "website not converting marketing help",
-                "looking for marketing audit feedback website",
-            ],
+            "platform": "indiehackers",
+            "name": "IndieHackers",
+            "keywords": ["website not converting marketing help", "looking for marketing audit"],
+            "config": {},
         },
         {
-            "channel": "fiverr",
-            "queries": ["marketing audit", "website audit seo", "website feedback conversion"],
+            "platform": "fiverr",
+            "name": "Fiverr buyer requests",
+            "keywords": ["marketing audit", "website audit seo", "website feedback conversion"],
+            "config": {},
         },
     ],
 
     "content_studio": [
         {
-            "channel": "reddit",
-            "subreddits": ["podcasting", "podcast", "podcasters", "startpodcasting", "entrepreneur"],
+            "platform": "reddit",
+            "name": "Podcasting subreddits",
             "keywords": [
-                "show notes", "new podcast", "just launched my podcast", "podcast help",
-                "podcast editing", "podcast marketing", "episode description",
-                "transcript", "podcast growth",
+                "show notes", "new podcast", "podcast help",
+                "podcast editing", "transcript", "podcast growth",
             ],
+            "config": {"subreddits": ["podcasting", "podcast", "podcasters",
+                                      "startpodcasting", "entrepreneur"]},
         },
         {
-            "channel": "google",
-            "queries": [
+            "platform": "google",
+            "name": "Google — podcast searches",
+            "keywords": [
                 "\"new podcast\" \"show notes\" help OR service 2025 OR 2026",
                 "\"podcast show notes\" \"looking for\" OR \"anyone recommend\" service",
-                "\"started a podcast\" \"show notes\" OR \"transcript\" help",
                 "site:reddit.com podcasting \"show notes\" struggling OR need help",
             ],
+            "config": {},
         },
         {
-            "channel": "linkedin",
-            "queries": [
+            "platform": "linkedin",
+            "name": "LinkedIn — podcast creators",
+            "keywords": [
                 "just launched my podcast looking for show notes help",
-                "podcast content creator looking for transcript show notes service",
                 "new podcast episode content repurposing",
             ],
+            "config": {},
         },
         {
-            "channel": "hackernews",
-            "queries": ["podcast show notes transcript automation", "podcast content creation"],
-            "post_type": "ask",
+            "platform": "hackernews",
+            "name": "Hacker News",
+            "keywords": ["podcast show notes transcript automation"],
+            "config": {"post_type": "ask"},
         },
         {
-            "channel": "indiehackers",
-            "queries": [
-                "podcast show notes help service",
-                "new podcast launched content",
-            ],
+            "platform": "fiverr",
+            "name": "Fiverr buyer requests",
+            "keywords": ["podcast show notes", "podcast transcript", "podcast content"],
+            "config": {},
         },
         {
-            "channel": "fiverr",
-            "queries": ["podcast show notes", "podcast transcript", "podcast content"],
-        },
-        {
-            "channel": "listennotes",
-            "queries": ["new podcast 2026", "new podcast 2025"],
+            "platform": "listennotes",
+            "name": "Listen Notes — new podcasts",
+            "keywords": ["new podcast 2026", "new podcast 2025"],
+            "config": {},
         },
     ],
 
     "accessibility_audit": [
         {
-            "channel": "reddit",
-            "subreddits": ["webdev", "web_design", "accessibility", "frontend", "wordpress", "startups"],
+            "platform": "reddit",
+            "name": "Web dev subreddits",
             "keywords": [
-                "wcag", "accessibility audit", "ada compliance", "screen reader",
-                "website accessibility", "axe results", "lighthouse accessibility",
-                "accessibility issues", "508 compliance",
+                "wcag", "accessibility audit", "ada compliance",
+                "website accessibility", "accessibility issues", "508 compliance",
             ],
+            "config": {"subreddits": ["webdev", "web_design", "accessibility",
+                                      "frontend", "wordpress", "startups"]},
         },
         {
-            "channel": "google",
-            "queries": [
+            "platform": "google",
+            "name": "Google — accessibility searches",
+            "keywords": [
                 "\"website accessibility\" \"looking for\" audit OR help 2025 OR 2026",
                 "\"ada compliance\" \"website\" need help OR audit freelancer",
                 "\"wcag\" \"website\" issues OR violations fix help",
-                "site:reddit.com webdev accessibility audit OR compliance help",
             ],
+            "config": {},
         },
         {
-            "channel": "linkedin",
-            "queries": [
+            "platform": "linkedin",
+            "name": "LinkedIn — accessibility",
+            "keywords": [
                 "website accessibility compliance audit looking for help",
                 "ada wcag website compliance small business",
-                "web accessibility remediation looking for expert",
             ],
+            "config": {},
         },
         {
-            "channel": "hackernews",
-            "queries": ["website accessibility wcag ada compliance", "accessibility audit web"],
-            "post_type": "ask",
+            "platform": "hackernews",
+            "name": "Hacker News",
+            "keywords": ["website accessibility wcag ada compliance"],
+            "config": {"post_type": "ask"},
         },
         {
-            "channel": "indiehackers",
-            "queries": [
-                "website accessibility compliance audit",
-                "ada compliance website startup",
-            ],
-        },
-        {
-            "channel": "fiverr",
-            "queries": ["accessibility audit wcag", "ada compliance website", "website accessibility"],
+            "platform": "fiverr",
+            "name": "Fiverr buyer requests",
+            "keywords": ["accessibility audit wcag", "ada compliance website"],
+            "config": {},
         },
     ],
 }
 
-# ── Reddit ─────────────────────────────────────────────────────────────────────
 
-_REDDIT_HEADERS = {
-    "User-Agent": "EchoForge-LeadBot/1.0 (research tool)",
-    "Accept": "application/json",
-}
+# ── Claude qualification ───────────────────────────────────────────────────────
 
-def _search_reddit(subreddit: str, query: str, limit: int = 8) -> list[dict]:
-    url = f"https://www.reddit.com/r/{subreddit}/search.json"
-    params = {"q": query, "sort": "new", "t": "month", "limit": limit, "restrict_sr": 1}
-    try:
-        resp = requests.get(url, headers=_REDDIT_HEADERS, params=params, timeout=10)
-        if resp.status_code != 200:
-            return []
-        posts = resp.json().get("data", {}).get("children", [])
-        results = []
-        for post in posts:
-            d = post.get("data", {})
-            if d.get("is_self") and len(d.get("selftext", "")) > 50:
-                results.append({
-                    "title": d.get("title", ""),
-                    "text": d.get("selftext", "")[:600],
-                    "author": d.get("author", ""),
-                    "url": f"https://www.reddit.com{d.get('permalink', '')}",
-                    "subreddit": subreddit,
-                    "score": d.get("score", 0),
-                })
-        return results
-    except Exception as e:
-        log.warning("Reddit search failed r/%s q=%s: %s", subreddit, query, e)
-        return []
-
-
-# ── Google via SerpAPI ─────────────────────────────────────────────────────────
-
-def _serpapi_google(query: str, num: int = 5) -> list[dict]:
-    """Generic Google search via SerpAPI. Used by google, linkedin, indiehackers channels."""
-    api_key = os.environ.get("SERPAPI_KEY", "")
-    if not api_key:
-        log.warning("SERPAPI_KEY not set — skipping: %s", query[:60])
-        return []
-    try:
-        resp = requests.get(
-            "https://serpapi.com/search",
-            params={"engine": "google", "q": query, "num": num, "api_key": api_key},
-            timeout=15,
-        )
-        if resp.status_code != 200:
-            log.warning("SerpAPI HTTP %s for: %s", resp.status_code, query[:60])
-            return []
-        results = resp.json().get("organic_results", [])
-        return [
-            {
-                "title": r.get("title", ""),
-                "url": r.get("link", ""),
-                "text": r.get("snippet", ""),
-                "author": "",
-            }
-            for r in results
-        ]
-    except Exception as e:
-        log.warning("SerpAPI error for '%s': %s", query[:60], e)
-        return []
-
-
-def _search_linkedin(query: str, num: int = 5) -> list[dict]:
+def _qualify_post(
+    post_dict: dict,
+    venture: str,
+    search_prompt: str | None,
+    personas: list[dict] | None,
+) -> dict | None:
     """
-    Find public LinkedIn posts via Google site: search.
-    LinkedIn's own API is too restricted for post discovery without an approved partner app.
-    Google indexes most public LinkedIn posts within a few days.
-    """
-    google_query = f'site:linkedin.com/posts OR site:linkedin.com/pulse {query}'
-    results = _serpapi_google(google_query, num=num)
-    # Tag them as linkedin source for the lead record
-    for r in results:
-        r["source"] = "linkedin"
-    return results
-
-
-def _search_indiehackers(query: str, num: int = 5) -> list[dict]:
-    google_query = f'site:indiehackers.com {query}'
-    return _serpapi_google(google_query, num=num)
-
-
-# ── Hacker News via Algolia (no API key needed) ────────────────────────────────
-
-def _search_hackernews(query: str, post_type: str = "ask", limit: int = 10) -> list[dict]:
-    """
-    Search HN via the Algolia API. Free, no key required, up to 1000 req/hour.
-    post_type: 'ask' (Ask HN), 'show' (Show HN), or 'story' (any post)
-    """
-    tag_map = {"ask": "ask_hn", "show": "show_hn", "story": "story"}
-    tag = tag_map.get(post_type, "ask_hn")
-    try:
-        resp = requests.get(
-            "https://hn.algolia.com/api/v1/search",
-            params={"query": query, "tags": tag, "hitsPerPage": limit},
-            timeout=10,
-        )
-        if resp.status_code != 200:
-            return []
-        hits = resp.json().get("hits", [])
-        results = []
-        for h in hits:
-            text = (h.get("story_text") or h.get("comment_text") or "")[:500]
-            if len(text) < 30:
-                continue
-            results.append({
-                "title": h.get("title", ""),
-                "text": text,
-                "author": h.get("author", ""),
-                "url": f"https://news.ycombinator.com/item?id={h.get('objectID', '')}",
-            })
-        return results
-    except Exception as e:
-        log.warning("HN Algolia search failed for '%s': %s", query, e)
-        return []
-
-
-# ── Fiverr buyer requests ──────────────────────────────────────────────────────
-
-_FIVERR_BUYER_REQUESTS_URL = "https://www.fiverr.com/requests/pending"
-
-def _search_fiverr_buyer_requests(queries: list[str]) -> list[dict]:
-    """
-    Fetch Fiverr buyer requests using a seller session cookie.
-    Requires FIVERR_SESSION_COOKIE env var (copy from browser DevTools → Application → Cookies
-    while logged into your Fiverr seller account, value of the cookie named 'SL_G_WPT_TO' and
-    'XSRF-TOKEN' — or the simplest approach: the full Cookie header string).
-
-    Falls back to Google signals if the cookie is not set.
-    """
-    session_cookie = os.environ.get("FIVERR_SESSION_COOKIE", "")
-
-    if not session_cookie:
-        # Fallback: search Google for Fiverr buying intent signals
-        results = []
-        for q in queries[:2]:
-            google_results = _serpapi_google(
-                f'site:fiverr.com/requests {q} OR "I need" {q}', num=3
-            )
-            results.extend(google_results)
-        log.info("Fiverr: no session cookie — used Google fallback (%d results)", len(results))
-        return results
-
-    # Direct Fiverr buyer requests scrape
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Cookie": session_cookie,
-        "Accept": "application/json, text/plain, */*",
-        "Referer": "https://www.fiverr.com",
-    }
-    try:
-        resp = requests.get(
-            "https://www.fiverr.com/requests/pending",
-            headers=headers,
-            timeout=15,
-        )
-        if resp.status_code == 401 or resp.status_code == 403:
-            log.warning("Fiverr: session cookie rejected (HTTP %s) — falling back to Google", resp.status_code)
-            return _search_fiverr_buyer_requests.__wrapped__(queries)  # type: ignore[attr-defined]
-
-        # Fiverr returns HTML with embedded JSON. Look for the buyer requests block.
-        text = resp.text
-        # Find __BUYER_REQUESTS__ or similar embedded JSON
-        match = re.search(r'"buyer_requests"\s*:\s*(\[.*?\])', text, re.DOTALL)
-        if not match:
-            # Try alternate pattern used in some Fiverr page layouts
-            match = re.search(r'window\.__DATA__\s*=\s*(\{.*?\});', text, re.DOTALL)
-            if not match:
-                log.warning("Fiverr: could not parse buyer requests from page")
-                return []
-            data = json.loads(match.group(1))
-            requests_list = data.get("buyerRequests", data.get("buyer_requests", []))
-        else:
-            requests_list = json.loads(match.group(1))
-
-        results = []
-        for req in requests_list[:20]:
-            title = req.get("title", "") or req.get("description", "")[:80]
-            desc = req.get("description", "") or req.get("body", "")
-            budget = req.get("budget", {})
-            budget_str = f" Budget: ${budget.get('min', '')}-${budget.get('max', '')}" if budget else ""
-            results.append({
-                "title": title,
-                "text": f"{desc}{budget_str}"[:500],
-                "author": req.get("buyer", {}).get("username", "") if isinstance(req.get("buyer"), dict) else "",
-                "url": "https://www.fiverr.com/requests/pending",
-            })
-        log.info("Fiverr: found %d buyer requests", len(results))
-        return results
-
-    except Exception as e:
-        log.warning("Fiverr buyer request scrape failed: %s", e)
-        return []
-
-# Unwrapped reference for fallback recursion guard
-_search_fiverr_buyer_requests.__wrapped__ = lambda queries: []  # type: ignore[attr-defined]
-
-
-# ── Listen Notes ───────────────────────────────────────────────────────────────
-
-def _search_listennotes(query: str, limit: int = 10) -> list[dict]:
-    api_key = os.environ.get("LISTENNOTES_API_KEY", "")
-    headers = {"X-ListenAPI-Key": api_key} if api_key else {}
-    try:
-        resp = requests.get(
-            "https://listen-api.listennotes.com/api/v2/search",
-            params={"q": query, "type": "podcast", "sort_by_date": 1, "len_min": 1},
-            headers=headers,
-            timeout=15,
-        )
-        if resp.status_code not in (200, 201):
-            return []
-        results = resp.json().get("results", [])
-        return [
-            {
-                "title": r.get("title_original", ""),
-                "website": r.get("website", "") or r.get("listennotes_url", ""),
-                "email": r.get("email", ""),
-                "description": (r.get("description_original", "") or "")[:300],
-            }
-            for r in results[:limit]
-        ]
-    except Exception as e:
-        log.warning("Listen Notes search failed: %s", e)
-        return []
-
-
-# ── Claude lead qualification ──────────────────────────────────────────────────
-
-def _extract_lead_context(post: dict, venture: str, search_prompt: str | None = None) -> dict | None:
-    """
-    Use Claude Haiku to decide if a post is a real lead and extract structured context.
-    Returns a lead dict or None if not a good fit.
+    Ask Claude Haiku whether a raw post is a genuine lead.
+    Returns a lead-enrichment dict or None if not a good fit.
     """
     import anthropic
 
@@ -425,31 +202,36 @@ def _extract_lead_context(post: dict, venture: str, search_prompt: str | None = 
         "accessibility_audit": "a WCAG accessibility audit service (violation scan, prioritised fix list with code examples)",
     }.get(venture, "a digital service")
 
+    persona_block = ""
+    if personas:
+        lines = "\n".join(f"  - {p.get('name','')}: {p.get('description','')}" for p in personas)
+        persona_block = f"\nCUSTOMER PERSONAS (use these to qualify and match):\n{lines}\n"
+
     criteria_block = (
-        f"\nCAMPAIGN SEARCH CRITERIA (user-approved — apply these when qualifying):\n{search_prompt}\n"
-        if search_prompt else ""
+        f"\nCAMPAIGN SEARCH CRITERIA:\n{search_prompt}\n" if search_prompt else ""
     )
 
     prompt = f"""You are screening a post to find potential customers for {venture_pitch}.
-{criteria_block}
-Source: {post.get('source_channel', 'web')}
-Title: {post.get('title', '')}
-Text: {post.get('text', '')}
-Author: {post.get('author', '')}
-URL: {post.get('url', '')}
+{persona_block}{criteria_block}
+Source: {post_dict.get('source_channel', 'web')}
+Title: {post_dict.get('title', '')}
+Text: {post_dict.get('text', '')}
+Author: {post_dict.get('author', '')}
+URL: {post_dict.get('url', '')}
 
 Is this person a potential customer who would benefit from this service?
-Reply with JSON only — no explanation outside the JSON:
+Reply with JSON only:
 {{
   "is_lead": true or false,
   "confidence": "high" | "medium" | "low",
   "name": "real name or username if visible, else null",
   "website_url": "their website URL if mentioned, else null",
   "company": "company or project name if visible, else null",
+  "matched_persona": "name of the best matching persona from the list, or null",
   "notes": "1-2 sentences: why they're a good fit and what their specific pain point is"
 }}
 
-Be selective. Only mark is_lead=true if there is a clear, genuine need that matches the service."""
+Be selective. Only mark is_lead=true if there is a clear, genuine need."""
 
     try:
         msg = client.messages.create(
@@ -457,116 +239,88 @@ Be selective. Only mark is_lead=true if there is a clear, genuine need that matc
             max_tokens=300,
             messages=[{"role": "user", "content": prompt}],
         )
-        text = msg.content[0].text.strip()
-        text = re.sub(r"^```json\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
-        data = json.loads(text)
+        raw = msg.content[0].text.strip()
+        raw = re.sub(r"^```json\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+        data = json.loads(raw)
         if not data.get("is_lead"):
             return None
         return {
-            "name":       data.get("name") or post.get("author", ""),
-            "website_url": data.get("website_url"),
-            "company":    data.get("company"),
-            "notes":      data.get("notes", ""),
-            "confidence": data.get("confidence", "medium"),
+            "name":            data.get("name") or post_dict.get("author", ""),
+            "website_url":     data.get("website_url"),
+            "company":         data.get("company"),
+            "matched_persona": data.get("matched_persona"),
+            "notes":           data.get("notes", ""),
+            "confidence":      data.get("confidence", "medium"),
         }
     except Exception as e:
-        log.warning("Claude lead extraction failed: %s", e)
+        log.warning("Claude qualification failed: %s", e)
         return None
 
 
 # ── Main entry point ───────────────────────────────────────────────────────────
 
 def find_leads(
-    venture: str,
+    sources: list[dict],
     max_leads: int = 20,
-    channels: list[str] | None = None,
     search_prompt: str | None = None,
+    personas: list[dict] | None = None,
+    venture: str = "",
 ) -> list[dict]:
     """
-    Search for potential customers across all configured channels for a venture.
+    Search configured sources for potential customers.
 
     Args:
-        venture:       marketing_audit | content_studio | accessibility_audit
-        max_leads:     Max leads to return (controls Claude API cost)
-        channels:      Optional subset — None means all channels
-        search_prompt: User-reviewed criteria prompt injected into Claude qualification
+        sources:       List of source dicts {platform, name, keywords, config, enabled}.
+                       Falls back to VENTURE_DEFAULT_SOURCES[venture] if empty.
+        max_leads:     Max qualified leads to return (controls Claude API cost).
+        search_prompt: User-reviewed criteria injected into Claude qualification.
+        personas:      Campaign personas [{name, description}] for matching.
+        venture:       Venture slug — used only for default-source fallback.
 
     Returns:
-        List of lead dicts ready for DB insertion.
+        List of lead dicts ready for DB insertion (includes `context` field).
     """
-    if venture not in VENTURE_CHANNELS:
-        raise ValueError(f"Unknown venture '{venture}'. Valid: {list(VENTURE_CHANNELS)}")
+    active_sources = [s for s in sources if s.get("enabled", True)]
 
-    config = VENTURE_CHANNELS[venture]
-    # (source_channel, post_dict) — post_dict must have: title, text, url, author
-    raw_posts: list[tuple[str, dict]] = []
+    if not active_sources and venture in VENTURE_DEFAULT_SOURCES:
+        active_sources = VENTURE_DEFAULT_SOURCES[venture]
+        log.info("find_leads: no sources configured — using defaults for '%s'", venture)
 
-    for channel_cfg in config:
-        ch = channel_cfg["channel"]
-        if channels and ch not in channels:
+    raw_posts: list[dict] = []
+
+    for src in active_sources:
+        platform = src.get("platform", "")
+        handler = HANDLERS.get(platform)
+        if not handler:
+            log.warning("find_leads: unknown platform '%s' — skipping", platform)
             continue
 
-        log.info("find_leads: searching channel '%s' for '%s'", ch, venture)
+        keywords = src.get("keywords") or []
+        config = src.get("config") or {}
+        log.info("find_leads: searching '%s' (%s)", src.get("name", platform), platform)
 
-        if ch == "reddit":
-            for subreddit in channel_cfg.get("subreddits", []):
-                for keyword in channel_cfg.get("keywords", [])[:3]:
-                    for p in _search_reddit(subreddit, keyword, limit=5):
-                        p["source_channel"] = "reddit"
-                        raw_posts.append(("reddit", p))
-                    time.sleep(0.5)  # Reddit public API rate limit
+        try:
+            posts = handler.search(keywords, config)
+            for p in posts:
+                raw_posts.append({
+                    "title":          p.title,
+                    "text":           p.text,
+                    "author":         p.author,
+                    "url":            p.url,
+                    "email":          p.email,
+                    "website_url":    p.website_url,
+                    "source_channel": p.source_channel or platform,
+                })
+        except Exception as e:
+            log.warning("find_leads: handler '%s' error: %s", platform, e)
 
-        elif ch == "google":
-            for query in channel_cfg.get("queries", []):
-                for r in _serpapi_google(query, num=5):
-                    r["source_channel"] = "google"
-                    raw_posts.append(("google", r))
-
-        elif ch == "linkedin":
-            for query in channel_cfg.get("queries", []):
-                for r in _search_linkedin(query, num=5):
-                    r["source_channel"] = "linkedin"
-                    raw_posts.append(("linkedin", r))
-
-        elif ch == "hackernews":
-            post_type = channel_cfg.get("post_type", "ask")
-            for query in channel_cfg.get("queries", []):
-                for p in _search_hackernews(query, post_type=post_type, limit=8):
-                    p["source_channel"] = "hackernews"
-                    raw_posts.append(("hackernews", p))
-
-        elif ch == "indiehackers":
-            for query in channel_cfg.get("queries", []):
-                for r in _search_indiehackers(query, num=5):
-                    r["source_channel"] = "indiehackers"
-                    raw_posts.append(("indiehackers", r))
-
-        elif ch == "fiverr":
-            queries = channel_cfg.get("queries", [])
-            for p in _search_fiverr_buyer_requests(queries):
-                p["source_channel"] = "fiverr"
-                raw_posts.append(("fiverr", p))
-
-        elif ch == "listennotes":
-            for query in channel_cfg.get("queries", []):
-                for show in _search_listennotes(query, limit=10):
-                    raw_posts.append(("listennotes", {
-                        "source_channel": "listennotes",
-                        "title": show["title"],
-                        "text": show["description"],
-                        "url": show["website"],
-                        "author": "",
-                        "email": show.get("email", ""),
-                        "website_url": show["website"],
-                    }))
-
-    log.info("find_leads: %d raw candidates across all channels for '%s'", len(raw_posts), venture)
+    log.info("find_leads: %d raw candidates across all sources", len(raw_posts))
 
     leads: list[dict] = []
     seen_urls: set[str] = set()
 
-    for source_channel, post in raw_posts:
+    for post in raw_posts:
         if len(leads) >= max_leads:
             break
 
@@ -576,38 +330,45 @@ def find_leads(
         if url:
             seen_urls.add(url)
 
-        # Listen Notes: already structured, skip Claude
-        if source_channel == "listennotes":
+        # Listen Notes: already structured, skip Claude qualification
+        if post.get("source_channel") == "listennotes":
             if post.get("email") or post.get("url"):
                 leads.append({
-                    "venture":        venture,
-                    "source_channel": "listennotes",
-                    "source_url":     url or None,
-                    "name":           post.get("author") or None,
-                    "email":          post.get("email") or None,
-                    "website_url":    post.get("website_url") or url or None,
-                    "company":        None,
-                    "notes":          post.get("text", "")[:300],
-                    "status":         "new",
+                    "venture":         venture,
+                    "source_channel":  "listennotes",
+                    "source_url":      url or None,
+                    "name":            post.get("author") or None,
+                    "email":           post.get("email") or None,
+                    "website_url":     post.get("website_url") or url or None,
+                    "company":         None,
+                    "notes":           post.get("text", "")[:300],
+                    "context":         post.get("text", "")[:1000],
+                    "matched_persona": None,
+                    "status":          "new",
                 })
             continue
 
-        # All other channels: Claude qualification
-        extracted = _extract_lead_context(post, venture, search_prompt)
+        extracted = _qualify_post(post, venture, search_prompt, personas)
         if not extracted:
             continue
 
         leads.append({
-            "venture":        venture,
-            "source_channel": source_channel,
-            "source_url":     url or None,
-            "name":           extracted.get("name") or None,
-            "email":          post.get("email") or None,  # Fiverr/LN may have emails
-            "website_url":    extracted.get("website_url"),
-            "company":        extracted.get("company"),
-            "notes":          extracted.get("notes", ""),
-            "status":         "new",
+            "venture":         venture,
+            "source_channel":  post.get("source_channel", "web"),
+            "source_url":      url or None,
+            "name":            extracted.get("name") or None,
+            "email":           post.get("email") or None,
+            "platform_username": (
+                post.get("author") if post.get("source_channel") in
+                ("reddit", "fiverr", "linkedin", "facebook", "instagram") else None
+            ),
+            "website_url":     extracted.get("website_url"),
+            "company":         extracted.get("company"),
+            "notes":           extracted.get("notes", ""),
+            "context":         post.get("text", "")[:2000],   # preserve raw post for personalized reply
+            "matched_persona": extracted.get("matched_persona"),
+            "status":          "new",
         })
 
-    log.info("find_leads: %d qualified leads for '%s' (from %d candidates)", len(leads), venture, len(raw_posts))
+    log.info("find_leads: %d qualified leads (from %d candidates)", len(leads), len(raw_posts))
     return leads

@@ -92,6 +92,86 @@ The Market Research venture shares all platform components with existing venture
 
 Gig Generator also supports all four EchoForge services. All gig configs live in `scripts/run_gig_generator.py`. Voice is always "We/Our" (team/agency) — "I" only in the Fiverr title (platform requirement).
 
+### Cold Outreach Platform — Architecture Notes
+
+The Cold Outreach system is a **platform-level feature** (not a venture). It is available to all ventures via the Marketing tab in planBadmin. The system replaces A/B template blasting with AI-driven, persona-aware lead discovery and per-lead personalized message composition.
+
+**Data model — key tables:**
+
+| Table | Purpose |
+|---|---|
+| `outreach_campaigns` | One per venture, holds personas (JSONB), target_prompt, schedule config, platform |
+| `campaign_sources` | One-to-many per campaign — each row is a search source with its own platform, keywords (JSONB), and config (JSONB) |
+| `leads` | Raw qualified leads; `context` (Text) stores the original post/query for message grounding; `matched_persona` links to the campaign persona |
+| `lead_drafts` | AI-written drafts per lead; status flow: `pending_review → approved / rejected → sent` |
+| `outreach_sends` | Send records (Resend); linked from `lead_drafts.send_record_id` |
+| `contacts` | CRM — upserted on send; tracks all contacts across ventures |
+
+**Source handler registry** — `src/aiplatform/skills/research/sources/`:
+
+| Handler | Platform | Method |
+|---|---|---|
+| `reddit.py` | Reddit | Public JSON API — no key; configurable `subreddits`, `sort`, `time_filter` |
+| `google.py` | Google | SerpAPI — `SERPAPI_KEY`; shared `serpapi_search()` utility |
+| `linkedin.py` | LinkedIn | Apify `linkedin-post-search-scraper` primary; Google `site:linkedin.com` fallback |
+| `facebook.py` | Facebook Groups | Apify `facebook-groups-scraper` primary; Google `site:facebook.com/groups` fallback; `group_urls` config |
+| `hackernews.py` | Hacker News | Algolia HN API — no key; `post_type: ask/show/story` config |
+| `indiehackers.py` | IndieHackers | Google `site:indiehackers.com` via SerpAPI |
+| `fiverr.py` | Fiverr | Session cookie scrape; Google fallback |
+| `listennotes.py` | Listen Notes | Listen Notes REST API — `LISTENNOTES_API_KEY`; bypasses Claude qualification (already structured) |
+
+`HANDLERS` dict in `sources/__init__.py` is the extension point — adding a new platform means adding one handler file and one entry in the dict. No changes to core logic.
+
+**VENTURE_DEFAULT_SOURCES** in `find_leads.py` seeds source rows when a new campaign is created (via the API) and acts as fallback when no `CampaignSource` rows exist. Currently defined for `marketing_audit`, `content_studio`, and `accessibility_audit`.
+
+**Two-stage AI pipeline:**
+
+1. **Qualification** (`find_leads.py` → `_qualify_post`) — Claude Haiku evaluates each raw post against the campaign's `search_prompt` and `personas`. Returns `is_lead`, `confidence`, `matched_persona`, `notes`. Skipped for Listen Notes (pre-structured).
+2. **Composition** (`compose_personalized.py` → `compose_for_lead`) — Claude Sonnet 4.6 writes a unique outreach message grounded in the lead's specific post (`context` field). `_PLATFORM_RULES` dict enforces platform-appropriate tone/format/length. Returns `{subject, message_body, context_used}`.
+
+**Celery tasks in `worker.py`:**
+
+| Task | Trigger | What it does |
+|---|---|---|
+| `run_find_leads(campaign_id, ...)` | Manual (UI) or Beat scheduler | Searches all active `CampaignSource` rows, qualifies via Claude Haiku, inserts Lead records |
+| `run_compose_pending(campaign_id)` | Manual (UI) or chained after `run_find_leads` | Composes a `LeadDraft` for every `new` lead without an existing pending draft |
+| `run_send_approved_drafts(campaign_id)` | Manual (UI) | Sends all `approved` drafts; enforces spam guard (30-day cooldown + unsubscribe check); upserts Contacts |
+| `run_scheduled_searches()` | Celery Beat every 30 min | Finds campaigns with `auto_search_enabled=True` and `next_search_at ≤ now`; fires `run_find_leads` + `run_compose_pending`; advances `next_search_at` |
+
+**Human review gate:** drafts start as `pending_review`. The operator approves (optionally editing subject/body), rejects, or bulk-approves from the Drafts tab. `run_send_approved_drafts` only processes `approved` status. No auto-send path exists.
+
+**API router** — `src/aiplatform/webapp/routers/outreach.py`:
+
+```
+GET/POST   /api/outreach/campaigns
+GET/PATCH  /api/outreach/campaigns/{id}
+PATCH      /api/outreach/campaigns/{id}/schedule
+POST       /api/outreach/campaigns/{id}/find-leads
+POST       /api/outreach/campaigns/{id}/compose-pending
+POST       /api/outreach/campaigns/{id}/compose-lead/{lead_id}
+POST       /api/outreach/campaigns/{id}/send-approved
+GET/POST   /api/outreach/campaigns/{id}/sources
+PATCH/DEL  /api/outreach/sources/{id}
+GET        /api/outreach/campaigns/{id}/drafts   ?status=pending_review|approved|rejected
+PATCH      /api/outreach/drafts/{id}
+GET        /api/outreach/campaigns/{id}/leads
+GET        /api/outreach/campaigns/{id}/stats
+GET        /api/outreach/contacts
+```
+
+Legacy A/B endpoints (`/compose`, `/send`, `/templates`, `/sends`) are preserved for backwards compatibility.
+
+**Environment variables required:**
+
+```
+ANTHROPIC_API_KEY     — Haiku (qualification) + Sonnet (composition)
+SERPAPI_KEY           — Google / LinkedIn / IndieHackers / Fiverr signal searches
+APIFY_API_TOKEN       — LinkedIn Posts Scraper + Facebook Groups Scraper (optional; graceful fallback)
+LISTENNOTES_API_KEY   — Listen Notes podcast discovery (optional)
+FIVERR_SESSION_COOKIE — Fiverr buyer requests scrape (optional; Google fallback)
+RESEND_API_KEY        — Email sending
+```
+
 Adding a new venture means writing a config, a pipeline, and a CLAUDE.md. It does not mean touching `/platform/`.
 
 ---

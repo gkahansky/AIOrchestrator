@@ -1,7 +1,7 @@
 """Marketing redesign: personas/sources/drafts on campaigns; context on leads
 
-Revision ID: a1b2c3d4e5f6
-Revises: f6a7b8c9d0e1
+Revision ID: a3b4c5d6e7f8
+Revises: c2d3e4f5a6b7
 Create Date: 2026-05-04 00:00:00
 
 Changes:
@@ -17,8 +17,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-revision: str = 'a1b2c3d4e5f6'
-down_revision: Union[str, Sequence[str], None] = 'f6a7b8c9d0e1'
+revision: str = 'a3b4c5d6e7f8'
+down_revision: Union[str, Sequence[str], None] = 'c2d3e4f5a6b7'
 branch_labels = None
 depends_on = None
 

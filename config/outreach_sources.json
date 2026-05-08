@@ -1,0 +1,278 @@
+{
+  "valid_ventures": [
+    "marketing_audit",
+    "content_studio",
+    "accessibility_audit",
+    "security_audit",
+    "market_research"
+  ],
+  "valid_platforms": [
+    "email",
+    "fiverr",
+    "reddit",
+    "linkedin",
+    "facebook",
+    "instagram"
+  ],
+  "valid_source_platforms": [
+    "reddit",
+    "google",
+    "linkedin",
+    "facebook",
+    "hackernews",
+    "indiehackers",
+    "fiverr",
+    "listennotes"
+  ],
+  "venture_pitches": {
+    "marketing_audit": "a website marketing audit service (SEO, messaging, conversion, competitive positioning)",
+    "content_studio": "a podcast show notes service (audio → show notes, transcripts, social content)",
+    "accessibility_audit": "a WCAG accessibility audit service (violation scan, prioritised fix list with code examples)",
+    "security_audit": "a web application security audit service (vulnerability scan, OWASP Top 10, pentest-style report with prioritised findings and code-level fix recommendations)",
+    "market_research": "a market research service (AI-powered competitive analysis, TAM estimates, customer segment breakdown, go-to-market strategy — delivered as a structured PDF report)"
+  },
+  "default_sources": {
+    "marketing_audit": [
+      {
+        "platform": "reddit",
+        "name": "Marketing subreddits",
+        "keywords": [
+          "website not converting", "seo help", "website traffic",
+          "marketing strategy", "website redesign", "landing page help"
+        ],
+        "config": {
+          "subreddits": ["smallbusiness", "entrepreneur", "startups", "digital_marketing", "SEO", "ecommerce"]
+        }
+      },
+      {
+        "platform": "google",
+        "name": "Google — buying intent",
+        "keywords": [
+          "\"need help with\" \"website\" OR \"marketing\" site:reddit.com OR site:indiehackers.com",
+          "\"looking for\" \"marketing consultant\" OR \"website audit\" freelancer 2025 OR 2026",
+          "\"my website\" \"not converting\" OR \"no traffic\" OR \"bounce rate\" help"
+        ],
+        "config": {}
+      },
+      {
+        "platform": "linkedin",
+        "name": "LinkedIn posts",
+        "keywords": [
+          "website not converting looking for marketing help",
+          "small business marketing struggles website traffic"
+        ],
+        "config": {}
+      },
+      {
+        "platform": "hackernews",
+        "name": "Hacker News Ask HN",
+        "keywords": ["marketing website landing page seo", "website conversion startup"],
+        "config": {"post_type": "ask"}
+      },
+      {
+        "platform": "indiehackers",
+        "name": "IndieHackers",
+        "keywords": ["website not converting marketing help", "looking for marketing audit"],
+        "config": {}
+      },
+      {
+        "platform": "fiverr",
+        "name": "Fiverr buyer requests",
+        "keywords": ["marketing audit", "website audit seo", "website feedback conversion"],
+        "config": {}
+      }
+    ],
+
+    "content_studio": [
+      {
+        "platform": "reddit",
+        "name": "Podcasting subreddits",
+        "keywords": [
+          "show notes", "new podcast", "podcast help",
+          "podcast editing", "transcript", "podcast growth"
+        ],
+        "config": {
+          "subreddits": ["podcasting", "podcast", "podcasters", "startpodcasting", "entrepreneur"]
+        }
+      },
+      {
+        "platform": "google",
+        "name": "Google — podcast searches",
+        "keywords": [
+          "\"new podcast\" \"show notes\" help OR service 2025 OR 2026",
+          "\"podcast show notes\" \"looking for\" OR \"anyone recommend\" service",
+          "site:reddit.com podcasting \"show notes\" struggling OR need help"
+        ],
+        "config": {}
+      },
+      {
+        "platform": "linkedin",
+        "name": "LinkedIn — podcast creators",
+        "keywords": [
+          "just launched my podcast looking for show notes help",
+          "new podcast episode content repurposing"
+        ],
+        "config": {}
+      },
+      {
+        "platform": "hackernews",
+        "name": "Hacker News",
+        "keywords": ["podcast show notes transcript automation"],
+        "config": {"post_type": "ask"}
+      },
+      {
+        "platform": "fiverr",
+        "name": "Fiverr buyer requests",
+        "keywords": ["podcast show notes", "podcast transcript", "podcast content"],
+        "config": {}
+      },
+      {
+        "platform": "listennotes",
+        "name": "Listen Notes — new podcasts",
+        "keywords": ["new podcast 2026", "new podcast 2025"],
+        "config": {}
+      }
+    ],
+
+    "accessibility_audit": [
+      {
+        "platform": "reddit",
+        "name": "Web dev subreddits",
+        "keywords": [
+          "wcag", "accessibility audit", "ada compliance",
+          "website accessibility", "accessibility issues", "508 compliance"
+        ],
+        "config": {
+          "subreddits": ["webdev", "web_design", "accessibility", "frontend", "wordpress", "startups"]
+        }
+      },
+      {
+        "platform": "google",
+        "name": "Google — accessibility searches",
+        "keywords": [
+          "\"website accessibility\" \"looking for\" audit OR help 2025 OR 2026",
+          "\"ada compliance\" \"website\" need help OR audit freelancer",
+          "\"wcag\" \"website\" issues OR violations fix help"
+        ],
+        "config": {}
+      },
+      {
+        "platform": "linkedin",
+        "name": "LinkedIn — accessibility",
+        "keywords": [
+          "website accessibility compliance audit looking for help",
+          "ada wcag website compliance small business"
+        ],
+        "config": {}
+      },
+      {
+        "platform": "hackernews",
+        "name": "Hacker News",
+        "keywords": ["website accessibility wcag ada compliance"],
+        "config": {"post_type": "ask"}
+      },
+      {
+        "platform": "fiverr",
+        "name": "Fiverr buyer requests",
+        "keywords": ["accessibility audit wcag", "ada compliance website"],
+        "config": {}
+      }
+    ],
+
+    "security_audit": [
+      {
+        "platform": "reddit",
+        "name": "Security subreddits",
+        "keywords": [
+          "pentest", "security audit", "web app vulnerability",
+          "sql injection", "security compliance", "soc2 startup"
+        ],
+        "config": {
+          "subreddits": ["netsec", "webdev", "startups", "SaaS", "devops", "aws"]
+        }
+      },
+      {
+        "platform": "google",
+        "name": "Google — security buying intent",
+        "keywords": [
+          "\"need security audit\" \"web app\" OR \"api\" site:reddit.com OR site:indiehackers.com",
+          "\"looking for penetration test\" OR \"pentest\" startup 2025 OR 2026",
+          "\"soc2\" \"security audit\" \"small team\" OR \"startup\" help"
+        ],
+        "config": {}
+      },
+      {
+        "platform": "linkedin",
+        "name": "LinkedIn — security",
+        "keywords": [
+          "web application security audit looking for help",
+          "startup pentest soc2 compliance"
+        ],
+        "config": {}
+      },
+      {
+        "platform": "hackernews",
+        "name": "Hacker News",
+        "keywords": ["web security audit pentest startup", "soc2 security compliance startup"],
+        "config": {"post_type": "ask"}
+      },
+      {
+        "platform": "fiverr",
+        "name": "Fiverr buyer requests",
+        "keywords": ["penetration testing", "security audit web app", "vulnerability scan"],
+        "config": {}
+      }
+    ],
+
+    "market_research": [
+      {
+        "platform": "reddit",
+        "name": "Startup & business subreddits",
+        "keywords": [
+          "market research", "competitive analysis", "entering new market",
+          "validate startup idea", "tam estimate", "go to market strategy"
+        ],
+        "config": {
+          "subreddits": ["startups", "entrepreneur", "SaaS", "venturecapital", "smallbusiness"]
+        }
+      },
+      {
+        "platform": "google",
+        "name": "Google — research buying intent",
+        "keywords": [
+          "\"market research\" \"looking for\" help OR service site:reddit.com OR site:indiehackers.com",
+          "\"competitive analysis\" \"startup\" \"looking for\" OR \"need\" 2025 OR 2026",
+          "\"validate idea\" OR \"new market\" \"need research\" founder"
+        ],
+        "config": {}
+      },
+      {
+        "platform": "linkedin",
+        "name": "LinkedIn — founders & PMs",
+        "keywords": [
+          "market research startup new market entry looking for help",
+          "competitive landscape analysis product launch"
+        ],
+        "config": {}
+      },
+      {
+        "platform": "hackernews",
+        "name": "Hacker News",
+        "keywords": ["market research startup competitive analysis validate idea"],
+        "config": {"post_type": "ask"}
+      },
+      {
+        "platform": "indiehackers",
+        "name": "IndieHackers",
+        "keywords": ["market research competitive analysis validate idea"],
+        "config": {}
+      },
+      {
+        "platform": "fiverr",
+        "name": "Fiverr buyer requests",
+        "keywords": ["market research report", "competitive analysis", "industry research"],
+        "config": {}
+      }
+    ]
+  }
+}

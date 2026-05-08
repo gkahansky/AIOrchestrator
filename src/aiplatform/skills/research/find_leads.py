@@ -23,17 +23,29 @@ import json
 import logging
 import os
 import re
+from pathlib import Path
 
 from aiplatform.skills.research.sources import HANDLERS
 
 log = logging.getLogger(__name__)
 
 
-# ── Default sources per venture ────────────────────────────────────────────────
-# Used when a campaign has no CampaignSource rows yet (e.g. legacy campaigns).
-# Also used to seed default sources when a new campaign is created.
+def _load_outreach_config() -> dict:
+    config_path = Path(
+        os.environ.get("OUTREACH_CONFIG_PATH", "config/outreach_sources.json")
+    )
+    if config_path.exists():
+        return json.loads(config_path.read_text())
+    return {}
 
-VENTURE_DEFAULT_SOURCES: dict[str, list[dict]] = {
+_cfg = _load_outreach_config()
+
+
+# ── Default sources per venture ────────────────────────────────────────────────
+# Loaded from config/outreach_sources.json (OUTREACH_CONFIG_PATH to override).
+# Edit the JSON file to add/change sources without a code deploy.
+
+VENTURE_DEFAULT_SOURCES: dict[str, list[dict]] = _cfg.get("default_sources", {
     "marketing_audit": [
         {
             "platform": "reddit",
@@ -177,7 +189,15 @@ VENTURE_DEFAULT_SOURCES: dict[str, list[dict]] = {
             "config": {},
         },
     ],
-}
+})
+
+_VENTURE_PITCHES: dict[str, str] = _cfg.get("venture_pitches", {
+    "marketing_audit":    "a website marketing audit service (SEO, messaging, conversion, competitive positioning)",
+    "content_studio":     "a podcast show notes service (audio → show notes, transcripts, social content)",
+    "accessibility_audit":"a WCAG accessibility audit service (violation scan, prioritised fix list with code examples)",
+    "security_audit":     "a web application security audit service (vulnerability scan, OWASP Top 10, pentest-style report with prioritised findings and code-level fix recommendations)",
+    "market_research":    "a market research service (AI-powered competitive analysis, TAM estimates, customer segment breakdown, go-to-market strategy — delivered as a structured PDF report)",
+})
 
 
 # ── Claude qualification ───────────────────────────────────────────────────────
@@ -196,11 +216,7 @@ def _qualify_post(
 
     client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
 
-    venture_pitch = {
-        "marketing_audit": "a website marketing audit service (SEO, messaging, conversion, competitive positioning)",
-        "content_studio": "a podcast show notes service (audio → show notes, transcripts, social content)",
-        "accessibility_audit": "a WCAG accessibility audit service (violation scan, prioritised fix list with code examples)",
-    }.get(venture, "a digital service")
+    venture_pitch = _VENTURE_PITCHES.get(venture, "a digital service")
 
     persona_block = ""
     if personas:

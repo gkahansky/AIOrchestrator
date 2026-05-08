@@ -30,9 +30,11 @@ Endpoints:
 
 from __future__ import annotations
 
+import json
 import os
 import uuid as _uuid
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -48,12 +50,31 @@ from aiplatform.webapp.auth import require_auth
 
 router = APIRouter()
 
-VALID_VENTURES = {"marketing_audit", "content_studio", "accessibility_audit"}
-VALID_PLATFORMS = {"email", "fiverr", "reddit", "linkedin", "facebook", "instagram"}
-VALID_SOURCE_PLATFORMS = {
+# ── Outreach config — loaded from JSON file, path overrideable via env var ─────
+# Edit config/outreach_sources.json to add ventures/platforms without a deploy.
+# Set OUTREACH_CONFIG_PATH on Railway to point to a custom file.
+
+def _load_outreach_config() -> dict:
+    config_path = Path(
+        os.environ.get("OUTREACH_CONFIG_PATH", "config/outreach_sources.json")
+    )
+    if config_path.exists():
+        return json.loads(config_path.read_text())
+    return {}
+
+_cfg = _load_outreach_config()
+
+VALID_VENTURES: set[str] = set(_cfg.get("valid_ventures", [
+    "marketing_audit", "content_studio", "accessibility_audit",
+    "security_audit", "market_research",
+]))
+VALID_PLATFORMS: set[str] = set(_cfg.get("valid_platforms", [
+    "email", "fiverr", "reddit", "linkedin", "facebook", "instagram",
+]))
+VALID_SOURCE_PLATFORMS: set[str] = set(_cfg.get("valid_source_platforms", [
     "reddit", "google", "linkedin", "facebook",
     "hackernews", "indiehackers", "fiverr", "listennotes",
-}
+]))
 
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────

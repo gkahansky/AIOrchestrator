@@ -255,7 +255,12 @@ export interface ChatApiResponse {
   responses: { advisor_id: string; content: string }[]
 }
 
-export type RoadmapItemType = "New feature" | "Bug" | "Feature enhancement"
+export type RoadmapItemType = "New feature" | "Bug" | "Feature enhancement" | "Task"
+
+export interface AppUser {
+  email: string
+  name: string
+}
 
 export type RoadmapStatus =
   | "not_started"
@@ -279,6 +284,7 @@ export interface RoadmapItem {
   feature_name: string | null
   status: RoadmapStatus
   sort_order: number
+  owner: string | null
   completed_at: string | null
   created_at: string
 }
@@ -294,6 +300,7 @@ export interface RoadmapItemCreate {
   item_type: RoadmapItemType
   feature_id: number | null
   status: RoadmapStatus
+  owner: string | null
 }
 
 export interface RoadmapItemUpdate {
@@ -302,6 +309,7 @@ export interface RoadmapItemUpdate {
   item_type?: RoadmapItemType
   feature_id?: number | null
   status?: RoadmapStatus
+  owner?: string | null
 }
 
 export interface AdvisorConfig {

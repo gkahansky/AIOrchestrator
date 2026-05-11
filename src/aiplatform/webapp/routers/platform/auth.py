@@ -13,17 +13,19 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from aiplatform.webapp.auth import (
     ALLOWED_EMAILS,
+    ALLOWED_USERS,
     GOOGLE_CLIENT_ID,
     JWT_EXPIRY_HOURS,
     _auth_disabled,
     create_session_token,
     verify_google_credential,
 )
+from aiplatform.webapp.auth import require_auth
 
 router = APIRouter()
 
@@ -68,6 +70,12 @@ def google_login(req: GoogleAuthRequest) -> GoogleAuthResponse:
         email=email,
         expires_in=JWT_EXPIRY_HOURS * 3600,
     )
+
+
+@router.get("/users")
+def list_users(user: str = Depends(require_auth)) -> list[dict]:
+    """Return all users eligible to access the admin app (for Owner dropdowns)."""
+    return ALLOWED_USERS
 
 
 @router.get("/config")

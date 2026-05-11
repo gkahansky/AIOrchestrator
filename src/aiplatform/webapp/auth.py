@@ -29,15 +29,32 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 _bearer = HTTPBearer(auto_error=False)
 
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
-ALLOWED_EMAIL    = os.environ.get("ALLOWED_EMAIL", "")  # kept for backward compat
 JWT_SECRET       = os.environ.get("JWT_SECRET", "")
 JWT_ALGORITHM    = "HS256"
 JWT_EXPIRY_HOURS = 24
 
-# ALLOWED_EMAILS supports comma-separated list: "a@x.com,b@y.com"
-# Falls back to ALLOWED_EMAIL for backward compatibility.
-_raw = os.environ.get("ALLOWED_EMAILS", ALLOWED_EMAIL)
-ALLOWED_EMAILS: set[str] = {e.strip().lower() for e in _raw.split(",") if e.strip()}
+# ALLOWED_EMAIL supports one or more users, comma-separated.
+# Each entry is either:
+#   "email@x.com"               (email only — display name falls back to email)
+#   "email@x.com;Display Name"  (email + display name, separated by semicolon)
+# Example: "alice@x.com;Alice,bob@x.com;Bob"
+_raw = os.environ.get("ALLOWED_EMAIL", "")
+
+def _parse_allowed_users(raw: str) -> list[dict]:
+    users = []
+    for entry in raw.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        if ";" in entry:
+            email, _, name = entry.partition(";")
+            users.append({"email": email.strip().lower(), "name": name.strip()})
+        else:
+            users.append({"email": entry.lower(), "name": entry.lower()})
+    return users
+
+ALLOWED_USERS: list[dict] = _parse_allowed_users(_raw)
+ALLOWED_EMAILS: set[str] = {u["email"] for u in ALLOWED_USERS}
 
 _auth_disabled = not (GOOGLE_CLIENT_ID and ALLOWED_EMAILS and JWT_SECRET)
 

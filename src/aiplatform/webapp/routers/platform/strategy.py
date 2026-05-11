@@ -270,6 +270,7 @@ class RoadmapItemResponse(BaseModel):
     feature_name: Optional[str]
     status: str
     sort_order: int
+    owner: Optional[str]
     completed_at: Optional[datetime]
     created_at: datetime
 
@@ -283,6 +284,7 @@ class RoadmapItemCreate(BaseModel):
     item_type: str = Field("New feature")
     feature_id: Optional[int] = None
     status: str = Field("not_started")
+    owner: Optional[str] = None
 
 
 class RoadmapItemUpdate(BaseModel):
@@ -291,6 +293,7 @@ class RoadmapItemUpdate(BaseModel):
     item_type: Optional[str] = None
     feature_id: Optional[int] = None
     status: Optional[str] = None
+    owner: Optional[str] = None
 
 
 class ReorderRequest(BaseModel):
@@ -307,6 +310,7 @@ def _item_to_dict(item: Roadmap) -> dict:
         "feature_name": item.feature.name if item.feature else None,
         "status": item.status,
         "sort_order": item.sort_order or 0,
+        "owner": item.owner,
         "completed_at": item.completed_at.isoformat() if item.completed_at else None,
         "created_at": item.created_at.isoformat(),
     }
@@ -353,6 +357,7 @@ def create_roadmap_item(body: RoadmapItemCreate, user: str = Depends(require_aut
             feature_id=body.feature_id,
             status="not_started",
             sort_order=max_order,
+            owner=body.owner,
         )
         db.add(item)
         db.commit()
@@ -381,6 +386,8 @@ def update_roadmap_item(item_id: int, body: RoadmapItemUpdate, user: str = Depen
             if body.status == "done" and item.status != "done":
                 item.completed_at = datetime.now(timezone.utc)
             item.status = body.status
+        if "owner" in body.model_fields_set:
+            item.owner = body.owner
 
         db.commit()
         db.refresh(item)

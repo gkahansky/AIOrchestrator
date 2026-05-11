@@ -288,8 +288,9 @@ class Roadmap(Base):
     effort_score     = Column(SmallInteger, nullable=True)
     margin_potential = Column(SmallInteger, nullable=True)
 
-    # "New feature" | "Bug" | "Feature enhancement"
+    # "New feature" | "Bug" | "Feature enhancement" | "Task"
     item_type  = Column(String(50), nullable=True, default="New feature")
+    owner      = Column(String(255), nullable=True)  # email of the assigned owner
     feature_id = Column(BigInteger, ForeignKey("roadmap_features.id", ondelete="SET NULL"), nullable=True)
 
     # not_started | in_progress | in_testing | ready_for_deployment | done

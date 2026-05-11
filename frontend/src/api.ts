@@ -11,6 +11,7 @@
   ApiKeyTestResult,
   AdvisoryProposal,
   AdvisorConfig,
+  AppUser,
   RoadmapFeature,
   RoadmapItem,
   RoadmapListResponse,
@@ -448,6 +449,13 @@ export async function updateAdvisorPrompt(id: string, content: string): Promise<
     body: JSON.stringify({ content }),
   })
   if (!res.ok) throw new Error("Failed to update advisor prompt")
+}
+
+// ── Auth / Users ─────────────────────────────────────────────────────────────
+
+export async function fetchUsers(): Promise<AppUser[]> {
+  const res = await fetch(`${BASE}/api/auth/users`, { headers: getHeaders() })
+  return handleResponse<AppUser[]>(res)
 }
 
 // ── Roadmap ──────────────────────────────────────────────────────────────────

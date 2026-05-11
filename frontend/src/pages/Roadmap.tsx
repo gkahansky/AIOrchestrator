@@ -3,10 +3,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   fetchRoadmap, fetchRoadmapDone, fetchRoadmapFeatures,
   createRoadmapFeature, createRoadmapItem, updateRoadmapItem,
-  deleteRoadmapItem, reorderRoadmapItems,
+  deleteRoadmapItem, reorderRoadmapItems, fetchUsers,
 } from "../api"
 import {
-  RoadmapItem, RoadmapFeature, RoadmapItemType, RoadmapStatus,
+  RoadmapItem, RoadmapFeature, RoadmapItemType, RoadmapStatus, AppUser,
 } from "../types"
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -31,11 +31,12 @@ const TYPE_COLOURS: Record<string, string> = {
   "New feature": "bg-purple-100 text-purple-700",
   "Bug": "bg-red-100 text-red-700",
   "Feature enhancement": "bg-orange-100 text-orange-700",
+  "Task": "bg-cyan-100 text-cyan-700",
 }
 
 const WIP_STATUSES: RoadmapStatus[] = ["in_progress", "in_testing", "ready_for_deployment"]
 const ALL_STATUSES: RoadmapStatus[] = ["not_started", ...WIP_STATUSES, "done"]
-const ITEM_TYPES: RoadmapItemType[] = ["New feature", "Bug", "Feature enhancement"]
+const ITEM_TYPES: RoadmapItemType[] = ["New feature", "Bug", "Feature enhancement", "Task"]
 
 type Section = "backlog" | "wip"
 
@@ -89,6 +90,12 @@ function ItemRow({ item, section, canDelete, onEdit, onDelete, onDragStart, onDr
           </span>
         </div>
         {item.description && <p className="text-xs text-on-surface-variant line-clamp-2">{item.description}</p>}
+        {item.owner && (
+          <p className="text-xs text-on-surface-variant/70 mt-1">
+            <span className="material-symbols-outlined text-[11px] align-middle mr-0.5">person</span>
+            {item.owner}
+          </p>
+        )}
       </div>
       <div className="flex gap-1.5 shrink-0">
         <button onClick={() => onEdit(item)}
@@ -114,6 +121,7 @@ interface ItemFormProps {
   onSave: (data: {
     title: string; description: string
     item_type: RoadmapItemType; feature_id: number | null; status: RoadmapStatus
+    owner: string | null
   }) => void
   onCancel: () => void
   onAddFeature: (name: string) => Promise<RoadmapFeature>
@@ -127,9 +135,12 @@ function ItemForm({ item, features, onSave, onCancel, onAddFeature, isSaving }: 
   const [itemType, setItemType] = useState<RoadmapItemType>(item?.item_type ?? "New feature")
   const [featureId, setFeatureId] = useState<number | null>(item?.feature_id ?? null)
   const [status, setStatus] = useState<RoadmapStatus>(item?.status ?? "not_started")
+  const [owner, setOwner] = useState<string | null>(item?.owner ?? null)
   const [addingFeature, setAddingFeature] = useState(false)
   const [newFeatureName, setNewFeatureName] = useState("")
   const [featureError, setFeatureError] = useState("")
+
+  const { data: users = [] } = useQuery<AppUser[]>({ queryKey: ["users"], queryFn: fetchUsers })
 
   async function handleFeatureChange(val: string) {
     if (val === "__add__") { setAddingFeature(true); return }
@@ -152,7 +163,7 @@ function ItemForm({ item, features, onSave, onCancel, onAddFeature, isSaving }: 
 
   function handleSubmit() {
     if (!title.trim()) return
-    onSave({ title: title.trim(), description, item_type: itemType, feature_id: featureId, status })
+    onSave({ title: title.trim(), description, item_type: itemType, feature_id: featureId, status, owner })
   }
 
   const inputCls = "w-full bg-surface-container-low border-none rounded-xl px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-on-surface-variant/50"
@@ -207,6 +218,13 @@ function ItemForm({ item, features, onSave, onCancel, onAddFeature, isSaving }: 
             <textarea maxLength={500} value={description} onChange={e => setDescription(e.target.value)}
               rows={3} className={inputCls + " resize-none"} placeholder="Optional description (max 500 chars)" />
             <p className="text-xs text-on-surface-variant/50 mt-1">{description.length}/500</p>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest font-label opacity-60 mb-1.5">Owner</label>
+            <select value={owner ?? ""} onChange={e => setOwner(e.target.value || null)} className={inputCls}>
+              <option value="">— Unassigned —</option>
+              {users.map(u => <option key={u.email} value={u.name}>{u.name}</option>)}
+            </select>
           </div>
           {!isNew && (
             <div>
@@ -364,7 +382,7 @@ export default function Roadmap() {
     resetDrag()
   }
 
-  function handleSave(data: Parameters<typeof createMutation.mutate>[0]) {
+  function handleSave(data: Parameters<typeof createMutation.mutate>[0] & { owner: string | null }) {
     if (editingItem) updateMutation.mutate({ id: editingItem.id, data })
     else createMutation.mutate(data)
   }

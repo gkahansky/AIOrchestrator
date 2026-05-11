@@ -15,6 +15,7 @@ import SecurityAudit from "./pages/ventures/SecurityAudit"
 import Finance from "./pages/Finance"
 import Settings from "./pages/Settings"
 import StrategyRoom from "./pages/StrategyRoom"
+import Roadmap from "./pages/Roadmap"
 import Marketing from "./pages/Marketing"
 import CampaignManager from "./pages/CampaignManager"
 
@@ -60,6 +61,7 @@ export default function App() {
             <Route path="strategy-room" element={<StrategyRoom />} />
             <Route path="strategy-room/:tab" element={<StrategyRoom />} />
             <Route path="strategy-room/market-research/:sessionId" element={<StrategyRoom />} />
+            <Route path="roadmap" element={<Roadmap />} />
             <Route path="marketing" element={<Marketing />} />
             <Route path="campaigns" element={<CampaignManager />} />
             <Route path="settings" element={<Settings />} />

@@ -206,3 +206,4 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-05-03 00:00 |  | 61bf43f | fix(content-repurposing): tiered subject detection (upper-body + HOG fallback) + 5-frame smoothing + region merge + linear crop pan — keeps humans in frame when face detection fails and eliminates jarring crop jump cuts |
 | 2026-05-03 19:54 |  | 0cc2a8d | feat(market-research): screenshot fallback to AI-generated UI mockup |
 | 2026-05-03 19:54 |  | d81520b | docs: merge DevLog after rebase |
+| 2026-05-11 09:15 |  | 6cd7905 | feat(roadmap): extract to standalone 'To Do List' page with cross-section drag & drop |

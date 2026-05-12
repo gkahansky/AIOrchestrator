@@ -1,0 +1,192 @@
+{
+  "marketing_audit": [
+    {
+      "name": "Alice Chen",
+      "email": "alice.chen.test@example.com",
+      "company": "Bloomfield Candles",
+      "website_url": "https://bloomfieldcandles.example.com",
+      "platform_username": "alicechen_biz",
+      "source_channel": "reddit",
+      "source_url": "https://reddit.com/r/smallbusiness/comments/test001",
+      "context": "Hey everyone, I launched my candle shop six months ago and I'm getting decent traffic from Instagram but almost no one buys. Bounce rate is like 80%. I have no idea what I'm doing wrong with my site. Would really appreciate someone taking a look.",
+      "matched_persona": "Small business owner struggling with conversion",
+      "notes": "Mock lead — test mode only"
+    },
+    {
+      "name": "Marcus Webb",
+      "email": "marcus.webb.test@example.com",
+      "company": "Webb Consulting",
+      "website_url": "https://webbconsulting.example.com",
+      "platform_username": "mwebb_digital",
+      "source_channel": "hackernews",
+      "source_url": "https://news.ycombinator.com/item?id=test002",
+      "context": "Ask HN: I redesigned my consulting website last year and my inbound dropped 40%. Anyone know a good marketing audit service that can tell me what went wrong? Preferably one that gives specific actionable fixes, not just a generic report.",
+      "matched_persona": "Consultant looking for specific marketing fixes",
+      "notes": "Mock lead — test mode only"
+    },
+    {
+      "name": "Priya Nair",
+      "email": "priya.nair.test@example.com",
+      "company": "Nair Skincare",
+      "website_url": "https://nairskincare.example.com",
+      "platform_username": "priya_nair_sk",
+      "source_channel": "linkedin",
+      "source_url": "https://linkedin.com/posts/test003",
+      "context": "Posting this in case anyone's been through this: we're spending $3k/month on Google Ads and getting clicks but our landing page converts at 0.8%. Our industry average is supposedly 3-4%. We've tried A/B tests but don't really know what we're testing for. Looking for a fresh set of eyes.",
+      "matched_persona": "E-commerce founder with paid traffic but low conversion",
+      "notes": "Mock lead — test mode only"
+    }
+  ],
+  "content_studio": [
+    {
+      "name": "Jordan Park",
+      "email": "jordan.park.test@example.com",
+      "company": "The Indie Dev Podcast",
+      "website_url": "https://indiedevpodcast.example.com",
+      "platform_username": "jordanparkpod",
+      "source_channel": "reddit",
+      "source_url": "https://reddit.com/r/podcasting/comments/test004",
+      "context": "Just launched my podcast 3 weeks ago — 4 episodes in. I'm a solo dev with no marketing background and I'm realizing show notes are a massive time sink. Takes me about 3 hours per episode to write decent ones. Is there a service that can do this from my audio file? Happy to pay.",
+      "matched_persona": "Solo podcast creator overwhelmed by post-production",
+      "notes": "Mock lead — test mode only"
+    },
+    {
+      "name": "Samantha Torres",
+      "email": "sam.torres.test@example.com",
+      "company": "Founders Table Podcast",
+      "website_url": "https://founderstable.example.com",
+      "platform_username": "samtorrespod",
+      "source_channel": "listennotes",
+      "source_url": "https://listennotes.example.com/podcasts/test005",
+      "context": "New podcast: Founders Table — interviews with startup founders. Episode 1 published 2026-04-30. Looking to grow fast, need to publish show notes and social clips consistently.",
+      "matched_persona": "New podcaster wanting consistent show notes",
+      "notes": "Mock lead — test mode only"
+    },
+    {
+      "name": "Dr. Kenji Yamamoto",
+      "email": "kenji.yama.test@example.com",
+      "company": "MedMind Podcast",
+      "website_url": "https://medmindpodcast.example.com",
+      "platform_username": "drkenjipod",
+      "source_channel": "google",
+      "source_url": "https://indiehackers.com/post/test006",
+      "context": "I run a medical education podcast — 45 min episodes twice a week. My listeners want proper transcripts and timestamps for CME credits. I've tried Otter.ai but the medical terminology is a mess. Anyone recommend a show notes service that handles technical vocabulary well?",
+      "matched_persona": "Professional podcaster needing accurate transcripts",
+      "notes": "Mock lead — test mode only"
+    }
+  ],
+  "accessibility_audit": [
+    {
+      "name": "Lena Hoffmann",
+      "email": "lena.hoffmann.test@example.com",
+      "company": "Hoffmann Legal",
+      "website_url": "https://hoffmannlegal.example.com",
+      "platform_username": "lenahoffmann_law",
+      "source_channel": "reddit",
+      "source_url": "https://reddit.com/r/webdev/comments/test007",
+      "context": "Our law firm got a demand letter last month about ADA website compliance. We have no idea where to start. Our site was built in 2019 and we haven't touched it. We need an accessibility audit that tells us exactly what's broken and how to fix it, ideally with priority order.",
+      "matched_persona": "Business facing ADA compliance demand",
+      "notes": "Mock lead — test mode only"
+    },
+    {
+      "name": "Tyler Okonkwo",
+      "email": "tyler.okonkwo.test@example.com",
+      "company": "EduPath SaaS",
+      "website_url": "https://edupathapp.example.com",
+      "platform_username": "tylerdev_ep",
+      "source_channel": "hackernews",
+      "source_url": "https://news.ycombinator.com/item?id=test008",
+      "context": "Show HN: EduPath — a learning platform for K-12. We're about to sell to a school district and they're requiring WCAG 2.1 AA compliance certification. We self-built so have no idea how far off we are. Who do people use for accessibility audits?",
+      "matched_persona": "SaaS selling to education/government requiring WCAG",
+      "notes": "Mock lead — test mode only"
+    },
+    {
+      "name": "Monique Dubois",
+      "email": "monique.dubois.test@example.com",
+      "company": "Artisan Collective",
+      "website_url": "https://artisancollective.example.com",
+      "platform_username": "monique_ac",
+      "source_channel": "google",
+      "source_url": "https://reddit.com/r/ecommerce/comments/test009",
+      "context": "Running an e-commerce site for independent artists. We've had two users contact us saying they can't use the checkout with their screen reader. I feel terrible and want to fix it properly. Looking for an accessibility audit that goes beyond automated scanners.",
+      "matched_persona": "E-commerce owner with known accessibility complaints",
+      "notes": "Mock lead — test mode only"
+    }
+  ],
+  "security_audit": [
+    {
+      "name": "Ben Adler",
+      "email": "ben.adler.test@example.com",
+      "company": "Vault Finance",
+      "website_url": "https://vaultfinance.example.com",
+      "platform_username": "benadler_ft",
+      "source_channel": "reddit",
+      "source_url": "https://reddit.com/r/startups/comments/test010",
+      "context": "We're a fintech startup, Series A, and our enterprise prospects are asking for a SOC2 report. We've never done a security audit. Our stack is React + Node + AWS RDS. Looking for a pentest shop that can handle web app + API and give us a real report we can show investors, not just a Nessus scan PDF.",
+      "matched_persona": "Fintech startup needing SOC2-ready security audit",
+      "notes": "Mock lead — test mode only"
+    },
+    {
+      "name": "Claire Nguyen",
+      "email": "claire.nguyen.test@example.com",
+      "company": "MedRecord SaaS",
+      "website_url": "https://medrecord.example.com",
+      "platform_username": "clairen_dev",
+      "source_channel": "hackernews",
+      "source_url": "https://news.ycombinator.com/item?id=test011",
+      "context": "Ask HN: We store PHI and are about to go through HIPAA audit. Our CTO wants an external web application pentest first so we can patch before the auditors arrive. Anyone have experience with security audit vendors who understand healthcare compliance requirements?",
+      "matched_persona": "Healthcare SaaS facing compliance pentest requirement",
+      "notes": "Mock lead — test mode only"
+    },
+    {
+      "name": "Omar Farouk",
+      "email": "omar.farouk.test@example.com",
+      "company": "ShipFast API",
+      "website_url": "https://shipfastapi.example.com",
+      "platform_username": "omarfarouk_dev",
+      "source_channel": "indiehackers",
+      "source_url": "https://indiehackers.com/post/test012",
+      "context": "Built a B2B API product — we handle webhooks and payment data for our clients. A potential customer asked if we've done a security audit and we haven't. We've been bootstrapped so kept putting it off. Now it's blocking a $30k/yr deal. Looking for a focused web app security audit, OWASP Top 10 at minimum.",
+      "matched_persona": "Bootstrapped API founder blocked by security requirements",
+      "notes": "Mock lead — test mode only"
+    }
+  ],
+  "market_research": [
+    {
+      "name": "Sofia Petrov",
+      "email": "sofia.petrov.test@example.com",
+      "company": "Petrov Ventures",
+      "website_url": "https://petrovventures.example.com",
+      "platform_username": "sofiapetrov_vc",
+      "source_channel": "reddit",
+      "source_url": "https://reddit.com/r/startups/comments/test013",
+      "context": "We're a 3-person team considering entering the SMB HR software market. We've done some Googling but we really need a proper competitive landscape, TAM estimate, and customer segment breakdown before we commit 6 months of dev time. Who does solid market research for early-stage startups at a reasonable price?",
+      "matched_persona": "Early-stage founder needing market validation before building",
+      "notes": "Mock lead — test mode only"
+    },
+    {
+      "name": "Rafael Lima",
+      "email": "rafael.lima.test@example.com",
+      "company": "Lima Capital",
+      "website_url": "https://limacapital.example.com",
+      "platform_username": "rafaellima_inv",
+      "source_channel": "linkedin",
+      "source_url": "https://linkedin.com/posts/test014",
+      "context": "We're evaluating a Series A investment in a supply chain visibility startup. Need an independent market research report on the supply chain software TAM, key competitors, and go-to-market dynamics before our investment committee meeting in 3 weeks. Anyone have recommendations for a fast-turnaround market research service?",
+      "matched_persona": "Investor needing market research for due diligence",
+      "notes": "Mock lead — test mode only"
+    },
+    {
+      "name": "Hannah Kim",
+      "email": "hannah.kim.test@example.com",
+      "company": "Bloom Health",
+      "website_url": "https://bloomhealth.example.com",
+      "platform_username": "hannahkim_health",
+      "source_channel": "indiehackers",
+      "source_url": "https://indiehackers.com/post/test015",
+      "context": "I'm a physician building a direct-pay concierge medicine platform. I need to understand the competitive landscape (ZocDoc, Hint Health, etc.), pricing models, and which patient segments to target first. I don't have a business background so I need this explained clearly, not just data dumps.",
+      "matched_persona": "Professional turned founder needing accessible market analysis",
+      "notes": "Mock lead — test mode only"
+    }
+  ]
+}

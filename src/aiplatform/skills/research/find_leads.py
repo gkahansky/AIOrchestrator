@@ -200,6 +200,37 @@ _VENTURE_PITCHES: dict[str, str] = _cfg.get("venture_pitches", {
 })
 
 
+# ── Mock leads (test mode) ─────────────────────────────────────────────────────
+
+def _load_mock_leads(venture: str) -> list[dict]:
+    """Return fixture leads for the given venture from config/test_leads.json."""
+    config_path = Path(
+        os.environ.get("TEST_LEADS_PATH", "config/test_leads.json")
+    )
+    if not config_path.exists():
+        log.warning("_load_mock_leads: %s not found — returning empty list", config_path)
+        return []
+    all_leads: dict = json.loads(config_path.read_text())
+    fixtures = all_leads.get(venture, [])
+    results = []
+    for f in fixtures:
+        results.append({
+            "venture": venture,
+            "source_channel": f.get("source_channel", "mock"),
+            "source_url": f.get("source_url"),
+            "name": f.get("name"),
+            "email": f.get("email"),
+            "platform_username": f.get("platform_username"),
+            "website_url": f.get("website_url"),
+            "company": f.get("company"),
+            "notes": f.get("notes"),
+            "context": f.get("context"),
+            "matched_persona": f.get("matched_persona"),
+        })
+    log.info("_load_mock_leads: returning %d fixture leads for '%s'", len(results), venture)
+    return results
+
+
 # ── Claude qualification ───────────────────────────────────────────────────────
 
 def _qualify_post(
@@ -282,6 +313,7 @@ def find_leads(
     search_prompt: str | None = None,
     personas: list[dict] | None = None,
     venture: str = "",
+    mock_mode: bool = False,
 ) -> list[dict]:
     """
     Search configured sources for potential customers.
@@ -293,10 +325,15 @@ def find_leads(
         search_prompt: User-reviewed criteria injected into Claude qualification.
         personas:      Campaign personas [{name, description}] for matching.
         venture:       Venture slug — used only for default-source fallback.
+        mock_mode:     When True, return fixture leads from config/test_leads.json
+                       instead of hitting real platforms. No API calls are made.
 
     Returns:
         List of lead dicts ready for DB insertion (includes `context` field).
     """
+    if mock_mode:
+        return _load_mock_leads(venture)
+
     active_sources = [s for s in sources if s.get("enabled", True)]
 
     if not active_sources and venture in VENTURE_DEFAULT_SOURCES:

@@ -35,7 +35,7 @@ class Base(DeclarativeBase):
     pass
 
 
-# ── Enums ──────────────────────────────────────────────────────────────────────
+# ── Enums ──────────────────────────────────────────────────────
 
 VENTURE_ENUM = Enum(
     "etsy", "marketing_audit", "content_studio", "accessibility_audit", "security_audit",
@@ -53,7 +53,7 @@ PHASE_EVENT_TYPE_ENUM = Enum(
 )
 
 
-# ── Jobs ───────────────────────────────────────────────────────────────────────
+# ── Jobs ──────────────────────────────────────────────────────
 
 class Job(Base):
     """
@@ -131,7 +131,7 @@ class Job(Base):
         }
 
 
-# ── Phase Events ───────────────────────────────────────────────────────────────
+# ── Phase Events ────────────────────────────────────────────────────
 
 class PhaseEvent(Base):
     """
@@ -161,7 +161,7 @@ class PhaseEvent(Base):
         return f"<PhaseEvent job={self.job_id} phase={self.phase} type={self.event_type}>"
 
 
-# ── Cost Events ────────────────────────────────────────────────────────────────
+# ── Cost Events ──────────────────────────────────────────────────────
 
 class CostEvent(Base):
     """
@@ -194,7 +194,7 @@ class CostEvent(Base):
                 f"cost=${self.cost_usd}>")
 
 
-# ── Revenue Events ─────────────────────────────────────────────────────────────
+# ── Revenue Events ─────────────────────────────────────────────────────
 
 class RevenueEvent(Base):
     """
@@ -303,7 +303,7 @@ class Roadmap(Base):
 
     feature = relationship("RoadmapFeature")
 
-# ── Outreach ───────────────────────────────────────────────────────────────────
+# ── Outreach ──────────────────────────────────────────────────────────
 
 LEAD_STATUS_ENUM = Enum(
     "new", "email_sent", "opened", "replied", "converted", "not_interested",
@@ -391,6 +391,10 @@ class OutreachCampaign(Base):
     search_interval_hours    = Column(Integer, nullable=True)          # 6 | 24 | 168 | …
     next_search_at           = Column(DateTime(timezone=True), nullable=True)
     last_search_at           = Column(DateTime(timezone=True), nullable=True)
+
+    # Test mode flags — independent; both default False on production campaigns
+    use_mock_leads = Column(Boolean, nullable=False, default=False, server_default="false")
+    dry_run        = Column(Boolean, nullable=False, default=False, server_default="false")
 
     leads     = relationship("Lead", back_populates="campaign")
     templates = relationship("OutreachTemplate", back_populates="campaign", cascade="all, delete-orphan")
@@ -541,7 +545,7 @@ class ContactMessage(Base):
     contact     = relationship("Contact", backref="messages")
 
 
-# ── Campaign Sources ───────────────────────────────────────────────────────────
+# ── Campaign Sources ─────────────────────────────────────────────────────
 
 class CampaignSource(Base):
     """
@@ -576,7 +580,7 @@ class CampaignSource(Base):
     campaign = relationship("OutreachCampaign", back_populates="sources")
 
 
-# ── Lead Drafts ────────────────────────────────────────────────────────────────
+# ── Lead Drafts ───────────────────────────────────────────────────────
 
 class LeadDraft(Base):
     """
@@ -611,7 +615,7 @@ class LeadDraft(Base):
     campaign = relationship("OutreachCampaign", back_populates="drafts")
 
 
-# ── Security Audit ─────────────────────────────────────────────────────────────
+# ── Security Audit ─────────────────────────────────────────────────────
 
 class SecurityAudit(Base):
     """
@@ -676,7 +680,7 @@ class SecurityAudit(Base):
     job = relationship("Job")
 
 
-# ── Market Research ────────────────────────────────────────────────────────────
+# ── Market Research ──────────────────────────────────────────────────────
 
 class MarketResearch(Base):
     """
@@ -722,7 +726,7 @@ class MarketResearch(Base):
                         onupdate=lambda: datetime.now(timezone.utc))
 
 
-# ── Campaign Manager ───────────────────────────────────────────────────────────
+# ── Campaign Manager ─────────────────────────────────────────────────────
 
 class Campaign(Base):
     """
@@ -778,7 +782,7 @@ class MetricsHistory(Base):
     campaign = relationship("Campaign", back_populates="metrics")
 
 
-# ── Content Repurposing ────────────────────────────────────────────────────────
+# ── Content Repurposing ─────────────────────────────────────────────────────
 
 class CRJob(Base):
     """

@@ -77,7 +77,7 @@ VALID_SOURCE_PLATFORMS: set[str] = set(_cfg.get("valid_source_platforms", [
 ]))
 
 
-# ── Pydantic schemas ──────────────────────────────────────────────────────
+# ── Pydantic schemas ──────────────────────────────────────────────
 
 class PersonaSchema(BaseModel):
     name: str
@@ -93,6 +93,8 @@ class CampaignCreate(BaseModel):
     user_search_instructions: str | None = None
     auto_search_enabled: bool = False
     search_interval_hours: int | None = None
+    use_mock_leads: bool = False
+    dry_run: bool = False
 
 class CampaignPatch(BaseModel):
     name: str | None = None
@@ -102,6 +104,8 @@ class CampaignPatch(BaseModel):
     personas: list[PersonaSchema] | None = None
     target_prompt: str | None = None
     user_search_instructions: str | None = None
+    use_mock_leads: bool | None = None
+    dry_run: bool | None = None
 
 class SchedulePatch(BaseModel):
     auto_search_enabled: bool
@@ -174,7 +178,7 @@ class ContactPatch(BaseModel):
     features_of_interest: dict | None = None
 
 
-# ── Serialisers ─────────────────────────────────────────────────────────
+# ── Serialisers ────────────────────────────────────────────────
 
 def _campaign_or_404(campaign_id: str, db: Any) -> OutreachCampaign:
     try:
@@ -286,6 +290,8 @@ def _campaign_to_dict(c: OutreachCampaign, db: Any) -> dict:
         "search_interval_hours": c.search_interval_hours,
         "next_search_at": c.next_search_at.isoformat() if c.next_search_at else None,
         "last_search_at": c.last_search_at.isoformat() if c.last_search_at else None,
+        "use_mock_leads": bool(c.use_mock_leads),
+        "dry_run": bool(c.dry_run),
         "leads_count": leads_count,
         "drafts_pending": drafts_pending,
         "templates_count": len(templates),
@@ -296,7 +302,7 @@ def _campaign_to_dict(c: OutreachCampaign, db: Any) -> dict:
     }
 
 
-# ── Campaign endpoints ────────────────────────────────────────────────────
+# ── Campaign endpoints ────────────────────────────────────────────
 
 @router.get("/campaigns")
 def list_campaigns(
@@ -327,6 +333,8 @@ def create_campaign(
         user_search_instructions=req.user_search_instructions,
         auto_search_enabled=req.auto_search_enabled,
         search_interval_hours=req.search_interval_hours,
+        use_mock_leads=req.use_mock_leads,
+        dry_run=req.dry_run,
     )
     if req.auto_search_enabled and req.search_interval_hours:
         c.next_search_at = datetime.now(timezone.utc) + timedelta(hours=req.search_interval_hours)
@@ -382,6 +390,8 @@ def patch_campaign(
     if req.target_prompt is not None:      c.target_prompt = req.target_prompt
     if req.user_search_instructions is not None:
         c.user_search_instructions = req.user_search_instructions
+    if req.use_mock_leads is not None:     c.use_mock_leads = req.use_mock_leads
+    if req.dry_run is not None:            c.dry_run = req.dry_run
     db.commit()
     db.refresh(c)
     result = _campaign_to_dict(c, db)
@@ -415,7 +425,7 @@ def delete_campaign(
     db.commit()
 
 
-# ── Sources endpoints ─────────────────────────────────────────────────────
+# ── Sources endpoints ─────────────────────────────────────────────
 
 @router.get("/campaigns/{campaign_id}/sources")
 def list_sources(
@@ -502,7 +512,7 @@ def reset_sources(
     return {"items": [_source_to_dict(s) for s in c.sources]}
 
 
-# ── Draft endpoints ──────────────────────────────────────────────────────────
+# ── Draft endpoints ──────────────────────────────────────────────────
 
 @router.get("/campaigns/{campaign_id}/drafts")
 def list_drafts(
@@ -546,7 +556,7 @@ def patch_draft(
     return _draft_to_dict(d, lead)
 
 
-# ── Action endpoints ──────────────────────────────────────────────────────────
+# ── Action endpoints ──────────────────────────────────────────────────
 
 @router.post("/campaigns/{campaign_id}/generate-prompt")
 def generate_search_prompt(
@@ -771,7 +781,7 @@ def get_campaign_stats(
     return analyze_campaign(campaign_id, db)
 
 
-# ── Leads endpoints ──────────────────────────────────────────────────────────
+# ── Leads endpoints ──────────────────────────────────────────────────
 
 @router.get("/leads")
 def list_leads(
@@ -826,7 +836,7 @@ def patch_lead(lead_id: str, req: LeadPatch, _: str = Depends(require_auth), db=
     return _lead_to_dict(l)
 
 
-# ── Contacts endpoints ───────────────────────────────────────────────────────
+# ── Contacts endpoints ───────────────────────────────────────────────
 
 @router.get("/contacts")
 def list_contacts(
@@ -870,7 +880,7 @@ def patch_contact(
     return _contact_to_dict(c)
 
 
-# ── Tracking endpoints (no auth) ────────────────────────────────────────────
+# ── Tracking endpoints (no auth) ───────────────────────────────────────
 
 @router.get("/track/open/{send_id}", include_in_schema=False)
 @router.post("/track/open/{send_id}", include_in_schema=False)

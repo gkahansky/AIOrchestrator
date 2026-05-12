@@ -1108,18 +1108,21 @@ def run_find_leads(
     Falls back to VENTURE_DEFAULT_SOURCES[venture] when sources is empty.
     """
     from aiplatform.skills.research.find_leads import find_leads
-    from aiplatform.database.models import Lead
+    from aiplatform.database.models import Lead, OutreachCampaign
     from aiplatform.database.session import SessionLocal
     import uuid
 
     db = SessionLocal()
     try:
+        campaign_for_mock = db.get(OutreachCampaign, uuid.UUID(campaign_id))
+        use_mock = bool(campaign_for_mock and campaign_for_mock.use_mock_leads)
         raw_leads = find_leads(
             sources=sources or [],
             max_leads=max_leads,
             search_prompt=search_prompt,
             personas=personas or [],
             venture=venture,
+            mock_mode=use_mock,
         )
 
         campaign_uuid = uuid.UUID(campaign_id)
@@ -1258,10 +1261,19 @@ def run_send_approved_drafts(self, campaign_id: str) -> dict:
         now = datetime.now(timezone.utc)
         sent_count = 0
         skipped_spam = 0
+        is_dry_run = bool(campaign.dry_run)
 
         for draft in drafts:
             lead = db.get(Lead, draft.lead_id)
             if not lead:
+                continue
+
+            # Dry-run: mark test_sent and skip all real sends / spam checks
+            if is_dry_run:
+                draft.status = "test_sent"
+                draft.sent_at = now
+                lead.status = "email_sent"
+                sent_count += 1
                 continue
 
             # Spam guard (email platform only)

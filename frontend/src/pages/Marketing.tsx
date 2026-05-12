@@ -55,6 +55,7 @@ const STATUS_COLORS: Record<string, string> = {
   approved:       "bg-emerald-100 text-emerald-700",
   rejected:       "bg-error/10 text-error",
   sent:           "bg-primary/10 text-primary",
+  test_sent:      "bg-violet-100 text-violet-700",
   approached:     "bg-primary/10 text-primary",
   inquired:       "bg-tertiary/10 text-tertiary",
   purchased:      "bg-emerald-600 text-white",
@@ -674,6 +675,15 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
     onDeleted()
   }
 
+  async function patchCampaign(patch: any) {
+    await fetch(`${API}/api/outreach/campaigns/${campaignId}`, {
+      method: "PATCH",
+      headers: { ...authHeader(), "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    })
+    qc.invalidateQueries({ queryKey: ["campaign", campaignId] })
+  }
+
   async function patchSource(id: string, patch: any) {
     await fetch(`${API}/api/outreach/sources/${id}`, {
       method: "PATCH",
@@ -753,6 +763,11 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
                 <h2 className="font-headline font-bold text-lg text-on-surface">{campaign.name}</h2>
                 <StatusBadge status={campaign.status} />
                 <PlatformBadge platform={platform} />
+                {(campaign.use_mock_leads || campaign.dry_run) && (
+                  <span className="text-[10px] font-label font-semibold px-2 py-0.5 rounded bg-violet-100 text-violet-700 flex items-center gap-0.5">
+                    <span className="material-symbols-outlined text-[10px]">science</span>TEST MODE
+                  </span>
+                )}
                 <span className={`text-[10px] font-label font-semibold px-2 py-0.5 rounded ${campaign.auto_search_enabled ? "bg-primary/10 text-primary" : "bg-surface-container text-on-surface-variant"}`}>
                   <span className="material-symbols-outlined text-[10px] mr-0.5">schedule</span>
                   {scheduleLabel}
@@ -768,6 +783,23 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
                   ))}
                 </div>
               )}
+              <div className="flex items-center gap-4 mt-3 pt-3 border-t border-outline-variant/10">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-violet-700 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[11px]">science</span>Test Mode
+                </span>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox" checked={!!campaign.use_mock_leads}
+                    onChange={e => patchCampaign({ use_mock_leads: e.target.checked })}
+                    className="w-3.5 h-3.5 accent-violet-600" />
+                  <span className="text-xs font-label text-on-surface">Mock leads</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox" checked={!!campaign.dry_run}
+                    onChange={e => patchCampaign({ dry_run: e.target.checked })}
+                    className="w-3.5 h-3.5 accent-violet-600" />
+                  <span className="text-xs font-label text-on-surface">Dry-run sends</span>
+                </label>
+              </div>
             </div>
             <div className="flex flex-wrap items-start gap-2">
               <button onClick={() => setShowFindLeads(true)} disabled={!!actionLoading}
@@ -832,7 +864,7 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
               <div className="p-8 text-center">
                 <span className="material-symbols-outlined text-[40px] text-on-surface-variant/30 block mb-3">group</span>
                 <p className="text-sm text-on-surface-variant">No leads yet.</p>
-                <p className="text-xs text-on-surface-variant mt-1">Click “Find Leads” to search across your configured sources.</p>
+                <p className="text-xs text-on-surface-variant mt-1">Click "Find Leads" to search across your configured sources.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -887,6 +919,7 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
                   { id: "pending_review", label: "Pending" },
                   { id: "approved", label: "Approved" },
                   { id: "rejected", label: "Rejected" },
+                  { id: "test_sent", label: "Test Sent" },
                   { id: "", label: "All" },
                 ].map(f => (
                   <button key={f.id} onClick={() => setDraftStatusFilter(f.id)}
@@ -910,7 +943,7 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
                   {draftStatusFilter === "pending_review" ? "No drafts awaiting review." : `No ${draftStatusFilter.replace("_", " ")} drafts.`}
                 </p>
                 {draftStatusFilter === "pending_review" && (
-                  <p className="text-xs text-on-surface-variant mt-1">Click “Generate Drafts” to write personalized messages for your leads.</p>
+                  <p className="text-xs text-on-surface-variant mt-1">Click "Generate Drafts" to write personalized messages for your leads.</p>
                 )}
               </div>
             ) : (
@@ -929,7 +962,7 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-xs text-on-surface-variant">
-                Each source is searched when you run “Find Leads” or on the scheduled interval.
+                Each source is searched when you run "Find Leads" or on the scheduled interval.
               </p>
               <div className="flex items-center gap-2">
                 <button onClick={resetSources}
@@ -1075,6 +1108,11 @@ function CampaignCard({ campaign, selected, onClick }: { campaign: any; selected
         {campaign.auto_search_enabled && (
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-bold uppercase">Auto</span>
         )}
+        {(campaign.use_mock_leads || campaign.dry_run) && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 font-bold uppercase flex items-center gap-0.5">
+            <span className="material-symbols-outlined text-[9px]">science</span>Test
+          </span>
+        )}
       </div>
       {campaign.personas?.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-2">
@@ -1109,6 +1147,8 @@ function NewCampaignForm({ venture, onCreated, onCancel }: {
   const [userInstructions, setUserInstructions] = useState("")
   const [personas, setPersonas] = useState<{ name: string; description: string }[]>([])
   const [intervalHours, setIntervalHours] = useState<number | null>(null)
+  const [useMockLeads, setUseMockLeads] = useState(false)
+  const [dryRun, setDryRun] = useState(false)
   const [creating, setCreating] = useState(false)
 
   async function create() {
@@ -1124,6 +1164,8 @@ function NewCampaignForm({ venture, onCreated, onCancel }: {
         user_search_instructions: userInstructions.trim() || null,
         auto_search_enabled: intervalHours !== null,
         search_interval_hours: intervalHours,
+        use_mock_leads: useMockLeads,
+        dry_run: dryRun,
       }),
     })
     setCreating(false)
@@ -1207,6 +1249,25 @@ function NewCampaignForm({ venture, onCreated, onCancel }: {
         <p className="text-[10px] text-on-surface-variant mt-1">
           {intervalHours ? `Automatically searches and drafts messages every ${intervalHours}h.` : "Search manually using the Find Leads button."}
         </p>
+      </div>
+
+      {/* Test Mode */}
+      <div className="border border-violet-200 bg-violet-50/50 rounded-lg p-3 space-y-2">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-violet-700 flex items-center gap-1">
+          <span className="material-symbols-outlined text-[12px]">science</span>Test Mode
+        </p>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={useMockLeads} onChange={e => setUseMockLeads(e.target.checked)}
+            className="w-3.5 h-3.5 accent-violet-600" />
+          <span className="text-xs font-label text-on-surface">Use mock leads</span>
+          <span className="text-[10px] text-on-surface-variant">(skip real platform searches — use fixture data)</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={dryRun} onChange={e => setDryRun(e.target.checked)}
+            className="w-3.5 h-3.5 accent-violet-600" />
+          <span className="text-xs font-label text-on-surface">Dry-run sends</span>
+          <span className="text-[10px] text-on-surface-variant">(mark drafts as test_sent — no real emails sent)</span>
+        </label>
       </div>
 
       <div className="flex gap-2 pt-1">

@@ -6,10 +6,12 @@ const authHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("api_t
 
 // ── Constants ────────────────────────────────────────────────────────────────────────
 
-const VENTURES = [
-  { id: "marketing_audit",     label: "Marketing Audit",    icon: "search" },
-  { id: "content_studio",      label: "Podcast Show Notes", icon: "mic" },
-  { id: "accessibility_audit", label: "Accessibility Audit",icon: "accessibility_new" },
+const PRODUCTS = [
+  { id: "marketing_audit",     label: "Marketing Audit",     icon: "search" },
+  { id: "market_research",     label: "Market Research",     icon: "analytics" },
+  { id: "accessibility_audit", label: "Accessibility Audit", icon: "accessibility_new" },
+  { id: "security_audit",      label: "Security Audit",      icon: "security" },
+  { id: "other",               label: "Other",               icon: "category" },
 ]
 
 const OUTREACH_PLATFORMS = [
@@ -82,11 +84,11 @@ function PlatformBadge({ platform, small }: { platform: string; small?: boolean 
 
 // ── API hooks ───────────────────────────────────────────────────────────────────────
 
-function useCampaigns(venture: string) {
+function useCampaigns() {
   return useQuery({
-    queryKey: ["campaigns", venture],
+    queryKey: ["campaigns"],
     queryFn: async () => {
-      const r = await fetch(`${API}/api/outreach/campaigns?venture=${venture}`, { headers: authHeader() })
+      const r = await fetch(`${API}/api/outreach/campaigns`, { headers: authHeader() })
       if (!r.ok) throw new Error(r.statusText)
       return r.json()
     },
@@ -664,6 +666,7 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
       qc.invalidateQueries({ queryKey: ["campaign", campaignId] })
       qc.invalidateQueries({ queryKey: ["leads", campaignId] })
       qc.invalidateQueries({ queryKey: ["drafts", campaignId] })
+
     } finally { setActionLoading(null) }
   }
 
@@ -694,7 +697,12 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
   }
 
   async function resetSources() {
-    if (!confirm(`Replace all sources with the default ${campaign?.venture} sources? This cannot be undone.`)) return
+    if (campaign?.venture === "other") {
+      alert("No default available for 'Other' product type.")
+      return
+    }
+    const productLabel = PRODUCTS.find(p => p.id === campaign?.venture)?.label ?? campaign?.venture
+    if (!confirm(`Replace all sources with the default ${productLabel} sources? This cannot be undone.`)) return
     const r = await fetch(`${API}/api/outreach/campaigns/${campaignId}/reset-sources`, {
       method: "POST", headers: authHeader(),
     })
@@ -1096,6 +1104,7 @@ function ContactsSection() {
 // ── Campaign sidebar card ──────────────────────────────────────────────────────────────────
 
 function CampaignCard({ campaign, selected, onClick }: { campaign: any; selected: boolean; onClick: () => void }) {
+  const product = PRODUCTS.find(p => p.id === campaign.venture)
   return (
     <button onClick={onClick}
       className={`w-full text-left p-4 rounded-xl border transition-all ${selected ? "border-primary bg-primary/5 shadow-float" : "border-outline-variant/20 bg-surface-container-lowest hover:border-primary/30"}`}>
@@ -1103,6 +1112,14 @@ function CampaignCard({ campaign, selected, onClick }: { campaign: any; selected
         <p className="text-sm font-label font-semibold text-on-surface leading-tight">{campaign.name}</p>
         <StatusBadge status={campaign.status} />
       </div>
+      {product && (
+        <div className="mb-2">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">
+            <span className="material-symbols-outlined text-[11px]">{product.icon}</span>
+            {product.label}
+          </span>
+        </div>
+      )}
       <div className="flex items-center gap-2 mb-2">
         <PlatformBadge platform={campaign.platform || "email"} small />
         {campaign.auto_search_enabled && (
@@ -1137,9 +1154,10 @@ function CampaignCard({ campaign, selected, onClick }: { campaign: any; selected
 
 // ── New Campaign form ──────────────────────────────────────────────────────────────────────
 
-function NewCampaignForm({ venture, onCreated, onCancel }: {
-  venture: string; onCreated: (id: string) => void; onCancel: () => void
+function NewCampaignForm({ onCreated, onCancel }: {
+  onCreated: (id: string) => void; onCancel: () => void
 }) {
+  const [product, setProduct] = useState("marketing_audit")
   const [name, setName] = useState("")
   const [goal, setGoal] = useState("")
   const [platform, setPlatform] = useState("email")
@@ -1158,7 +1176,7 @@ function NewCampaignForm({ venture, onCreated, onCancel }: {
       method: "POST",
       headers: { ...authHeader(), "Content-Type": "application/json" },
       body: JSON.stringify({
-        venture, name: name.trim(), goal: goal.trim() || null, platform,
+        venture: product, name: name.trim(), goal: goal.trim() || null, platform,
         personas: personas.filter(p => p.name.trim()),
         target_prompt: targetPrompt.trim() || null,
         user_search_instructions: userInstructions.trim() || null,
@@ -1177,6 +1195,15 @@ function NewCampaignForm({ venture, onCreated, onCancel }: {
 
   return (
     <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-4 space-y-4">
+      {/* Product */}
+      <div>
+        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Product</label>
+        <select value={product} onChange={e => setProduct(e.target.value)}
+          className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface">
+          {PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+        </select>
+      </div>
+
       {/* Name + platform */}
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -1289,12 +1316,11 @@ type MainTab = "campaigns" | "contacts"
 
 export default function Marketing() {
   const [mainTab, setMainTab] = useState<MainTab>("campaigns")
-  const [activeVenture, setActiveVenture] = useState(VENTURES[0].id)
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null)
   const [showNewCampaign, setShowNewCampaign] = useState(false)
   const qc = useQueryClient()
 
-  const { data: campaignsData, isLoading: campaignsLoading } = useCampaigns(activeVenture)
+  const { data: campaignsData, isLoading: campaignsLoading } = useCampaigns()
 
   return (
     <div className="space-y-6">
@@ -1322,17 +1348,6 @@ export default function Marketing() {
 
       {mainTab === "campaigns" && (
         <>
-          <div className="flex gap-1 bg-surface-container-low p-1 rounded-xl w-fit">
-            {VENTURES.map(v => (
-              <button key={v.id}
-                onClick={() => { setActiveVenture(v.id); setSelectedCampaignId(null); setShowNewCampaign(false) }}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-label font-semibold transition-colors ${activeVenture === v.id ? "bg-surface-container-lowest text-on-surface shadow-float" : "text-on-surface-variant hover:text-on-surface"}`}>
-                <span className="material-symbols-outlined text-[14px]">{v.icon}</span>
-                {v.label}
-              </button>
-            ))}
-          </div>
-
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Sidebar */}
             <div className="lg:col-span-4 space-y-3">
@@ -1346,10 +1361,9 @@ export default function Marketing() {
 
               {showNewCampaign && (
                 <NewCampaignForm
-                  venture={activeVenture}
                   onCreated={id => {
                     setShowNewCampaign(false)
-                    qc.invalidateQueries({ queryKey: ["campaigns", activeVenture] })
+                    qc.invalidateQueries({ queryKey: ["campaigns"] })
                     setSelectedCampaignId(id)
                   }}
                   onCancel={() => setShowNewCampaign(false)}

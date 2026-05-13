@@ -20,11 +20,14 @@ V1 (optimized_prompts is {llm_id: text}):
 Resumable: completed sections (or packages in v2) are skipped on retry.
 """
 
+import base64
 import json
 import logging
 import os
+import tempfile
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
@@ -858,7 +861,6 @@ def _build_pdf(record: MarketResearch, output_path: str) -> str:
 </body>
 </html>"""
 
-    from pathlib import Path
     from playwright.sync_api import sync_playwright
 
     out = Path(output_path)

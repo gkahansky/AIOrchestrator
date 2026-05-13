@@ -1797,7 +1797,7 @@ def cr_pipeline_watchdog() -> dict:
 
 
 @celery_app.task(name="platform.run_market_research", bind=True, max_retries=2,
-                 soft_time_limit=1800, time_limit=1900)
+                 soft_time_limit=5400, time_limit=5500)
 def run_market_research(self, research_id: str) -> dict:
     """Run the full market research pipeline for a given session ID."""
     from ventures.market_research.pipeline import run_market_research as _run

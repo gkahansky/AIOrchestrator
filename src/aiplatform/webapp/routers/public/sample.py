@@ -206,13 +206,11 @@ def request_accessibility_sample(
     db=Depends(get_db),
 ) -> dict:
     """
-    Run an accessibility audit on the provided URL and email a censored sample PDF.
-    One request per email per 24 hours.
+    Run an accessibility audit on the provided URL and email a sample PDF.
+    One request per email per 24 hours. Auto-delivers without human review.
     """
-    import uuid
-    from aiplatform.database.job_ops import upsert_job
     from aiplatform.database.models import AccessibilityAudit
-    
+
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
 
@@ -220,42 +218,37 @@ def request_accessibility_sample(
 
     order_id = f"sample-acc-{uuid.uuid4().hex[:10]}"
     audit_id = str(uuid.uuid4())
-    
-    order = {
-        "order_id": order_id,
+
+    order: dict = {
+        "order_id":    order_id,
         "sample_email": email,
-        "client_email": email,
-        "url": url,
-        "tier": "sample",
-        "audit_id": audit_id,
-        "status": "pending"
+        "client_email": "",   # pipeline must not send a delivery email — sample task handles it
+        "url":         url,
+        "tier":        "sample",
+        "audit_id":    audit_id,
+        "status":      "pending",
     }
 
-    # Store initial accessibility context for the worker
+    # Create AccessibilityAudit record (venture-specific) + generic Job row
     new_audit = AccessibilityAudit(audit_id=audit_id, target_url=url, status="running")
     db.add(new_audit)
-    db.commit()
-    db.refresh(new_audit)
+    db.flush()
 
-    # Sync to global Job row
     new_job = Job(
         venture="accessibility_audit",
         status="pending",
         phase_current=1,
         phase_total=4,
         input_data=order,
-        output_data=dict(order),
+        output_data={"status": "pending"},
     )
     db.add(new_job)
     db.flush()
     new_audit.job_id = new_job.id
     db.commit()
-    db.refresh(new_job)
 
-    from aiplatform.worker import run_accessibility_scan_job as celery_task
-    task = celery_task.delay(audit_id, url)
-    
-    # Store task connection
+    from aiplatform.worker import run_accessibility_sample as celery_task
+    task = celery_task.delay(order)
     new_job.celery_task_id = str(task.id)
     db.commit()
 

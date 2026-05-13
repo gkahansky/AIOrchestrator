@@ -595,6 +595,110 @@ def run_audit_sample(self, order: dict) -> dict:
         raise
 
 
+# ── Accessibility Audit sample ────────────────────────────────────────────────
+
+@celery_app.task(bind=True, name="accessibility.run_sample", max_retries=1)
+def run_accessibility_sample(self, order: dict) -> dict:
+    """
+    Run an accessibility scan on the provided URL and email a sample PDF.
+    Skips the human review gate — samples auto-deliver.
+    """
+    sample_email = order.get("sample_email", "")
+    audit_id = order.get("audit_id", "")
+    url = order.get("url", "")
+
+    try:
+        from ventures.accessibility_audit.pipeline import run_order
+        from aiplatform.skills.comms.send_email import send_email
+        from aiplatform.database.crm_ops import can_send_sample, log_contact_message
+        from aiplatform.database.session import SessionLocal
+        from aiplatform.database.models import Job
+        from pathlib import Path
+
+        if sample_email and not can_send_sample(sample_email, "accessibility_audit"):
+            return {
+                "order_id": order.get("order_id"),
+                "status": "skipped_throttle",
+                "error": "Sample limit reached (30 days)",
+            }
+
+        # Run scan → generate PDF → upload to Drive → sets status=review_pending
+        run_order(audit_id, url)
+
+        # Read results and auto-approve (skip review gate for samples)
+        with SessionLocal() as db:
+            job = db.query(Job).filter(
+                Job.venture == "accessibility_audit",
+                Job.input_data["audit_id"].astext == audit_id,
+            ).first()
+            output = dict(job.output_data or {}) if job else {}
+            if job:
+                job.status = "delivered"
+                db.commit()
+
+        drive_link = output.get("drive_report_link", "")
+        pdf_path = output.get("pdf_path", "")
+        wcag_score = output.get("wcag_score")
+        violation_rules = output.get("violation_rules", 0)
+
+        if sample_email:
+            score_text = f"<strong>{wcag_score}/100</strong>" if wcag_score is not None else "analyzed"
+            drive_section = (
+                f'<p><a href="{drive_link}">View your sample accessibility report in Google Drive &rarr;</a></p>'
+                if drive_link else ""
+            )
+            body = (
+                f"<p>Hi there,</p>"
+                f"<p>Here's your free accessibility audit sample for <b>{url}</b>.</p>"
+                f"<p>Your site scored {score_text} for WCAG 2.1 compliance. "
+                f"The scan found <strong>{violation_rules} violation rule{'s' if violation_rules != 1 else ''}</strong>.</p>"
+                f"<p>The sample report includes your compliance score and the top violations. "
+                f"The full audit adds detailed remediation steps for every issue, "
+                f"prioritized by impact, with code-level guidance for your developers.</p>"
+                f"{drive_section}"
+                f"<p><b>Want the full report?</b> Visit "
+                f'<a href="https://echoforge.biz">echoforge.biz</a> to order.</p>'
+                f"<p>— EchoForge</p>"
+            )
+            attachments = [pdf_path] if (pdf_path and Path(pdf_path).exists()) else []
+            result_send = send_email(
+                to=sample_email,
+                subject=f"Your Free Accessibility Audit Sample — {url}",
+                body_html=body,
+                attachments=attachments,
+            )
+            if isinstance(result_send, dict) and result_send.get("error"):
+                raise RuntimeError(f"send_email failed: {result_send['error']}")
+
+            log_contact_message(
+                email=sample_email,
+                venture="accessibility_audit",
+                message_type="sample",
+                subject=f"Your Free Accessibility Audit Sample — {url}",
+                body_snippet=body[:200],
+                message_id=result_send.get("message_id") if isinstance(result_send, dict) else None,
+            )
+
+            from datetime import datetime, timezone, timedelta
+            run_nurture_email.apply_async(
+                args=[sample_email, "accessibility", order.get("order_id", ""), 3],
+                eta=datetime.now(timezone.utc) + timedelta(days=3),
+            )
+            run_nurture_email.apply_async(
+                args=[sample_email, "accessibility", order.get("order_id", ""), 7],
+                eta=datetime.now(timezone.utc) + timedelta(days=7),
+            )
+
+        return {"order_id": order.get("order_id"), "status": "sample_delivered"}
+
+    except Exception as exc:
+        _mark_failed(order.get("order_id"), "accessibility_audit", str(exc))
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=60)
+        _slack_alert_failure("accessibility_sample", order.get("order_id"), exc)
+        raise
+
+
 # ── Content Studio venture ─────────────────────────────────────────────────────
 
 @celery_app.task(bind=True, name="podcast.run_order", max_retries=2)
@@ -768,6 +872,29 @@ def run_nurture_email(self, email: str, service: str, order_id: str, day: int) -
                     '<p><a href="https://echoforge.biz"><b>Claim your discount →</b></a></p>'
                     "<p>— EchoForge</p>"
                 )
+        elif service == "accessibility":
+            if day == 3:
+                subject = "Your accessibility audit sample — did you review your score?"
+                body = (
+                    "<p>Hi,</p>"
+                    "<p>A few days ago we sent you a free accessibility audit sample for your website.</p>"
+                    "<p>The sample shows your WCAG 2.1 compliance score and top violations. "
+                    "The full audit includes detailed remediation steps for every issue, "
+                    "prioritized by impact with code-level guidance for your developers.</p>"
+                    '<p><a href="https://echoforge.biz"><b>Order the full accessibility audit →</b></a></p>'
+                    "<p>— EchoForge</p>"
+                )
+            else:  # day 7
+                subject = "Last chance — 20% off your full accessibility audit"
+                body = (
+                    "<p>Hi,</p>"
+                    "<p>Your free accessibility audit sample has been waiting in your inbox for a week. "
+                    "We want to make it easy to act on the findings.</p>"
+                    "<p><b>20% off your first full accessibility audit.</b> "
+                    "Reply with code <b>ACCESS20</b> when ordering.</p>"
+                    '<p><a href="https://echoforge.biz"><b>Claim your discount →</b></a></p>'
+                    "<p>— EchoForge</p>"
+                )
         else:  # audit
             if day == 3:
                 subject = "Your marketing audit sample — did you check your score?"
@@ -792,9 +919,10 @@ def run_nurture_email(self, email: str, service: str, order_id: str, day: int) -
                 )
 
         result_send = send_email(to=email, subject=subject, body_html=body)
+        venture_map = {"podcast": "content_studio", "accessibility": "accessibility_audit"}
         log_contact_message(
             email=email,
-            venture=f'{service}_notes' if service == 'podcast' else 'marketing_audit',
+            venture=venture_map.get(service, "marketing_audit"),
             message_type='nurture',
             subject=subject,
             body_snippet=body[:200],

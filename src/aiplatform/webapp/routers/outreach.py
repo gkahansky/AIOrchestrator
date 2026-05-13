@@ -66,7 +66,7 @@ _cfg = _load_outreach_config()
 
 VALID_VENTURES: set[str] = set(_cfg.get("valid_ventures", [
     "marketing_audit", "content_studio", "accessibility_audit",
-    "security_audit", "market_research",
+    "security_audit", "market_research", "other",
 ]))
 VALID_PLATFORMS: set[str] = set(_cfg.get("valid_platforms", [
     "email", "fiverr", "reddit", "linkedin", "facebook", "instagram",
@@ -487,7 +487,7 @@ def reset_sources(
 ) -> dict:
     """Replace all sources with the venture defaults from outreach_sources.json."""
     c = _campaign_or_404(campaign_id, db)
-    defaults = OUTREACH_CONFIG.get("default_sources", {}).get(c.venture, [])
+    defaults = _cfg.get("default_sources", {}).get(c.venture, [])
     if not defaults:
         raise HTTPException(status_code=400, detail=f"No default sources configured for venture '{c.venture}'")
 

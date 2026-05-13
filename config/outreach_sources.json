@@ -4,7 +4,8 @@
     "content_studio",
     "accessibility_audit",
     "security_audit",
-    "market_research"
+    "market_research",
+    "other"
   ],
   "valid_platforms": [
     "email",

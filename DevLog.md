@@ -207,3 +207,4 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-05-03 19:54 |  | 0cc2a8d | feat(market-research): screenshot fallback to AI-generated UI mockup |
 | 2026-05-03 19:54 |  | d81520b | docs: merge DevLog after rebase |
 | 2026-05-11 09:15 |  | 6cd7905 | feat(roadmap): extract to standalone 'To Do List' page with cross-section drag & drop |
+| 2026-05-14 20:57 |  | 8f8e6a3 | feat(market-research): executive summary from section takeaways, proper report title |

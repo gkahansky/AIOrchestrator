@@ -96,6 +96,35 @@ CROSS_MODULE_SYSTEM_PROMPT = (
 # locked=True sections cannot be unchecked in the UI.
 SECTION_LIBRARY = [
     {
+        "id": "executive_summary",
+        "name": "Executive Summary",
+        "required_items": [
+            "Main market opportunities",
+            "Key challenges and risks",
+            "Strategic recommendations",
+            "Pros and cons summary",
+        ],
+        "expected_outputs": ["Opportunities", "Challenges", "Recommendations", "Pros/Cons"],
+        "default_prompt": (
+            "Synthesise the key takeaways from all research sections into a concise executive summary.\n\n"
+            "Requirements:\n"
+            "- Maximum 3 pages (~800-1200 words)\n"
+            "- Cover the main opportunities, challenges, risks, and strategic recommendations\n"
+            "- Be selective: include only the most decision-relevant insights\n"
+            "- Use clear sections:\n"
+            "  ## Market Overview\n"
+            "  ## Key Opportunities\n"
+            "  ## Key Challenges & Risks\n"
+            "  ## Pros and Cons\n"
+            "  ## Strategic Recommendations\n"
+            "- Be specific: include key figures and named entities from the research\n\n"
+            "This section is synthesised from all other research sections. "
+            "Do not add new research — draw only from what the research established."
+        ),
+        "default_enabled": True,
+        "locked": True,  # always included, always generated after all other sections
+    },
+    {
         "id": "market_regulation",
         "name": "Market & Regulation",
         "required_items": [
@@ -389,23 +418,45 @@ SECTION_LIBRARY = [
 # Checks: (a) all required_items present, (b) all quantitative claims have citations.
 SECTION_CRITIC_SYSTEM = """You are a rigorous market research critic reviewing a single report section.
 
-Your job is to check two things only:
+Your job is to check two things and extract key insights:
 1. COMPLETENESS — are all required items listed below present and substantively addressed?
 2. CITATIONS — does every quantitative claim (figures, percentages, market sizes, CPC values, etc.) have an inline citation in the format [Source: Name, Year]?
+3. KEY TAKEAWAYS — extract 3-5 of the most important strategic insights from this section that a decision-maker should know. These will be used to compose an Executive Summary.
 
 Output ONLY valid JSON (no markdown, no code fences):
 {
   "verdict": "PASS" or "REVISE",
   "missing_items": ["item description if missing, else empty list"],
   "uncited_claims": ["quote the uncited claim if any, else empty list"],
-  "gaps_summary": "one sentence describing what must be improved, or empty string if PASS"
+  "gaps_summary": "one sentence describing what must be improved, or empty string if PASS",
+  "key_takeaways": ["concise insight 1", "concise insight 2", "concise insight 3"]
 }
 
-Be strict: PASS only if ALL required items are addressed AND all quantitative claims are cited."""
+Be strict: PASS only if ALL required items are addressed AND all quantitative claims are cited.
+For key_takeaways: be selective — only include genuinely important findings, not every point."""
 
 # System prompt for building a 2-sentence section summary (used for reference context).
 SECTION_SUMMARY_SYSTEM = (
     "You are a research editor. Write exactly 2 sentences summarising the key findings "
     "of the section provided. Be specific: include the most important figure or named entity. "
     "Output only the 2-sentence summary — no preamble."
+)
+
+# System prompt for composing the Executive Summary from per-section key takeaways.
+EXEC_SUMMARY_SYSTEM = (
+    "You are a senior market research analyst writing an Executive Summary for a board-level audience.\n"
+    "You have been given the most important key takeaways from each research section.\n\n"
+    "Your task:\n"
+    "- Synthesise ONLY the most strategically significant points — be ruthlessly selective\n"
+    "- Maximum 3 pages (~800-1200 words total)\n"
+    "- Cover the main opportunities, challenges, risks, pros/cons, and strategic recommendations\n"
+    "- Be specific: reference key figures, named competitors, and concrete data where available\n"
+    "- Every claim must come from the research provided — do not add new information\n"
+    "- Write in clear, executive prose under these ## headings:\n"
+    "  ## Market Overview\n"
+    "  ## Key Opportunities\n"
+    "  ## Key Challenges & Risks\n"
+    "  ## Pros and Cons\n"
+    "  ## Strategic Recommendations\n\n"
+    "Output clean Markdown. No preamble."
 )

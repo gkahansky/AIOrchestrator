@@ -51,6 +51,7 @@ from ventures.market_research.config import (
     CROSS_MODULE_SYSTEM_PROMPT,
     SECTION_CRITIC_SYSTEM,
     SECTION_SUMMARY_SYSTEM,
+    EXEC_SUMMARY_SYSTEM,
 )
 
 import anthropic
@@ -443,7 +444,7 @@ def _critic_section(section: dict, draft: str) -> dict:
         f"Required items that must be present:\n{required_list}\n\n"
         f"Section draft to review:\n\n{draft}"
     )
-    raw = _claude_sync(SECTION_CRITIC_SYSTEM, user_msg, max_tokens=512)
+    raw = _claude_sync(SECTION_CRITIC_SYSTEM, user_msg, max_tokens=1024)
     start = raw.find("{")
     end = raw.rfind("}") + 1
     if start == -1 or end == 0:
@@ -481,6 +482,26 @@ def _build_section_summary(section_name: str, draft: str) -> str:
     """Generate a 2-sentence summary for use as reference context in subsequent sections."""
     user_msg = f"Section: {section_name}\n\nContent:\n{draft[:3000]}"
     return _claude_sync(SECTION_SUMMARY_SYSTEM, user_msg, max_tokens=128)
+
+
+def _compose_executive_summary(
+    topic: str,
+    sections_takeaways: list[tuple[str, list[str]]],
+    exec_prompt: str,
+) -> str:
+    """Compose the executive summary from per-section key takeaways collected by the critic."""
+    takeaways_block = ""
+    for section_name, takeaways in sections_takeaways:
+        if takeaways:
+            items = "\n".join(f"  - {t}" for t in takeaways)
+            takeaways_block += f"\n### {section_name}\n{items}\n"
+
+    user_msg = (
+        f"Topic: {topic}\n\n"
+        f"Key takeaways from each research section:\n{takeaways_block}\n\n"
+        f"Instructions:\n{exec_prompt}"
+    )
+    return _claude_sync(EXEC_SUMMARY_SYSTEM, user_msg, max_tokens=4096)
 
 
 def _extract_citations(text: str) -> list[str]:
@@ -522,6 +543,12 @@ def _run_v3(
     if not enabled_sections:
         raise RuntimeError("V3: no sections enabled in section_config")
 
+    # Separate the executive summary section — it is composed post-loop from takeaways
+    exec_summary_section = next(
+        (s for s in enabled_sections if s["id"] == "executive_summary"), None
+    )
+    research_sections = [s for s in enabled_sections if s["id"] != "executive_summary"]
+
     # Initialise or resume results store
     existing = record.research_results or {}
     section_store: dict[str, dict] = (
@@ -543,7 +570,7 @@ def _run_v3(
         if data.get("summary") and data.get("status") in ("done", "disclaimer")
     }
 
-    for section in enabled_sections:
+    for section in research_sections:
         sec_id = section["id"]
 
         # Resume: skip sections already completed
@@ -597,6 +624,7 @@ def _run_v3(
 
         critic1 = _critic_section(section, draft)
         section_store[sec_id]["critic_round_1"] = critic1
+        key_takeaways = critic1.get("key_takeaways", [])  # default: use round-1 takeaways
 
         if critic1.get("verdict") == "REVISE":
             # Author fills gaps
@@ -611,6 +639,7 @@ def _run_v3(
 
             critic2 = _critic_section(section, draft)
             section_store[sec_id]["critic_round_2"] = critic2
+            key_takeaways = critic2.get("key_takeaways", [])  # override with round-2 takeaways
 
             if critic2.get("verdict") == "REVISE":
                 # Still failing — append disclaimer
@@ -622,6 +651,8 @@ def _run_v3(
                 section_store[sec_id]["status"] = "done"
         else:
             section_store[sec_id]["status"] = "done"
+
+        section_store[sec_id]["key_takeaways"] = key_takeaways
 
         # Build citations and summary for reference context
         citations = _extract_citations(draft)
@@ -635,6 +666,32 @@ def _run_v3(
         record.research_results = {"version": 3, "sections": section_store}
         db.commit()
         logger.info("v3: section %s complete — status: %s", sec_id, section_store[sec_id]["status"])
+
+    # Compose executive summary from per-section key takeaways (runs after all sections)
+    if exec_summary_section:
+        existing_exec = section_store.get("executive_summary", {})
+        if existing_exec.get("status") not in ("done", "disclaimer"):
+            logger.info("v3: composing executive summary from section takeaways")
+            sections_takeaways = [
+                (s["name"], section_store.get(s["id"], {}).get("key_takeaways", []))
+                for s in research_sections
+            ]
+            exec_prompt = (
+                exec_summary_section.get("prompt")
+                or exec_summary_section.get("default_prompt", "")
+            )
+            exec_draft = _compose_executive_summary(topic, sections_takeaways, exec_prompt)
+            section_store["executive_summary"] = {
+                "name": exec_summary_section["name"],
+                "status": "done",
+                "draft": exec_draft,
+                "citations": [],
+                "summary": "",
+                "key_takeaways": [],
+            }
+            record.research_results = {"version": 3, "sections": section_store}
+            db.commit()
+            logger.info("v3: executive summary complete")
 
     # Assembly: Python concatenation of all section drafts
     _set_status(db, record, "merging")
@@ -851,9 +908,9 @@ def _build_pdf(record: MarketResearch, output_path: str) -> str:
 </style>
 </head>
 <body>
-<h1>Market Research Report</h1>
+<h1>Market Research for {topic}</h1>
 <div class="meta">
-  Topic: <strong>{topic}</strong> &nbsp;|&nbsp; Generated: {now}
+  Generated: {now}
 </div>
 {body_html}
 {{"<div class='critic-section'><h3>Critic Review</h3>" + critic_html + "</div>" if critic_html else ""}}

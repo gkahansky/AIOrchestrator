@@ -2453,7 +2453,7 @@ function SessionDetailDrawer({
   )
 }
 
-function MarketResearchTab({ initialSessionId }: { initialSessionId?: string | null }) {
+export function MarketResearchTab({ initialSessionId }: { initialSessionId?: string | null }) {
   const navigate = useNavigate()
   const [topic, setTopic] = useState("")
   const [selectedLlms, setSelectedLlms] = useState<string[]>([])
@@ -2492,11 +2492,11 @@ function MarketResearchTab({ initialSessionId }: { initialSessionId?: string | n
 
   const openSession = (id: string) => {
     setDetailId(id)
-    navigate(`/strategy-room/market-research/${id}`)
+    navigate(`/market-research/${id}`)
   }
   const closeSession = () => {
     setDetailId(null)
-    navigate("/strategy-room/market-research")
+    navigate("/market-research")
   }
 
   // Initialise section config from library when it first loads
@@ -2764,17 +2764,14 @@ function MarketResearchTab({ initialSessionId }: { initialSessionId?: string | n
 export default function StrategyRoom() {
   const navigate = useNavigate()
   const tabMatch = useMatch("/strategy-room/:tab")
-  const sessionMatch = useMatch("/strategy-room/market-research/:sessionId")
 
-  const rawTab = sessionMatch ? "market-research" : (tabMatch?.params.tab ?? "agents")
-  const activeTab = (["agents", "roadmap", "market-research"].includes(rawTab)
-    ? rawTab : "agents") as "agents" | "roadmap" | "market-research"
-  const initialSessionId = sessionMatch?.params.sessionId ?? null
+  const rawTab = tabMatch?.params.tab ?? "agents"
+  const activeTab = (["agents", "roadmap"].includes(rawTab)
+    ? rawTab : "agents") as "agents" | "roadmap"
 
-  const tabs: { key: "agents" | "roadmap" | "market-research"; label: string; icon: string }[] = [
-    { key: "agents",          label: "Agents",          icon: "psychology" },
-    { key: "roadmap",         label: "Roadmap",         icon: "map" },
-    { key: "market-research", label: "Market Research", icon: "analytics" },
+  const tabs: { key: "agents" | "roadmap"; label: string; icon: string }[] = [
+    { key: "agents",  label: "Agents",  icon: "psychology" },
+    { key: "roadmap", label: "Roadmap", icon: "map" },
   ]
 
   return (
@@ -2811,7 +2808,6 @@ export default function StrategyRoom() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-8">
         {activeTab === "agents" && <AgentsTab />}
         {activeTab === "roadmap" && <RoadmapTab />}
-        {activeTab === "market-research" && <MarketResearchTab initialSessionId={initialSessionId} />}
       </main>
     </div>
   )

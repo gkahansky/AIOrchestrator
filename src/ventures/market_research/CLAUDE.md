@@ -1,8 +1,23 @@
-# Market Research Venture — CLAUDE.md
+# Market Research — CLAUDE.md
 ## Claude Code Context File — Venture Level
 
 **Read `/CLAUDE.md` (root) first for platform architecture rules.**
 **This file is authoritative for all work on the Market Research venture.**
+
+---
+
+## Product Identity
+
+**Product:** Market Research (Venture E)
+**Order surfaces:**
+- `planBadmin.com` Strategy Room → Market Research tab (current)
+- Future: standalone website (not EchoForge.biz) — submits orders via `POST /api/ventures/market-research/sessions` with API-key auth
+
+**Architecture:** productized, multi-sector, configurable research engine. Not EchoForge-specific.
+
+**Sector registry:** `registry.py` — defines all sectors and their section libraries. Adding a new sector = one entry in `SECTORS` dict, no pipeline changes.
+
+**Report configuration:** `report_config` JSONB on the `market_research` record controls output depth, writing style, analytical framework, and citation format per session.
 
 ---
 
@@ -25,9 +40,112 @@ An on-demand multi-LLM market research service. Supports three pipeline versions
 ```
 src/ventures/market_research/
   pipeline.py     # Full pipeline: v3 section loop + v2 work packages + v1 rerun, Celery entry point
-  config.py       # SECTION_LIBRARY, CROSS_MODULE_SYSTEM_PROMPT, all system prompts
+  config.py       # Re-exports SECTION_LIBRARY + CROSS_MODULE_SYSTEM_PROMPT from registry.py; all system prompts
+  registry.py     # PRODUCTS + SECTORS dict (all 4 sector section libraries); build_report_directives()
   CLAUDE.md       # This file
 ```
+
+---
+
+## Product Registry (`registry.py`)
+
+### Two-level hierarchy: Product → Sector → Section Library
+
+```python
+PRODUCTS = {
+    "market_research": {
+        "display_name": "Market Research",
+        "sectors": ["business_intelligence", "academic", "vc_due_diligence", "product_discovery"],
+        "default_sector": "business_intelligence",
+    }
+}
+```
+
+Each entry in `SECTORS` has:
+- `display_name`, `description` — shown in UI sector picker
+- `section_library: list[dict]` — same schema as the current `SECTION_LIBRARY`
+- `default_system_prompt: str` — pre-filled in the cross-module system prompt editor
+- `terminology_overrides: dict` — reserved for UI label overrides
+
+### How to add a new sector
+
+1. Add an entry to `SECTORS` in `registry.py` with `section_library`, `default_system_prompt`, and display fields
+2. No pipeline changes needed — the sector's section_library is loaded via the API and stored in `section_config`
+3. Add the sector key to the `PRODUCTS["market_research"]["sectors"]` list
+
+### Current sectors
+
+| Key | Display Name | Locked Final Section |
+|---|---|---|
+| `business_intelligence` | Business Intelligence | Final Synthesis |
+| `academic` | Academic & Research | Executive Abstract |
+| `vc_due_diligence` | VC Due Diligence | Executive Investment Memo |
+| `product_discovery` | Product Discovery | Product Executive Summary |
+
+---
+
+## Report Configuration (`report_config`)
+
+Stored as JSONB on the `market_research` record. Set at session creation; never mutated by the pipeline.
+
+```json
+{
+  "output_depth":    "executive" | "standard" | "exhaustive",
+  "writing_style":   "corporate" | "academic" | "aggressive",
+  "framework":       "swot" | "pestle" | "lean_canvas" | "porters" | "none",
+  "citation_format": "inline" | "apa" | "mla" | "hyperlink"
+}
+```
+
+**Token budget** (`registry.py → DEPTH_MAX_TOKENS`):
+- `executive`: 4096 tokens per LLM call
+- `standard`: 8192 (default)
+- `exhaustive`: 16384
+
+**Injection point:** `_build_section_research_prompt()` in `pipeline.py` calls `build_report_directives(report_config)` and appends the resulting `## Report Directives` block to every section prompt.
+
+**`build_report_directives()`** in `registry.py` converts the config dict into a human-readable directives block. Returns empty string if `report_config` is None (preserves current default behaviour).
+
+---
+
+## Order Surface: planBadmin
+
+**Creation form** (`frontend/src/pages/StrategyRoom.tsx`):
+- **Research Type** selector — loads sector section library via `GET /api/ventures/market-research/products`
+- **Report Format** panel — Output Depth, Writing Style, Framework, Citation Format controls
+- `report_config` and `sector` are included in the `POST /api/ventures/market-research/sessions` payload
+
+---
+
+## Order Surface: External Website (Phase 3)
+
+The future standalone website (not EchoForge.biz) POSTs to the same API with API-key auth:
+- Header: `X-API-Key: {MARKET_RESEARCH_API_KEY}` (env var on Railway)
+- Optional `callback_url` in the request body → pipeline fires a webhook on completion
+- No Google OAuth required for external submissions
+
+**Contract:** `POST /api/ventures/market-research/sessions`
+```json
+{
+  "topic": "AI accessibility tools market",
+  "sector": "business_intelligence",
+  "report_config": {"output_depth": "standard", "writing_style": "corporate"},
+  "selected_llms": ["claude", "openai"],
+  "client_email": "client@example.com",
+  "section_config": { ... }
+}
+```
+
+---
+
+## Roadmap
+
+| Phase | Goal | Status |
+|---|---|---|
+| Phase 1 | Report format controls (depth/style/framework/citation) for BI sector | ✅ built |
+| Phase 2 | New sectors: Academic, VC Due Diligence, Product Discovery (section libraries in registry) | ✅ built |
+| Phase 3 | External website order surface (API-key auth, webhook callback) | 🔲 planned |
+| Phase 4 | URL + PDF data ingestion as research source; whitepaper depth (50+ pages) | 🔲 planned |
 
 ---
 
@@ -198,6 +316,8 @@ V3 sessions are resumed by skipping sections whose status is already `"done"` or
 | `POST` | `/api/ventures/market-research/sessions/{id}/rerun` | Clone session with adjusted V1 prompts |
 | `GET` | `/api/ventures/market-research/available-llms` | Which LLMs are configured |
 | `GET` | `/api/ventures/market-research/sessions/{id}/history` | Full job audit snapshot — topic, system prompt, all section prompts, filenames, start/end time, duration, errors, PDF Drive link |
+| `GET` | `/api/ventures/market-research/products` | Product + sector registry for UI sector picker |
+| `GET` | `/api/ventures/market-research/sector-library/{sector}` | Section library + system prompt for a specific sector |
 
 ---
 
@@ -268,16 +388,22 @@ Same as V2 — Qdrant-backed, injected into section prompts if documents uploade
 |---|---|---|
 | Multi-LLM parallel research | ✅ live | Claude, OpenAI, Gemini, Grok |
 | V3 section-based pipeline | ✅ built | 8 sections + Final Synthesis; 2-round critic loop; citation enforcement; reference context |
-| Section library | ✅ built | 9 default sections in config.py; user-editable prompts; custom section support |
+| Section library | ✅ built | 9 default sections in config.py (re-exported from registry.py); user-editable prompts; custom section support |
+| Product + Sector registry | ✅ built | registry.py — 4 sectors (BI, Academic, VC, PM Discovery); PRODUCTS dict; build_report_directives() |
+| Report configuration (depth/style/framework/citation) | ✅ built | report_config JSONB on record; injected into section prompts via build_report_directives(); token budget scales with output_depth |
+| New sector section libraries | ✅ built | Academic, VC Due Diligence, Product Discovery — in registry.py |
+| Sector library endpoints | ✅ built | GET /sector-library/{sector}; GET /products |
 | V2 agentic work-package pipeline | ✅ live | Backwards compat |
 | V1 rerun mode | ✅ live | Backwards compat |
 | Critic/reflection (V3) | ✅ built | Per-section; checks required_items + citations; 2 rounds max; disclaimer fallback |
 | Citation enforcement | ✅ built | Inline `[Source: ...]` tags; citations appendix in final doc |
 | Reference context (cross-module) | ✅ built | 2-sentence summaries passed to each subsequent section |
+| Executive Summary | ✅ built | Generated post-loop from per-section key_takeaways; inserted first in assembled doc |
+| Table of Contents | ✅ built | Programmatic TOC from section list at assembly time; includes Citations entry |
 | Section-level status UI | ✅ built | Cards with live status badges; word count; click to open SectionDetailPanel |
 | Citations tab | ✅ built | All citations grouped by section in drawer |
 | PDF generation | ✅ live | Playwright HTML→PDF |
-| Styled HTML tables in PDF | ✅ live | render_markdown.py converts Markdown tables to styled HTML; LLMs instructed to use Markdown table syntax |
+| Styled HTML tables in PDF | ✅ live | render_markdown.py converts Markdown tables to styled HTML |
 | Visual content in PDF | ✅ live | capture_visual.py (Playwright screenshots + Gemini Imagen charts); markers resolved to base64 data URIs at PDF build time |
 | Drive upload | ✅ live | `DRIVE_MARKET_RESEARCH_ID` folder |
 | Email delivery | ✅ live | Includes Drive link |
@@ -286,3 +412,4 @@ Same as V2 — Qdrant-backed, injected into section prompts if documents uploade
 | Job history endpoint | ✅ built | GET /sessions/{id}/history — full audit snapshot with prompts, timing, files, PDF link |
 | History tab (frontend) | ✅ built | Lazy-loaded tab in SessionDetailDrawer; collapsible system/section prompts |
 | started_at / completed_at / uploaded_filenames | ✅ built | DB columns + migration c2d3e4f5a6b7; pipeline sets timestamps on start/end/error |
+| External website order surface (API-key auth) | 🔲 planned | Phase 3 — X-API-Key header + callback_url webhook |

@@ -50,6 +50,8 @@ class CreateResearchRequest(BaseModel):
     critic_llm: str = "grok"
     client_email: str | None = None
     section_config: SectionConfig | None = None  # None → V2 pipeline (backwards compat)
+    report_config: dict | None = None   # {output_depth, writing_style, framework, citation_format}
+    sector: str | None = None           # sector key from registry; defaults to "business_intelligence"
 
 
 class ResearchSummary(BaseModel):
@@ -146,6 +148,8 @@ def create_session(
         critic_llm=req.critic_llm,
         client_email=req.client_email,
         section_config=sc,
+        report_config=req.report_config,
+        sector=req.sector or "business_intelligence",
         status="pending",
     )
     db.add(record)
@@ -299,11 +303,43 @@ def get_session_history(
 
 @router.get("/section-library")
 def get_section_library(_: str = Depends(require_auth)) -> dict:
-    """Return the default V3 section library so the frontend can populate the section selector."""
+    """Return the default V3 section library (business_intelligence sector) for backwards compat."""
     from ventures.market_research.config import SECTION_LIBRARY, CROSS_MODULE_SYSTEM_PROMPT
     return {
         "sections": SECTION_LIBRARY,
         "default_system_prompt": CROSS_MODULE_SYSTEM_PROMPT,
+    }
+
+
+@router.get("/sector-library/{sector_key}")
+def get_sector_library(sector_key: str, _: str = Depends(require_auth)) -> dict:
+    """Return the section library and system prompt for a specific sector."""
+    from ventures.market_research.registry import SECTORS
+    sector = SECTORS.get(sector_key)
+    if not sector:
+        raise HTTPException(status_code=404, detail=f"Sector '{sector_key}' not found")
+    return {
+        "sector": sector_key,
+        "display_name": sector["display_name"],
+        "description": sector["description"],
+        "sections": sector["section_library"],
+        "default_system_prompt": sector["default_system_prompt"],
+    }
+
+
+@router.get("/products")
+def get_products(_: str = Depends(require_auth)) -> dict:
+    """Return the product + sector registry for the frontend sector picker."""
+    from ventures.market_research.registry import PRODUCTS, SECTORS
+    return {
+        "products": PRODUCTS,
+        "sectors": {
+            key: {
+                "display_name": s["display_name"],
+                "description": s["description"],
+            }
+            for key, s in SECTORS.items()
+        },
     }
 
 

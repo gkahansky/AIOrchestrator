@@ -4,6 +4,17 @@ import os
 
 DRIVE_FOLDER = os.environ.get("MARKET_RESEARCH_DRIVE_FOLDER", "Market Research Reports")
 
+# ── Sector registry re-exports ─────────────────────────────────────────────────
+# The canonical section library and system prompt now live in registry.py.
+# These re-exports keep all existing imports unchanged.
+from ventures.market_research.registry import (  # noqa: E402
+    SECTORS as _SECTORS,
+    build_report_directives,  # noqa: F401 — re-exported for pipeline use
+)
+
+SECTION_LIBRARY      = _SECTORS["business_intelligence"]["section_library"]
+CROSS_MODULE_SYSTEM_PROMPT = _SECTORS["business_intelligence"]["default_system_prompt"]
+
 # ── V1 / V2 legacy config ──────────────────────────────────────────────────────
 
 RESEARCH_ANGLES = [
@@ -68,33 +79,11 @@ Output the final assembled report only — no preamble."""
 
 
 # ── V3 Section-Based Pipeline ──────────────────────────────────────────────────
+# CROSS_MODULE_SYSTEM_PROMPT and SECTION_LIBRARY are now imported from registry.py above.
+# They remain available here for all existing imports.
 
-# Injected into every LLM call for a V3 session (editable per session in UI).
-CROSS_MODULE_SYSTEM_PROMPT = (
-    "Always reference insights from previous modules where relevant. "
-    "Avoid contradictions with earlier findings. "
-    "Build cumulative insights — each module should deepen the overall picture. "
-    "Highlight confirmations or conflicts between modules explicitly.\n\n"
-    "TABLES: When presenting comparative or quantitative data, always use Markdown table syntax "
-    "(| col | col | with a |---|---| separator row). Tables will be rendered as styled HTML — "
-    "do not use ASCII art or plain-text column alignment.\n\n"
-    "VISUAL CONTENT: You MUST embed visual markers for any content that is better seen than "
-    "described. This is not optional — failure to embed markers means no images appear in the "
-    "final report. Use these two formats (embed directly in the text, on their own line):\n"
-    "  [SCREENSHOT: https://full-url-here.com | Brief caption]\n"
-    "    — Use for publicly accessible web pages (landing pages, pricing pages, product pages).\n"
-    "      Do NOT use for pages that require login (ad libraries, dashboards, gated tools).\n"
-    "  [GENERATE IMAGE: Detailed visual description 40-60 words | Caption]\n"
-    "    — Use for ad creative recreations, charts, diagrams, comparison matrices, or any URL "
-    "that requires authentication. Describe the visual in enough detail that an AI image "
-    "generator can faithfully recreate it: layout, colors, key text, format, style.\n"
-    "Always include the | separator and caption. Aim for 1-3 visuals per section where relevant."
-)
-
-# The section library. Each entry is the default template; users can enable/disable
-# sections and edit prompts before starting a session.
-# locked=True sections cannot be unchecked in the UI.
-SECTION_LIBRARY = [
+# Legacy inline copy kept as reference only — DO NOT use; use CROSS_MODULE_SYSTEM_PROMPT instead.
+_LEGACY_SECTION_LIBRARY_STUB = [
     {
         "id": "executive_summary",
         "name": "Executive Summary",

@@ -53,6 +53,7 @@ from ventures.market_research.config import (
     SECTION_SUMMARY_SYSTEM,
     EXEC_SUMMARY_SYSTEM,
 )
+from ventures.market_research.registry import build_report_directives, DEPTH_MAX_TOKENS
 
 import anthropic
 import asyncio
@@ -407,6 +408,7 @@ def _build_section_research_prompt(
     section: dict,
     ref_context: str,
     system_prompt: str,
+    report_config: dict | None = None,
 ) -> str:
     """Build the per-section research prompt injected into all LLM calls."""
     ref_block = (
@@ -414,12 +416,14 @@ def _build_section_research_prompt(
         f"{ref_context}"
         if ref_context else ""
     )
+    directives_block = build_report_directives(report_config) if report_config else ""
     return (
         f"Research topic context: see system prompt.\n\n"
         f"Section to research: {section['name']}\n\n"
         f"{section['prompt']}"
         f"{ref_block}\n\n"
         f"Cross-module instruction: {system_prompt}"
+        f"{directives_block}"
     )
 
 
@@ -539,6 +543,12 @@ def _run_v3(
     sections = section_config.get("sections", [])
     session_system_prompt = section_config.get("system_prompt", CROSS_MODULE_SYSTEM_PROMPT)
 
+    # report_config drives output depth (token budget) and writing style/framework directives
+    report_config: dict | None = record.report_config
+    section_max_tokens = DEPTH_MAX_TOKENS.get(
+        (report_config or {}).get("output_depth", "standard"), 8192
+    )
+
     enabled_sections = [s for s in sections if s.get("enabled", True)]
     if not enabled_sections:
         raise RuntimeError("V3: no sections enabled in section_config")
@@ -595,7 +605,9 @@ def _run_v3(
         db.commit()
 
         # Stage: all LLMs research section in parallel
-        research_prompt = _build_section_research_prompt(section, ref_context, session_system_prompt)
+        research_prompt = _build_section_research_prompt(
+            section, ref_context, session_system_prompt, report_config
+        )
         llm_prompts = {llm: research_prompt for llm in selected}
 
         outcome = run_parallel_research_sync(
@@ -603,7 +615,7 @@ def _run_v3(
             system_prompt=f"You are an expert market researcher. Topic: {topic}",
             selected_llms=selected,
             timeout=180,
-            max_tokens=8192,
+            max_tokens=section_max_tokens,
         )
         llm_results = outcome["results"]
         if not llm_results:
@@ -696,14 +708,26 @@ def _run_v3(
     # Assembly: Python concatenation of all section drafts
     _set_status(db, record, "merging")
 
-    parts = []
+    citations_appendix = _build_citations_appendix(section_store)
+
+    # Table of contents — built from sections that have content
+    toc_entries: list[str] = []
+    n = 1
+    for section in enabled_sections:
+        if section_store.get(section["id"], {}).get("draft"):
+            toc_entries.append(f"{n}. {section['name']}")
+            n += 1
+    if citations_appendix:
+        toc_entries.append(f"{n}. Citations & Sources")
+    toc_block = "# Table of Contents\n\n" + "\n".join(toc_entries)
+
+    parts = [toc_block]
     for section in enabled_sections:
         sec_id = section["id"]
         draft = section_store.get(sec_id, {}).get("draft", "")
         if draft:
             parts.append(f"# {section['name']}\n\n{draft}")
 
-    citations_appendix = _build_citations_appendix(section_store)
     if citations_appendix:
         parts.append(citations_appendix)
 

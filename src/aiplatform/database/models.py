@@ -350,6 +350,7 @@ class Lead(Base):
 
     context        = Column(Text, nullable=True)          # raw post/query text that surfaced this lead
     matched_persona = Column(String(100), nullable=True)  # which persona name this lead matches
+    intent_score   = Column(Integer, nullable=True)       # 0–100 intent signal strength from Claude Haiku
 
     campaign = relationship("OutreachCampaign", back_populates="leads")
     sends    = relationship("OutreachSend", back_populates="lead", cascade="all, delete-orphan")
@@ -704,6 +705,10 @@ class MarketResearch(Base):
     section_config    = Column(JSONB, nullable=True)   # v3: {version:3, system_prompt, sections:[{id,name,enabled,prompt,locked}]}
     optimized_prompts = Column(JSONB, nullable=True)   # v2: {version:2, packages:[...]} / v1: {llm_id: prompt}
     research_results  = Column(JSONB, nullable=True)   # v3: {version:3, sections:{id:{status,draft,...}}} / v2/v1: legacy
+
+    # Productization fields (Phase 1+)
+    report_config = Column(JSONB, nullable=True)       # {output_depth, writing_style, framework, citation_format}
+    sector        = Column(String(100), nullable=True, default="business_intelligence")  # sector key from registry
     merged_report     = Column(Text, nullable=True)
     critic_feedback   = Column(Text, nullable=True)
     final_report      = Column(Text, nullable=True)

@@ -11,6 +11,7 @@ const PRODUCTS = [
   { id: "market_research",     label: "Market Research",     icon: "analytics" },
   { id: "accessibility_audit", label: "Accessibility Audit", icon: "accessibility_new" },
   { id: "security_audit",      label: "Security Audit",      icon: "security" },
+  { id: "content_repurposing", label: "Content Repurposing", icon: "video_library" },
   { id: "other",               label: "Other",               icon: "category" },
 ]
 
@@ -32,6 +33,8 @@ const SOURCE_PLATFORMS = [
   { id: "indiehackers", label: "IndieHackers",   icon: "rocket_launch" },
   { id: "fiverr",       label: "Fiverr",         icon: "work" },
   { id: "listennotes",  label: "Listen Notes",   icon: "headphones" },
+  { id: "youtube",      label: "YouTube",        icon: "play_circle" },
+  { id: "instagram",    label: "Instagram",      icon: "photo_camera" },
 ]
 
 const SEARCH_INTERVALS = [
@@ -879,7 +882,7 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-surface-container-low border-b border-outline-variant/10">
-                      {["Name", "Channel", "Their Post", "Persona", "Company / Website", "Status"].map(h => (
+                      {["Name", "Channel", "Their Post", "Persona", "Intent", "Company / Website", "Status"].map(h => (
                         <th key={h} className="px-4 py-2.5 text-left text-[10px] font-label font-semibold uppercase tracking-wider text-on-surface-variant whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -904,6 +907,15 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
                           {l.matched_persona
                             ? <span className="text-[10px] px-2 py-0.5 rounded bg-tertiary/10 text-tertiary font-bold uppercase">{l.matched_persona}</span>
                             : <span className="text-xs text-on-surface-variant">—</span>}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {l.intent_score != null ? (
+                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${
+                              l.intent_score >= 70 ? "bg-green-500/15 text-green-700 dark:text-green-400"
+                              : l.intent_score >= 50 ? "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400"
+                              : "bg-surface-container text-on-surface-variant"
+                            }`}>{l.intent_score}</span>
+                          ) : <span className="text-xs text-on-surface-variant">—</span>}
                         </td>
                         <td className="px-4 py-3 text-xs text-on-surface-variant max-w-[140px] truncate">
                           {l.company || l.website_url || "—"}
@@ -1168,6 +1180,21 @@ function NewCampaignForm({ onCreated, onCancel }: {
   const [useMockLeads, setUseMockLeads] = useState(false)
   const [dryRun, setDryRun] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [templates, setTemplates] = useState<any[]>([])
+
+  useEffect(() => {
+    fetch(`${API}/api/outreach/persona-templates`, { headers: authHeader() })
+      .then(r => r.ok ? r.json() : { items: [] })
+      .then(d => setTemplates(d.items || []))
+      .catch(() => {})
+  }, [])
+
+  function applyTemplate(tpl: any) {
+    setProduct(tpl.venture || "content_repurposing")
+    setTargetPrompt(tpl.target_prompt || "")
+    if (tpl.personas?.length) setPersonas(tpl.personas)
+    if (tpl.name && !name.trim()) setName(tpl.name)
+  }
 
   async function create() {
     if (!name.trim()) return
@@ -1195,6 +1222,24 @@ function NewCampaignForm({ onCreated, onCancel }: {
 
   return (
     <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-4 space-y-4">
+      {/* Persona templates */}
+      {templates.length > 0 && (
+        <div>
+          <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+            Start from a template
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {templates.map((tpl: any) => (
+              <button key={tpl.key} onClick={() => applyTemplate(tpl)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-label font-semibold border border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 transition-colors">
+                <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
+                {tpl.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Product */}
       <div>
         <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Product</label>

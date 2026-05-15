@@ -146,6 +146,68 @@ VENTURE_DEFAULT_SOURCES: dict[str, list[dict]] = _cfg.get("default_sources", {
         },
     ],
 
+    "content_repurposing": [
+        {
+            "platform": "reddit",
+            "name": "Professional & fitness subreddits",
+            "keywords": [
+                "repurpose video content", "content creation burnout",
+                "no time to edit videos", "turn podcast into clips",
+                "social media content from video", "content workflow help",
+            ],
+            "config": {"subreddits": [
+                "legaladvice", "Accounting", "consulting", "financialplanning",
+                "personaltraining", "Fitness", "yoga", "nutritionadvice",
+                "entrepreneur", "smallbusiness",
+            ]},
+        },
+        {
+            "platform": "youtube",
+            "name": "YouTube comments — content creators",
+            "keywords": [
+                "how to repurpose video content into clips",
+                "content creation workflow for professionals",
+                "video editing tool for coaches lawyers",
+                "turn one video into social media content",
+            ],
+            "config": {"max_videos": 5, "max_comments_per_video": 10},
+        },
+        {
+            "platform": "instagram",
+            "name": "Instagram — fitness & creator hashtags",
+            "keywords": [
+                "content repurposing", "video editing struggle",
+                "content creation tips", "no time to post",
+            ],
+            "config": {"hashtags": [
+                "fitnesscontent", "contentcreator", "creatoreconomy",
+                "wellnesscreator", "videoediting", "contentcreationtips",
+            ], "max_posts": 15},
+        },
+        {
+            "platform": "linkedin",
+            "name": "LinkedIn — professional content creators",
+            "keywords": [
+                "struggle to repurpose video content professional",
+                "no time to post on social media lawyer consultant coach",
+                "content creation workflow professional services",
+            ],
+            "config": {},
+        },
+        {
+            "platform": "facebook",
+            "name": "Facebook Groups — coaches & professionals",
+            "keywords": [
+                "repurpose video content", "content creation help",
+                "video editing workflow", "social media consistency",
+            ],
+            "config": {"group_urls": [
+                "https://www.facebook.com/groups/onlinecoaches",
+                "https://www.facebook.com/groups/contentcreators",
+            ]},
+        },
+    ],
+
     "accessibility_audit": [
         {
             "platform": "reddit",
@@ -197,6 +259,7 @@ _VENTURE_PITCHES: dict[str, str] = _cfg.get("venture_pitches", {
     "accessibility_audit":"a WCAG accessibility audit service (violation scan, prioritised fix list with code examples)",
     "security_audit":     "a web application security audit service (vulnerability scan, OWASP Top 10, pentest-style report with prioritised findings and code-level fix recommendations)",
     "market_research":    "a market research service (AI-powered competitive analysis, TAM estimates, customer segment breakdown, go-to-market strategy — delivered as a structured PDF report)",
+    "content_repurposing": "an AI content repurposing service that transforms one long-form video or podcast into clips, captions, thumbnails, blog posts and social media assets automatically — ideal for professionals, coaches and creators who produce video but lack time to edit and post consistently",
 })
 
 
@@ -271,6 +334,7 @@ Reply with JSON only:
 {{
   "is_lead": true or false,
   "confidence": "high" | "medium" | "low",
+  "intent_score": <integer 0-100 — how urgently this person needs the service right now: 90-100=actively asking for it, 70-89=clear pain point mentioned, 50-69=has the problem but not seeking help, 0-49=weak or indirect signal>,
   "name": "real name or username if visible, else null",
   "website_url": "their website URL if mentioned, else null",
   "company": "company or project name if visible, else null",
@@ -292,6 +356,11 @@ Be selective. Only mark is_lead=true if there is a clear, genuine need."""
         data = json.loads(raw)
         if not data.get("is_lead"):
             return None
+        raw_score = data.get("intent_score")
+        try:
+            intent_score = max(0, min(100, int(raw_score))) if raw_score is not None else None
+        except (TypeError, ValueError):
+            intent_score = None
         return {
             "name":            data.get("name") or post_dict.get("author", ""),
             "website_url":     data.get("website_url"),
@@ -299,6 +368,7 @@ Be selective. Only mark is_lead=true if there is a clear, genuine need."""
             "matched_persona": data.get("matched_persona"),
             "notes":           data.get("notes", ""),
             "confidence":      data.get("confidence", "medium"),
+            "intent_score":    intent_score,
         }
     except Exception as e:
         log.warning("Claude qualification failed: %s", e)
@@ -413,13 +483,14 @@ def find_leads(
             "email":           post.get("email") or None,
             "platform_username": (
                 post.get("author") if post.get("source_channel") in
-                ("reddit", "fiverr", "linkedin", "facebook", "instagram") else None
+                ("reddit", "fiverr", "linkedin", "facebook", "instagram", "youtube") else None
             ),
             "website_url":     extracted.get("website_url"),
             "company":         extracted.get("company"),
             "notes":           extracted.get("notes", ""),
             "context":         post.get("text", "")[:2000],   # preserve raw post for personalized reply
             "matched_persona": extracted.get("matched_persona"),
+            "intent_score":    extracted.get("intent_score"),
             "status":          "new",
         })
 

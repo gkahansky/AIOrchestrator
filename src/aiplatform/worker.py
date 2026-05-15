@@ -1277,6 +1277,7 @@ def run_find_leads(
                 notes=lead_data.get("notes"),
                 context=lead_data.get("context"),
                 matched_persona=lead_data.get("matched_persona"),
+                intent_score=lead_data.get("intent_score"),
                 status="new",
                 campaign_id=campaign_uuid,
             ))

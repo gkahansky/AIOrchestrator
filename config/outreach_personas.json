@@ -1,0 +1,44 @@
+[
+  {
+    "key": "legal_professional",
+    "name": "Legal & Professional Services",
+    "venture": "content_repurposing",
+    "personas": [
+      {
+        "name": "Yoav",
+        "description": "Independent lawyer or professional service provider (accountant, consultant, financial advisor), age 40–55. Occasionally records professional videos but lacks the systems, time and resources to turn them into consistent social media content. Values professionalism and reputation over virality."
+      }
+    ],
+    "target_prompt": "AI content repurposing service for professional service providers (lawyers, accountants, consultants, financial advisors) who record professional video content but struggle to repurpose it into a consistent stream of social media assets. They have no internal content team and no time to edit.",
+    "default_sources": ["linkedin", "reddit", "youtube"],
+    "default_subreddits": ["legaladvice", "Accounting", "consulting", "financialplanning", "smallbusiness", "entrepreneur"],
+    "default_hashtags": [],
+    "key_triggers": [
+      "One video becomes dozens of marketing assets",
+      "No internal content team required",
+      "AI that understands professional content",
+      "More visibility with less effort"
+    ]
+  },
+  {
+    "key": "wellness_fitness",
+    "name": "Wellness / Fitness / Coaching",
+    "venture": "content_repurposing",
+    "personas": [
+      {
+        "name": "Maya",
+        "description": "Fitness coach, wellness creator or online coach, age 24–34. Produces video content regularly for Instagram, TikTok and YouTube but struggles with editing time and maintaining daily posting frequency. Works independently or with a very small team."
+      }
+    ],
+    "target_prompt": "AI content repurposing service for fitness coaches, wellness creators and online coaches who film regularly but can't keep up with editing, captions and posting consistently. They need one filming session to produce a full month of social media content automatically.",
+    "default_sources": ["instagram", "reddit", "youtube", "facebook"],
+    "default_subreddits": ["personaltraining", "Fitness", "yoga", "nutritionadvice", "onlinecoaching"],
+    "default_hashtags": ["fitnesscontent", "contentcreator", "creatoreconomy", "wellnesscreator", "videoediting"],
+    "key_triggers": [
+      "One filming day = one month of content",
+      "AI-generated clips, captions and hooks",
+      "Less editing, more clients",
+      "Turn one video into dozens of social assets"
+    ]
+  }
+]

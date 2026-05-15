@@ -66,7 +66,7 @@ _cfg = _load_outreach_config()
 
 VALID_VENTURES: set[str] = set(_cfg.get("valid_ventures", [
     "marketing_audit", "content_studio", "accessibility_audit",
-    "security_audit", "market_research", "other",
+    "security_audit", "market_research", "content_repurposing", "other",
 ]))
 VALID_PLATFORMS: set[str] = set(_cfg.get("valid_platforms", [
     "email", "fiverr", "reddit", "linkedin", "facebook", "instagram",
@@ -74,6 +74,7 @@ VALID_PLATFORMS: set[str] = set(_cfg.get("valid_platforms", [
 VALID_SOURCE_PLATFORMS: set[str] = set(_cfg.get("valid_source_platforms", [
     "reddit", "google", "linkedin", "facebook",
     "hackernews", "indiehackers", "fiverr", "listennotes",
+    "youtube", "instagram",
 ]))
 
 
@@ -251,6 +252,7 @@ def _lead_to_dict(l: Lead) -> dict:
         "notes": l.notes,
         "context": l.context,
         "matched_persona": l.matched_persona,
+        "intent_score": l.intent_score,
         "status": l.status,
         "campaign_id": str(l.campaign_id) if l.campaign_id else None,
         "created_at": l.created_at.isoformat(), "updated_at": l.updated_at.isoformat(),
@@ -300,6 +302,20 @@ def _campaign_to_dict(c: OutreachCampaign, db: Any) -> dict:
         "reply_rate": round(total_replies / total_sends * 100, 1) if total_sends > 0 else 0,
         "created_at": c.created_at.isoformat(), "updated_at": c.updated_at.isoformat(),
     }
+
+
+# ── Persona templates ────────────────────────────────────────────
+
+def _load_persona_templates() -> list[dict]:
+    path = Path(os.environ.get("OUTREACH_PERSONAS_PATH", "config/outreach_personas.json"))
+    if path.exists():
+        return json.loads(path.read_text())
+    return []
+
+@router.get("/persona-templates")
+def get_persona_templates(_: str = Depends(require_auth)) -> dict:
+    """Return pre-built campaign templates for each target audience segment."""
+    return {"items": _load_persona_templates()}
 
 
 # ── Campaign endpoints ────────────────────────────────────────────

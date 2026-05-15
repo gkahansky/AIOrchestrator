@@ -11,6 +11,7 @@ Import the registry to resolve a platform name to its handler:
 from aiplatform.skills.research.sources import (
     reddit, google, linkedin, facebook,
     hackernews, indiehackers, fiverr, listennotes,
+    youtube, instagram,
 )
 
 HANDLERS = {
@@ -22,6 +23,8 @@ HANDLERS = {
     "indiehackers": indiehackers,
     "fiverr":       fiverr,
     "listennotes":  listennotes,
+    "youtube":      youtube,
+    "instagram":    instagram,
 }
 
 VALID_PLATFORMS = set(HANDLERS.keys())

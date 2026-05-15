@@ -724,6 +724,9 @@ class MarketResearch(Base):
     completed_at       = Column(DateTime(timezone=True), nullable=True)   # when pipeline finished (success or failure)
     uploaded_filenames = Column(JSONB, nullable=True)                     # list of original filenames from RAG uploads
 
+    # Internal flag — True = platform-owned research (freely reusable); False = client/customer session
+    internal = Column(Boolean, nullable=False, server_default="false", default=False)
+
     created_at = Column(DateTime(timezone=True), nullable=False,
                         default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), nullable=False,

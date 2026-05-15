@@ -11,6 +11,24 @@ log = logging.getLogger(__name__)
 
 REGISTRY_PATH = Path(__file__).parent.parent.parent / "registry" / "advisors.json"
 PROMPTS_DIR = REGISTRY_PATH.parent / "prompts"
+VENTURES_DIR = Path(__file__).parent.parent.parent.parent / "ventures"
+
+_VENTURE_CONTEXT_CACHE: str | None = None
+
+
+def _load_venture_context() -> str:
+    global _VENTURE_CONTEXT_CACHE
+    if _VENTURE_CONTEXT_CACHE is not None:
+        return _VENTURE_CONTEXT_CACHE
+    parts: list[str] = []
+    if VENTURES_DIR.exists():
+        for venture_dir in sorted(VENTURES_DIR.iterdir()):
+            claude_md = venture_dir / "CLAUDE.md"
+            if claude_md.exists():
+                content = claude_md.read_text(encoding="utf-8")[:3000]
+                parts.append(f"### Venture: {venture_dir.name}\n{content}")
+    _VENTURE_CONTEXT_CACHE = "\n\n".join(parts)
+    return _VENTURE_CONTEXT_CACHE
 
 # Pricing approximation for cost logging (claude-sonnet-4-6 ~$3/M input, $15/M output)
 _APPROX_COST_PER_CALL = 0.008
@@ -58,6 +76,14 @@ def run_advisor(advisor_id: str, context_data: dict, job_id: str = None) -> dict
     system_prompt = _load_system_prompt(prompt_ref)
 
     log.info("Running advisor '%s' (prompt_ref=%s)", advisor_id, prompt_ref)
+
+    venture_context = _load_venture_context()
+    if venture_context:
+        system_prompt = (
+            system_prompt
+            + "\n\n---\n## Platform Ventures Overview\n"
+            + venture_context
+        )
 
     # ── Real LLM call via Anthropic API ───────────────────────────────────────
     import anthropic

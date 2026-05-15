@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
 from typing import Any, List, Optional
 import uuid
@@ -174,6 +174,25 @@ def reject_proposal(proposal_id: uuid.UUID, user: str = Depends(require_auth)):
 import os
 import json
 from pathlib import Path
+
+_VENTURES_DIR = Path(__file__).parent.parent.parent.parent.parent / "ventures"
+_venture_context_cache: str | None = None
+
+
+def _load_venture_context() -> str:
+    global _venture_context_cache
+    if _venture_context_cache is not None:
+        return _venture_context_cache
+    parts: list[str] = []
+    if _VENTURES_DIR.exists():
+        for venture_dir in sorted(_VENTURES_DIR.iterdir()):
+            claude_md = venture_dir / "CLAUDE.md"
+            if claude_md.exists():
+                content = claude_md.read_text(encoding="utf-8")[:3000]
+                parts.append(f"### Venture: {venture_dir.name}\n{content}")
+    _venture_context_cache = "\n\n".join(parts)
+    return _venture_context_cache
+
 
 class AdvisorPromptRequest(BaseModel):
     content: str
@@ -437,6 +456,7 @@ class ChatMessageIn(BaseModel):
 class ChatRequest(BaseModel):
     advisor_ids: List[str]
     messages: List[ChatMessageIn]
+    session_context: Optional[str] = None  # extracted text from user-attached files
 
 
 @router.post("/chat")
@@ -467,6 +487,21 @@ def chat_with_advisors(body: ChatRequest, user: str = Depends(require_auth)):
             "You are a strategic business advisor. Provide concise, actionable insights."
         )
 
+        venture_context = _load_venture_context()
+        if venture_context:
+            system_prompt = (
+                system_prompt
+                + "\n\n---\n## Platform Ventures Overview\n"
+                + venture_context
+            )
+
+        if body.session_context:
+            system_prompt = (
+                system_prompt
+                + "\n\n---\n## Additional Context (user-provided)\n"
+                + body.session_context
+            )
+
         # Build per-advisor message thread (user msgs + own assistant replies only)
         thread = []
         for msg in body.messages:
@@ -496,6 +531,32 @@ def chat_with_advisors(body: ChatRequest, user: str = Depends(require_auth)):
             })
 
     return {"responses": responses}
+
+
+@router.post("/context-upload")
+async def upload_context_files(
+    files: List[UploadFile] = File(...),
+    user: str = Depends(require_auth),
+) -> dict:
+    """Extract text from uploaded files so the user can attach context to an agent consultation."""
+    from aiplatform.skills.research.rag_store import _extract_text
+
+    extracted_parts: list[str] = []
+    filenames: list[str] = []
+    for f in files:
+        data = await f.read()
+        fname = f.filename or "upload"
+        text = _extract_text(fname, data).strip()
+        if text:
+            extracted_parts.append(f"--- {fname} ---\n{text}")
+            filenames.append(fname)
+
+    combined = "\n\n".join(extracted_parts)
+    return {
+        "extracted_text": combined,
+        "filenames": filenames,
+        "char_count": len(combined),
+    }
 
 
 @router.post("/roadmap/reorder")

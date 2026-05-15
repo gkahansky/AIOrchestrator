@@ -10,7 +10,7 @@ import {
   fetchRoadmap, fetchRoadmapDone, fetchRoadmapFeatures,
   createRoadmapFeature, createRoadmapItem, updateRoadmapItem,
   deleteRoadmapItem, reorderRoadmapItems, fetchUsers,
-  triggerAdvisor, chatWithAdvisors,
+  triggerAdvisor, chatWithAdvisors, uploadStrategyContext,
   fetchAvailableLlms, createMarketResearchSession, uploadResearchDocs,
   fetchMarketResearchSessions, fetchMarketResearchSession, rerunResearchSession,
   retryResearchSession, fetchSectionLibrary, fetchSectionDetail, fetchResearchHistory,
@@ -605,6 +605,7 @@ function ChatPanel({
   onSelectSession,
   onCloseSession,
   onSendMessage,
+  onAttachFiles,
   onClose,
 }: {
   sessions: ChatSession[]
@@ -612,10 +613,12 @@ function ChatPanel({
   onSelectSession: (id: string) => void
   onCloseSession: (id: string) => void
   onSendMessage: (sessionId: string, text: string) => void
+  onAttachFiles: (sessionId: string, files: File[]) => void
   onClose: () => void
 }) {
   const [input, setInput] = useState("")
   const bottomRef = useRef<HTMLDivElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const activeSession = sessions.find(s => s.id === activeId)
 
   function send() {
@@ -739,7 +742,41 @@ function ChatPanel({
 
         {/* Input */}
         <div className="px-4 pb-5 pt-3 border-t border-surface-container shrink-0">
+          {activeSession?.attachedFiles && activeSession.attachedFiles.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1">
+              {activeSession.attachedFiles.map((f, i) => (
+                <span key={i} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <span className="material-symbols-outlined text-xs" style={{ fontSize: "12px" }}>attach_file</span>
+                  {f}
+                </span>
+              ))}
+            </div>
+          )}
           <div className="flex gap-2">
+            <button
+              onClick={() => fileRef.current?.click()}
+              title="Attach context files"
+              className={`w-11 h-11 flex items-center justify-center rounded-xl transition-all shrink-0 ${
+                activeSession?.attachedFiles?.length
+                  ? "text-primary bg-primary/10"
+                  : "text-on-surface-variant hover:bg-surface-container-low"
+              }`}
+            >
+              <span className="material-symbols-outlined text-lg">attach_file</span>
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              accept=".pdf,.txt,.md,.docx,.doc,.xlsx,.xls,.pptx,.ppt"
+              className="hidden"
+              onChange={e => {
+                if (activeId && e.target.files && e.target.files.length > 0) {
+                  onAttachFiles(activeId, Array.from(e.target.files))
+                  e.target.value = ""
+                }
+              }}
+            />
             <input
               type="text"
               value={input}
@@ -875,7 +912,7 @@ function AgentsTab() {
       // Add current user message
       payload.push({ role: "user" as const, content: text, advisor_id: undefined })
 
-      chatWithAdvisors({ advisor_ids: session.advisor_ids, messages: payload })
+      chatWithAdvisors({ advisor_ids: session.advisor_ids, messages: payload, session_context: session.contextText })
         .then(resp => {
           setChatSessions(curr => curr.map(s => {
             if (s.id !== sessionId) return s
@@ -914,6 +951,24 @@ function AgentsTab() {
       return next
     })
   }
+
+  const handleAttachFiles = useCallback(async (sessionId: string, files: File[]) => {
+    try {
+      const { extracted_text, filenames } = await uploadStrategyContext(files)
+      setChatSessions(prev => prev.map(s => {
+        if (s.id !== sessionId) return s
+        const existing = s.contextText ?? ""
+        const separator = existing ? "\n\n---\n\n" : ""
+        return {
+          ...s,
+          contextText: existing + separator + extracted_text,
+          attachedFiles: [...(s.attachedFiles ?? []), ...filenames],
+        }
+      }))
+    } catch (err) {
+      console.error("Failed to upload context files:", err)
+    }
+  }, [])
 
   async function handleTriggerSkill(advisorId: string, skill: SkillDef) {
     if (skill.todo) return
@@ -1170,6 +1225,7 @@ function AgentsTab() {
           onSelectSession={setActiveChatId}
           onCloseSession={closeSession}
           onSendMessage={sendMessage}
+          onAttachFiles={handleAttachFiles}
           onClose={() => setShowChat(false)}
         />
       )}
@@ -2491,6 +2547,7 @@ export function MarketResearchTab({ initialSessionId }: { initialSessionId?: str
   const [selectedLlms, setSelectedLlms] = useState<string[]>([])
   const [criticLlm, setCriticLlm] = useState("grok")
   const [email, setEmail] = useState("")
+  const [isInternal, setIsInternal] = useState(false)
   const [files, setFiles] = useState<File[]>([])
   const [detailId, setDetailId] = useState<string | null>(initialSessionId ?? null)
   const [pollingId, setPollingId] = useState<string | null>(null)
@@ -2567,6 +2624,7 @@ export function MarketResearchTab({ initialSessionId }: { initialSessionId?: str
         section_config: showSections ? sectionConfig : null,
         sector: selectedSector,
         report_config: reportConfig,
+        internal: isInternal,
       })
       if (files.length > 0) {
         await uploadResearchDocs(sess.id, files)
@@ -2579,6 +2637,7 @@ export function MarketResearchTab({ initialSessionId }: { initialSessionId?: str
       setTopic("")
       setFiles([])
       setEmail("")
+      setIsInternal(false)
     },
   })
 
@@ -2809,6 +2868,22 @@ export function MarketResearchTab({ initialSessionId }: { initialSessionId?: str
             className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
         </div>
 
+        {/* Internal flag */}
+        <label className="flex items-center gap-3 cursor-pointer select-none">
+          <div
+            onClick={() => setIsInternal(v => !v)}
+            className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+              isInternal ? "bg-primary border-primary" : "border-gray-300 bg-white"
+            }`}
+          >
+            {isInternal && <span className="material-symbols-outlined text-white text-xs">check</span>}
+          </div>
+          <div>
+            <span className="text-sm font-medium text-gray-700">Internal research</span>
+            <p className="text-xs text-gray-400">Platform-owned session — can be freely reused and referenced.</p>
+          </div>
+        </label>
+
         <button
           disabled={!topic.trim() || selectedLlms.length === 0 || createMutation.isPending}
           onClick={() => createMutation.mutate()}
@@ -2837,6 +2912,9 @@ export function MarketResearchTab({ initialSessionId }: { initialSessionId?: str
                   <p className="font-medium text-gray-900 text-sm truncate">{sess.title || sess.topic}</p>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <MrStatusBadge status={sess.status} />
+                    {sess.internal && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-medium">Internal</span>
+                    )}
                     {sess.selected_llms.map(llm => (
                       <span key={llm} className={`text-xs px-1.5 py-0.5 rounded ${LLM_META[llm]?.bg ?? "bg-gray-100"} ${LLM_META[llm]?.color ?? "text-gray-600"}`}>
                         {LLM_META[llm]?.label ?? llm}

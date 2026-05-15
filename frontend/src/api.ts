@@ -586,6 +586,7 @@ export interface MarketResearchSession {
   selected_llms: string[]
   critic_llm: string
   drive_link: string | null
+  internal: boolean
   created_at: string
 }
 
@@ -751,6 +752,17 @@ export async function fetchProducts(): Promise<{ products: Record<string, { disp
   return handleResponse(res)
 }
 
+export async function uploadStrategyContext(files: File[]): Promise<{ extracted_text: string; filenames: string[]; char_count: number }> {
+  const form = new FormData()
+  files.forEach(f => form.append("files", f))
+  const res = await fetch(`${BASE}/api/platform/strategy/context-upload`, {
+    method: "POST",
+    headers: { Authorization: (getHeaders() as Record<string, string>).Authorization },
+    body: form,
+  })
+  return handleResponse(res)
+}
+
 export async function createMarketResearchSession(body: {
   topic: string
   selected_llms?: string[]
@@ -764,6 +776,7 @@ export async function createMarketResearchSession(body: {
     citation_format?: string
   } | null
   sector?: string | null
+  internal?: boolean
 }): Promise<MarketResearchSession> {
   const res = await fetch(`${BASE}/api/ventures/market-research/sessions`, {
     method: "POST",

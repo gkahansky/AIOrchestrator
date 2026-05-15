@@ -244,11 +244,14 @@ export interface ChatSession {
   advisor_ids: string[]
   messages: ChatMessage[]
   loading: boolean
+  contextText?: string      // extracted text from user-attached context files
+  attachedFiles?: string[]  // filenames shown as attachment badges
 }
 
 export interface ChatRequest {
   advisor_ids: string[]
   messages: Pick<ChatMessage, "role" | "advisor_id" | "content">[]
+  session_context?: string  // injected into the advisor system prompt
 }
 
 export interface ChatApiResponse {

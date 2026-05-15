@@ -52,6 +52,7 @@ class CreateResearchRequest(BaseModel):
     section_config: SectionConfig | None = None  # None → V2 pipeline (backwards compat)
     report_config: dict | None = None   # {output_depth, writing_style, framework, citation_format}
     sector: str | None = None           # sector key from registry; defaults to "business_intelligence"
+    internal: bool = False                       # True = platform-owned; False = customer session
 
 
 class ResearchSummary(BaseModel):
@@ -62,6 +63,7 @@ class ResearchSummary(BaseModel):
     selected_llms: list[str]
     critic_llm: str
     drive_link: str | None
+    internal: bool
     created_at: str
 
 
@@ -84,6 +86,7 @@ def _to_summary(r: MarketResearch) -> ResearchSummary:
         selected_llms=r.selected_llms or [],
         critic_llm=r.critic_llm,
         drive_link=r.drive_link,
+        internal=r.internal,
         created_at=r.created_at.isoformat(),
     )
 
@@ -150,6 +153,7 @@ def create_session(
         section_config=sc,
         report_config=req.report_config,
         sector=req.sector or "business_intelligence",
+        internal=req.internal,
         status="pending",
     )
     db.add(record)

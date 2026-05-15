@@ -210,8 +210,6 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-05-14 20:57 |  | 8f8e6a3 | feat(market-research): executive summary from section takeaways, proper report title |
 | 2026-05-14 20:57 |  | ac4237c | docs: update DevLog for recent commits |
 | 2026-05-14 21:01 |  | 8d3fa63 | feat(nav): move Market Research to main sidebar, remove from Strategy Room |
-| 2026-05-14 00:00 |  | (pending) | feat(outreach): YouTube + Instagram source handlers, numeric intent score (0-100), content_repurposing default sources, persona campaign templates with frontend selector |
-| 2026-05-15 00:00 |  | (pending) | feat(market-research): add table of contents to final document — programmatically generated from assembled sections |
-| 2026-05-15 12:00 |  | (pending) | feat(market-research): productization — registry.py with 4-sector section libraries (BI/Academic/VC/PM), report_config controls (depth/style/framework/citation), sector-library + products API endpoints, token budget scaling, updated CLAUDE.md |
 | 2026-05-15 18:41 |  | 340dd9e | feat(outreach): YouTube + Instagram handlers, numeric intent score, persona templates |
-| 2026-05-15 18:42 |  | 0c6b194 | feat(market-research): productization â€” multi-sector registry, report config controls |
+| 2026-05-15 18:42 |  | 0c6b194 | feat(market-research): productization — multi-sector registry, report config controls |
+| 2026-05-15 00:00 |  | d4089b4 | All advisors now load venture CLAUDE.md context; agent consultation supports file attachments; market research gains internal flag with retroactive migration |

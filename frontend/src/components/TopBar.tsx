@@ -54,7 +54,7 @@ export default function TopBar({ onMenuToggle }: TopBarProps) {
 
         {/* New Order button */}
         <button
-          onClick={() => navigate("/ventures")}
+          onClick={() => navigate("/market-research")}
           className="flex items-center gap-1.5 px-3 md:px-4 py-2 rounded-xl bg-gradient-to-br from-primary to-primary-container text-on-primary text-sm font-label font-semibold shadow-float hover:opacity-90 transition-opacity"
         >
           <span className="material-symbols-outlined text-[16px]">add</span>

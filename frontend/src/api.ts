@@ -741,12 +741,29 @@ export async function fetchSectionDetail(sessionId: string, sectionId: string): 
   return handleResponse<SectionDetail>(res)
 }
 
+export async function fetchSectorLibrary(sector: string): Promise<{ sections: SectionLibraryEntry[]; default_system_prompt: string }> {
+  const res = await fetch(`${BASE}/api/ventures/market-research/sector-library/${sector}`, { headers: getHeaders() })
+  return handleResponse(res)
+}
+
+export async function fetchProducts(): Promise<{ products: Record<string, { display_name: string; sectors: string[]; default_sector: string }>; sectors: Record<string, { display_name: string; description: string }> }> {
+  const res = await fetch(`${BASE}/api/ventures/market-research/products`, { headers: getHeaders() })
+  return handleResponse(res)
+}
+
 export async function createMarketResearchSession(body: {
   topic: string
   selected_llms?: string[]
   critic_llm?: string
   client_email?: string
   section_config?: SectionConfig | null
+  report_config?: {
+    output_depth?: string
+    writing_style?: string
+    framework?: string
+    citation_format?: string
+  } | null
+  sector?: string | null
 }): Promise<MarketResearchSession> {
   const res = await fetch(`${BASE}/api/ventures/market-research/sessions`, {
     method: "POST",

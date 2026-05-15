@@ -12,12 +12,12 @@ interface VentureCard {
 
 const ventures: VentureCard[] = [
   {
-    name: "Accessibility Audit",
-    description: "EchoForge — automated WCAG scan & heuristic reporting",
-    to: "/ventures/accessibility-audit",
-    icon: "accessibility_new",
-    color: "text-secondary",
-    bgColor: "bg-surface-variant",
+    name: "Market Research",
+    description: "Plan B AI — multi-LLM research committee, sector-specific reports",
+    to: "/market-research",
+    icon: "analytics",
+    color: "text-primary",
+    bgColor: "bg-primary-fixed",
     status: "active",
   },
   {
@@ -25,15 +25,15 @@ const ventures: VentureCard[] = [
     description: "EchoForge — website SEO & marketing audit pipeline",
     to: "/ventures/marketing-audit",
     icon: "search",
-    color: "text-primary",
-    bgColor: "bg-primary-fixed",
+    color: "text-secondary",
+    bgColor: "bg-surface-variant",
     status: "active",
   },
   {
-    name: "Content Studio",
-    description: "EchoForge — podcast show notes & content repurposing",
-    to: "/ventures/content-studio",
-    icon: "mic",
+    name: "Accessibility Audit",
+    description: "EchoForge — automated WCAG scan & heuristic reporting",
+    to: "/ventures/accessibility-audit",
+    icon: "accessibility_new",
     color: "text-tertiary",
     bgColor: "bg-tertiary-fixed",
     status: "active",
@@ -46,15 +46,6 @@ const ventures: VentureCard[] = [
     color: "text-error",
     bgColor: "bg-error-container",
     status: "active",
-  },
-  {
-    name: "MiroPrintStudio",
-    description: "Etsy digital image shop — AI-generated wall art",
-    to: "/ventures/etsy",
-    icon: "storefront",
-    color: "text-on-surface-variant",
-    bgColor: "bg-surface-container-high",
-    status: "coming_soon",
   },
 ]
 

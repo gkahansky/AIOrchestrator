@@ -89,7 +89,7 @@ function CopyButton({ text }: { text: string }) {
 
 export default function GigGenerator() {
   const [platform, setPlatform] = useState("Fiverr")
-  const [venture, setVenture] = useState("podcast_notes")
+  const [venture, setVenture] = useState("marketing_audit")
 
   const mutation = useMutation({
     mutationFn: () => generateGig(platform, venture),
@@ -132,7 +132,6 @@ export default function GigGenerator() {
             onChange={(e) => setVenture(e.target.value)}
             className="w-full bg-surface border border-outline-variant/30 rounded-lg px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
           >
-            <option value="podcast_notes">EchoForge: Podcast Notes & Content</option>
             <option value="marketing_audit">EchoForge: Marketing Audit</option>
             <option value="accessibility_audit">EchoForge: Accessibility WCAG Audit</option>
             <option value="security_audit">EchoForge: Security Audit</option>

@@ -18,7 +18,7 @@ import StrategyRoom from "./pages/StrategyRoom"
 import MarketResearch from "./pages/MarketResearch"
 import Roadmap from "./pages/Roadmap"
 import Marketing from "./pages/Marketing"
-import CampaignManager from "./pages/CampaignManager"
+
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -65,7 +65,7 @@ export default function App() {
             <Route path="market-research/:sessionId" element={<MarketResearch />} />
             <Route path="roadmap" element={<Roadmap />} />
             <Route path="marketing" element={<Marketing />} />
-            <Route path="campaigns" element={<CampaignManager />} />
+            <Route path="campaigns" element={<Navigate to="/marketing" replace />} />
             <Route path="settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

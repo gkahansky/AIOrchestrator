@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import CampaignManager from "./CampaignManager"
 
 const API = import.meta.env.VITE_API_URL || "https://api.planbadmin.com"
 const authHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("api_token")}` })
@@ -7,11 +8,10 @@ const authHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("api_t
 // ── Constants ────────────────────────────────────────────────────────────────────────
 
 const PRODUCTS = [
-  { id: "marketing_audit",     label: "Marketing Audit",     icon: "search" },
   { id: "market_research",     label: "Market Research",     icon: "analytics" },
+  { id: "marketing_audit",     label: "Marketing Audit",     icon: "search" },
   { id: "accessibility_audit", label: "Accessibility Audit", icon: "accessibility_new" },
   { id: "security_audit",      label: "Security Audit",      icon: "security" },
-  { id: "content_repurposing", label: "Content Repurposing", icon: "video_library" },
   { id: "other",               label: "Other",               icon: "category" },
 ]
 
@@ -1357,10 +1357,10 @@ function NewCampaignForm({ onCreated, onCancel }: {
 
 // ── Main page ────────────────────────────────────────────────────────────────────────────
 
-type MainTab = "campaigns" | "contacts"
+type MainTab = "outreach" | "contacts" | "paid_campaigns"
 
 export default function Marketing() {
-  const [mainTab, setMainTab] = useState<MainTab>("campaigns")
+  const [mainTab, setMainTab] = useState<MainTab>("outreach")
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null)
   const [showNewCampaign, setShowNewCampaign] = useState(false)
   const qc = useQueryClient()
@@ -1372,14 +1372,15 @@ export default function Marketing() {
       <div>
         <h1 className="font-headline font-bold text-2xl text-on-surface">Marketing</h1>
         <p className="text-sm font-body text-on-surface-variant mt-0.5">
-          Persona-driven outreach — find leads, write personalized messages, review before sending
+          Persona-driven outreach, contacts, and paid campaign management
         </p>
       </div>
 
       <div className="flex gap-1 bg-surface-container-low p-1 rounded-xl w-fit">
         {([
-          { id: "campaigns", label: "Campaigns", icon: "campaign" },
-          { id: "contacts",  label: "Contacts",  icon: "contacts" },
+          { id: "outreach",       label: "Outreach",        icon: "campaign" },
+          { id: "contacts",       label: "Contacts",        icon: "contacts" },
+          { id: "paid_campaigns", label: "Paid Campaigns",  icon: "flag" },
         ] as { id: MainTab; label: string; icon: string }[]).map(t => (
           <button key={t.id} onClick={() => setMainTab(t.id)}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-label font-semibold transition-colors ${mainTab === t.id ? "bg-surface-container-lowest text-on-surface shadow-float" : "text-on-surface-variant hover:text-on-surface"}`}>
@@ -1390,8 +1391,9 @@ export default function Marketing() {
       </div>
 
       {mainTab === "contacts" && <ContactsSection />}
+      {mainTab === "paid_campaigns" && <CampaignManager />}
 
-      {mainTab === "campaigns" && (
+      {mainTab === "outreach" && (
         <>
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Sidebar */}

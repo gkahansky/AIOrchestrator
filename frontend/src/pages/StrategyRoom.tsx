@@ -14,6 +14,7 @@ import {
   fetchAvailableLlms, createMarketResearchSession, uploadResearchDocs,
   fetchMarketResearchSessions, fetchMarketResearchSession, rerunResearchSession,
   retryResearchSession, fetchSectionLibrary, fetchSectionDetail, fetchResearchHistory,
+  fetchSectorLibrary, fetchProducts,
 } from "../api"
 import type {
   MarketResearchDetail, V2OptimizedPrompts,
@@ -2453,6 +2454,37 @@ function SessionDetailDrawer({
   )
 }
 
+const SECTORS_DISPLAY: Record<string, string> = {
+  business_intelligence: "Business Intelligence",
+  academic: "Academic & Research",
+  vc_due_diligence: "VC Due Diligence",
+  product_discovery: "Product Discovery",
+}
+
+const OUTPUT_DEPTHS = [
+  { value: "executive", label: "Executive", hint: "Concise, ~4k tokens" },
+  { value: "standard",  label: "Standard",  hint: "Balanced, ~8k tokens" },
+  { value: "exhaustive",label: "Exhaustive",hint: "Deep-dive, ~16k tokens" },
+]
+const WRITING_STYLES = [
+  { value: "corporate",  label: "Corporate" },
+  { value: "academic",   label: "Academic" },
+  { value: "aggressive", label: "Aggressive" },
+]
+const FRAMEWORKS = [
+  { value: "none",        label: "No Framework" },
+  { value: "swot",        label: "SWOT" },
+  { value: "pestle",      label: "PESTLE" },
+  { value: "lean_canvas", label: "Lean Canvas" },
+  { value: "porters",     label: "Porter's Five Forces" },
+]
+const CITATION_FORMATS = [
+  { value: "inline",    label: "Inline" },
+  { value: "apa",       label: "APA" },
+  { value: "mla",       label: "MLA" },
+  { value: "hyperlink", label: "Hyperlink" },
+]
+
 export function MarketResearchTab({ initialSessionId }: { initialSessionId?: string | null }) {
   const navigate = useNavigate()
   const [topic, setTopic] = useState("")
@@ -2463,12 +2495,19 @@ export function MarketResearchTab({ initialSessionId }: { initialSessionId?: str
   const [detailId, setDetailId] = useState<string | null>(initialSessionId ?? null)
   const [pollingId, setPollingId] = useState<string | null>(null)
   const [showSections, setShowSections] = useState(true)
+  const [showReportFormat, setShowReportFormat] = useState(false)
   const [sectionConfig, setSectionConfig] = useState<SectionConfig | null>(null)
+  const [selectedSector, setSelectedSector] = useState("business_intelligence")
+  const [reportConfig, setReportConfig] = useState({ output_depth: "standard", writing_style: "corporate", framework: "none", citation_format: "inline" })
   const fileRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
 
   const { data: llmsData } = useQuery({ queryKey: ["market-research-llms"], queryFn: fetchAvailableLlms })
-  const { data: sectionLibraryData } = useQuery({ queryKey: ["section-library"], queryFn: fetchSectionLibrary })
+  const { data: productsData } = useQuery({ queryKey: ["market-research-products"], queryFn: fetchProducts })
+  const { data: sectionLibraryData } = useQuery({
+    queryKey: ["section-library", selectedSector],
+    queryFn: () => selectedSector === "business_intelligence" ? fetchSectionLibrary() : fetchSectorLibrary(selectedSector),
+  })
   const { data: sessions = [] } = useQuery({ queryKey: ["market-research-sessions"], queryFn: fetchMarketResearchSessions, refetchInterval: pollingId ? 3000 : false })
   const { data: detail, isLoading: isLoadingDetail } = useQuery({
     queryKey: ["market-research-session", detailId],
@@ -2499,20 +2538,20 @@ export function MarketResearchTab({ initialSessionId }: { initialSessionId?: str
     navigate("/market-research")
   }
 
-  // Initialise section config from library when it first loads
+  // Reload section config when sector or library changes
   useEffect(() => {
-    if (sectionLibraryData && !sectionConfig) {
+    if (sectionLibraryData) {
       setSectionConfig({
         version: 3,
         system_prompt: sectionLibraryData.default_system_prompt,
         sections: sectionLibraryData.sections.map(s => ({
           id: s.id,
           name: s.name,
-          enabled: s.default_enabled,
-          prompt: s.default_prompt,
-          locked: s.locked,
-          required_items: s.required_items,
-          expected_outputs: s.expected_outputs,
+          enabled: s.default_enabled ?? true,
+          prompt: s.default_prompt ?? (s as any).prompt ?? "",
+          locked: s.locked ?? false,
+          required_items: s.required_items ?? [],
+          expected_outputs: s.expected_outputs ?? [],
         })),
       })
     }
@@ -2526,6 +2565,8 @@ export function MarketResearchTab({ initialSessionId }: { initialSessionId?: str
         critic_llm: criticLlm,
         client_email: email || undefined,
         section_config: showSections ? sectionConfig : null,
+        sector: selectedSector,
+        report_config: reportConfig,
       })
       if (files.length > 0) {
         await uploadResearchDocs(sess.id, files)
@@ -2615,6 +2656,90 @@ export function MarketResearchTab({ initialSessionId }: { initialSessionId?: str
                     {LLM_META[llm]?.label ?? llm}
                   </button>
                 ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Sector picker */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Research Type</label>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(SECTORS_DISPLAY).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setSelectedSector(key)}
+                className={`px-3 py-2 rounded-xl border text-sm font-medium transition-all ${
+                  selectedSector === key
+                    ? "bg-primary/10 text-primary border-primary/40"
+                    : "bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-400"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {productsData?.sectors?.[selectedSector]?.description && (
+            <p className="text-xs text-gray-400 mt-1.5">{productsData.sectors[selectedSector].description}</p>
+          )}
+        </div>
+
+        {/* Report Format */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-sm font-medium text-gray-700">Report Format</label>
+            <button
+              onClick={() => setShowReportFormat(v => !v)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-all font-medium ${
+                showReportFormat
+                  ? "bg-primary/10 text-primary border-primary/30"
+                  : "bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-400"
+              }`}
+            >
+              <span className="material-symbols-outlined text-sm">tune</span>
+              {showReportFormat ? "Hide options" : `${reportConfig.output_depth} · ${reportConfig.writing_style}`}
+            </button>
+          </div>
+          {showReportFormat && (
+            <div className="border border-gray-200 rounded-xl p-4 bg-gray-50 space-y-4">
+              <div>
+                <p className="text-xs font-medium text-gray-600 mb-2">Output Depth</p>
+                <div className="flex gap-2 flex-wrap">
+                  {OUTPUT_DEPTHS.map(d => (
+                    <button key={d.value} onClick={() => setReportConfig(r => ({ ...r, output_depth: d.value }))}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${reportConfig.output_depth === d.value ? "bg-primary/10 text-primary border-primary/40" : "bg-white text-gray-500 border-gray-200 hover:border-gray-400"}`}>
+                      <span>{d.label}</span>
+                      <span className="ml-1 text-gray-400">{d.hint}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-600 mb-2">Writing Style</p>
+                <div className="flex gap-2 flex-wrap">
+                  {WRITING_STYLES.map(s => (
+                    <button key={s.value} onClick={() => setReportConfig(r => ({ ...r, writing_style: s.value }))}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${reportConfig.writing_style === s.value ? "bg-primary/10 text-primary border-primary/40" : "bg-white text-gray-500 border-gray-200 hover:border-gray-400"}`}>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-medium text-gray-600 mb-2">Analytical Framework</p>
+                  <select value={reportConfig.framework} onChange={e => setReportConfig(r => ({ ...r, framework: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary/30">
+                    {FRAMEWORKS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-600 mb-2">Citation Format</p>
+                  <select value={reportConfig.citation_format} onChange={e => setReportConfig(r => ({ ...r, citation_format: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary/30">
+                    {CITATION_FORMATS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  </select>
+                </div>
               </div>
             </div>
           )}

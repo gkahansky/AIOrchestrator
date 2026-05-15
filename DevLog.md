@@ -214,3 +214,4 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-05-15 00:00 |  | (pending) | feat(market-research): add table of contents to final document — programmatically generated from assembled sections |
 | 2026-05-15 12:00 |  | (pending) | feat(market-research): productization — registry.py with 4-sector section libraries (BI/Academic/VC/PM), report_config controls (depth/style/framework/citation), sector-library + products API endpoints, token budget scaling, updated CLAUDE.md |
 | 2026-05-15 18:41 |  | 340dd9e | feat(outreach): YouTube + Instagram handlers, numeric intent score, persona templates |
+| 2026-05-15 18:42 |  | 0c6b194 | feat(market-research): productization â€” multi-sector registry, report config controls |

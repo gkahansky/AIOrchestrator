@@ -80,11 +80,16 @@ It adds components not shared with any other venture (do not move these to `/pla
 The Market Research venture shares all platform components with existing ventures (Celery, FastAPI, PostgreSQL, Playwright PDF, Drive upload, email delivery). It adds:
 - `aiplatform/skills/research/multi_llm_research.py` — parallel async LLM execution (Claude, OpenAI, Gemini, Grok); `max_tokens` param configurable per call
 - `aiplatform/skills/research/rag_store.py` — Qdrant-backed RAG for pre-uploaded documents; supports PDF, DOCX, XLSX, PPTX, TXT, CSV
-- `ventures/market_research/config.py` — `SECTION_LIBRARY` (8 modules + Final Synthesis), `CROSS_MODULE_SYSTEM_PROMPT`, section critic/summary prompts, legacy V1/V2 prompts
+- `ventures/market_research/registry.py` — `PRODUCTS` + `SECTORS` dict (4 sectors: business_intelligence, academic, vc_due_diligence, product_discovery); each sector has `section_library`, `default_system_prompt`, `display_name`, `description`. `build_report_directives(report_config)` builds the injected directives block. `DEPTH_MAX_TOKENS` maps output_depth → max_tokens.
+- `ventures/market_research/config.py` — re-exports `SECTION_LIBRARY` and `CROSS_MODULE_SYSTEM_PROMPT` from `registry.py` for backwards compat; also holds section critic/summary prompts, legacy V1/V2 prompts
 - `aiplatform/skills/media/render_markdown.py` — Markdown → styled HTML converter; alignment-aware table parsing (`<thead>/<tbody>`); visual marker injection (`[SCREENSHOT:]` / `[GENERATE IMAGE:]` → `<figure>`); citation superscripts. Venture-agnostic.
 - `aiplatform/skills/media/capture_visual.py` — `screenshot_url()` (Playwright headless) + `generate_chart()` (Gemini Imagen 4:3 business charts). Resolves visual markers to base64 data URIs at PDF build time. Venture-agnostic.
 
-**V3 Section-Based Pipeline (default for new sessions):** User selects from a fixed section library (8 research modules + Final Synthesis). Each section is researched independently by all selected LLMs in parallel, Level-1 merged, then put through a 2-round author/critic loop. The critic checks: (a) all required items present, (b) every quantitative claim has an inline citation `[Source: Name, Year]`. After 2 failed rounds a disclaimer is appended. Completed sections contribute a 2-sentence reference summary to all subsequent sections. Final assembly is Python concatenation + citations appendix. Section-level status is visible in the UI and resumes on retry.
+**Report Configuration:** `report_config` JSONB column on `market_research` table stores `{output_depth, writing_style, framework, citation_format}`. Pipeline reads this at run time: `build_report_directives()` appends a "Report Directives" block to every section prompt; `output_depth` maps to max_tokens (executive=4096, standard=8192, exhaustive=16384).
+
+**Multi-Sector Support:** Session creation accepts a `sector` field (default `business_intelligence`). Each sector has its own section library and default system prompt loaded from `registry.py`. New sector endpoint: `GET /api/ventures/market-research/sector-library/{sector}`. Product registry endpoint: `GET /api/ventures/market-research/products`.
+
+**V3 Section-Based Pipeline (default for new sessions):** User selects from a sector's section library. Each section is researched independently by all selected LLMs in parallel, Level-1 merged, then put through a 2-round author/critic loop. The critic checks: (a) all required items present, (b) every quantitative claim has an inline citation `[Source: Name, Year]`. After 2 failed rounds a disclaimer is appended. Completed sections contribute a 2-sentence reference summary to all subsequent sections. Executive Summary is generated post-loop from each section's `key_takeaways` (not researched in parallel). TOC is programmatically built at assembly time. Final assembly order: Executive Summary → section drafts → TOC → Citations Appendix. Section-level status is visible in the UI and resumes on retry.
 
 **V2 Agentic Pipeline (backwards compat):** Topics are decomposed into 3-4 Work Packages. Each package runs all selected LLMs in parallel (8192 token budget), results are Level-1 merged, missing sections are filled via a completeness gate, and carry-forward context prevents repetition. Final report is assembled via Python concatenation + focused Executive Summary call. Package results persist after each package completes, enabling resumability on retry.
 
@@ -119,14 +124,16 @@ The Cold Outreach system is a **platform-level feature** (not a venture). It is 
 | `indiehackers.py` | IndieHackers | Google `site:indiehackers.com` via SerpAPI |
 | `fiverr.py` | Fiverr | Session cookie scrape; Google fallback |
 | `listennotes.py` | Listen Notes | Listen Notes REST API — `LISTENNOTES_API_KEY`; bypasses Claude qualification (already structured) |
+| `youtube.py` | YouTube | YouTube Data API v3 — `search.list` finds videos by keyword, `commentThreads.list` pulls top comments as lead signals; `YOUTUBE_API_KEY` required |
+| `instagram.py` | Instagram | Apify `instagram-hashtag-scraper` primary; Google `site:instagram.com` fallback; `hashtags` config |
 
 `HANDLERS` dict in `sources/__init__.py` is the extension point — adding a new platform means adding one handler file and one entry in the dict. No changes to core logic.
 
-**VENTURE_DEFAULT_SOURCES** in `find_leads.py` seeds source rows when a new campaign is created (via the API) and acts as fallback when no `CampaignSource` rows exist. Currently defined for `marketing_audit`, `content_studio`, and `accessibility_audit`.
+**VENTURE_DEFAULT_SOURCES** in `find_leads.py` seeds source rows when a new campaign is created (via the API) and acts as fallback when no `CampaignSource` rows exist. Currently defined for `marketing_audit`, `content_studio`, `accessibility_audit`, and `content_repurposing`.
 
 **Two-stage AI pipeline:**
 
-1. **Qualification** (`find_leads.py` → `_qualify_post`) — Claude Haiku evaluates each raw post against the campaign's `search_prompt` and `personas`. Returns `is_lead`, `confidence`, `matched_persona`, `notes`. Skipped for Listen Notes (pre-structured).
+1. **Qualification** (`find_leads.py` → `_qualify_post`) — Claude Haiku evaluates each raw post against the campaign's `search_prompt` and `personas`. Returns `is_lead`, `confidence`, `matched_persona`, `notes`, `intent_score` (0-100). Skipped for Listen Notes (pre-structured).
 2. **Composition** (`compose_personalized.py` → `compose_for_lead`) — Claude Sonnet 4.6 writes a unique outreach message grounded in the lead's specific post (`context` field). `_PLATFORM_RULES` dict enforces platform-appropriate tone/format/length. Returns `{subject, message_body, context_used}`.
 
 **Celery tasks in `worker.py`:**
@@ -166,7 +173,8 @@ Legacy A/B endpoints (`/compose`, `/send`, `/templates`, `/sends`) are preserved
 ```
 ANTHROPIC_API_KEY     — Haiku (qualification) + Sonnet (composition)
 SERPAPI_KEY           — Google / LinkedIn / IndieHackers / Fiverr signal searches
-APIFY_API_TOKEN       — LinkedIn Posts Scraper + Facebook Groups Scraper (optional; graceful fallback)
+APIFY_API_TOKEN       — LinkedIn Posts Scraper + Facebook Groups Scraper + Instagram Hashtag Scraper (optional; graceful fallback)
+YOUTUBE_API_KEY       — YouTube video search + comment discovery (optional; handler skipped if absent)
 LISTENNOTES_API_KEY   — Listen Notes podcast discovery (optional)
 FIVERR_SESSION_COOKIE — Fiverr buyer requests scrape (optional; Google fallback)
 RESEND_API_KEY        — Email sending

@@ -24,7 +24,8 @@ Complete inventory of every third-party tool, service, API, and library used acr
 | **Google OAuth 2.0** (`google-auth`, `google-auth-oauthlib`) | User-level Drive auth (5TB quota) | Preferred auth method at runtime; materialised from `GOOGLE_DRIVE_TOKEN_JSON` env var on Railway startup |
 | **Google Service Account** (`google-auth`) | Fallback Drive auth | Used when OAuth token is not configured; limited to 15GB service account quota |
 | **Google Identity Services** | Web app login | Google OAuth login for the management console (`planBadmin.com`) |
-| **SerpAPI** | Google Search + Trends proxy | Etsy theme research (demand/competition scoring), competitor price monitoring, keyword trend analysis |
+| **SerpAPI** | Google Search + Trends proxy | Etsy theme research (demand/competition scoring), competitor price monitoring, keyword trend analysis; outreach fallback for LinkedIn, IndieHackers, Instagram (`site:` searches) |
+| **YouTube Data API v3** (REST via `requests`) | Video search + comment discovery | Cold Outreach lead discovery — `search.list` finds relevant videos by keyword, `commentThreads.list` extracts top comments as high-intent lead signals. `YOUTUBE_API_KEY` required. |
 
 ---
 
@@ -80,7 +81,7 @@ Complete inventory of every third-party tool, service, API, and library used acr
 
 | Tool | Purpose | Use Cases |
 |---|---|---|
-| **Resend** (REST API via `requests`) | Transactional email | Order confirmations, PDF delivery emails, review notifications, sample report delivery |
+| **Resend** (REST API via `requests`) | Transactional email | Order confirmations, PDF delivery emails, review notifications, sample report delivery; also used for cold outreach sends (see Lead Discovery section) |
 | **Gmail SMTP** | Email inbox polling | Fiverr order intake — polls Gmail for Fiverr order confirmation emails |
 | **Slack API** | Internal notifications | Phase completion alerts, review gate notifications, error alerts, pipeline status updates |
 
@@ -102,6 +103,18 @@ Complete inventory of every third-party tool, service, API, and library used acr
 | **python-docx** (`python-docx>=1.1.0`) | Word document parsing | Extract text from DOCX/DOC files uploaded as RAG documents in Market Research |
 | **openpyxl** (`openpyxl>=3.1.0`) | Excel spreadsheet parsing | Extract cell data from XLSX/XLS files uploaded as RAG documents in Market Research |
 | **python-pptx** (`python-pptx>=0.6.23`) | PowerPoint parsing | Extract slide text from PPTX/PPT files uploaded as RAG documents in Market Research |
+
+---
+
+## Lead Discovery & Outreach
+
+| Tool | Purpose | Use Cases |
+|---|---|---|
+| **Apify** (REST API via `requests`) | Web scraping platform | LinkedIn post search (`linkedin-post-search-scraper`), Facebook Groups (`facebook-groups-scraper`), Instagram hashtag discovery (`instagram-hashtag-scraper`) — all with graceful Google fallback. `APIFY_API_TOKEN` required. |
+| **Reddit Public JSON API** | Forum post search | Subreddit keyword search — no API key; configurable `subreddits`, `sort`, `time_filter` per campaign source |
+| **Algolia HN Search API** | Hacker News post search | Ask HN / Show HN / story search by keyword; no key required |
+| **Listen Notes API** | Podcast directory | Discover podcasters as leads; bypasses Claude qualification (already structured data). `LISTENNOTES_API_KEY` required. |
+| **Resend** (REST API via `requests`) | Transactional email | Outreach email delivery with open-tracking pixel; unsubscribe handling; 30-day cooldown guard |
 
 ---
 
@@ -197,6 +210,10 @@ No code changes required to swap — set `active: true` in `skills.json`.
 | Google OAuth App | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
 | Gemini | `GOOGLE_AI_API_KEY` |
 | SerpAPI | `SERPAPI_KEY` |
+| YouTube Data API | `YOUTUBE_API_KEY` |
+| Apify | `APIFY_API_TOKEN` |
+| Listen Notes | `LISTENNOTES_API_KEY` |
+| Fiverr scraping | `FIVERR_SESSION_COOKIE` |
 | Etsy | `ETSY_API_KEY`, `ETSY_API_SECRET`, `ETSY_SHOP_ID`, `ETSY_ACCESS_TOKEN`, `ETSY_REFRESH_TOKEN` |
 | Resend | `RESEND_API_KEY`, `EMAIL_FROM` |
 | Gmail | `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD` |

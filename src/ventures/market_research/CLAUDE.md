@@ -75,12 +75,22 @@ Each entry in `SECTORS` has:
 
 ### Current sectors
 
-| Key | Display Name | Locked Final Section |
-|---|---|---|
-| `business_intelligence` | Business Intelligence | Final Synthesis |
-| `academic` | Academic & Research | Executive Abstract |
-| `vc_due_diligence` | VC Due Diligence | Executive Investment Memo |
-| `product_discovery` | Product Discovery | Product Executive Summary |
+| Key | Display Name | Locked Final Section | Notes |
+|---|---|---|---|
+| `business_intelligence` | Business Intelligence | Final Synthesis | Default sector |
+| `academic` | Academic & Research | Executive Abstract | |
+| `product_discovery` | Product Discovery | Product Executive Summary | |
+| `legal_research` | Legal Research | Legal Summary & Recommendations | Jurisdiction mandatory in topic |
+| `medical_research` | Medical & Health Research | Clinical Summary & Recommendations | Peer-reviewed sources only |
+
+**VC Due Diligence** was removed from the active sector list. The section library code (`_VC_SECTION_LIBRARY`, `_VC_SYSTEM_PROMPT`) is preserved in `registry.py` as dead code for easy re-activation.
+
+### Online Search Requirement
+
+All sector system prompts include `_ONLINE_SEARCH_INSTRUCTION`, which instructs all LLMs:
+- Do not rely on pre-training data alone
+- Actively search for publications, studies, and data from the last 12-24 months
+- Mark any claim that cannot be verified with a recent source as `[Pre-training data — currency unverified]`
 
 ---
 
@@ -91,20 +101,50 @@ Stored as JSONB on the `market_research` record. Set at session creation; never 
 ```json
 {
   "output_depth":    "executive" | "standard" | "exhaustive",
-  "writing_style":   "corporate" | "academic" | "aggressive",
+  "writing_style":   "corporate" | "academic" | "aggressive" | "online_explainer",
   "framework":       "swot" | "pestle" | "lean_canvas" | "porters" | "none",
   "citation_format": "inline" | "apa" | "mla" | "hyperlink"
 }
 ```
 
-**Token budget** (`registry.py → DEPTH_MAX_TOKENS`):
-- `executive`: 4096 tokens per LLM call
-- `standard`: 8192 (default)
-- `exhaustive`: 16384
+**Token budget** (`registry.py → DEPTH_MAX_TOKENS`) — controls max_tokens per LLM call per section:
+- `executive`: 4096 tokens → approx **5-10 page report / ~3,000 words total**
+- `standard`: 8192 (default) → approx **20-35 page report / ~12,000 words total**
+- `exhaustive`: 16384 → approx **50-80 page report / ~30,000 words total**
 
 **Injection point:** `_build_section_research_prompt()` in `pipeline.py` calls `build_report_directives(report_config)` and appends the resulting `## Report Directives` block to every section prompt.
 
 **`build_report_directives()`** in `registry.py` converts the config dict into a human-readable directives block. Returns empty string if `report_config` is None (preserves current default behaviour).
+
+### Writing Styles — What Each Does
+
+| Style | Tone | Use Case | What Changes in Output |
+|---|---|---|---|
+| `corporate` | Direct, professional, McKinsey-style | Client deliverables, management reports | Active voice, bullet-point summaries, decisive recommendations, no hedging |
+| `academic` | Formal, hedging, objective | University, research, professional papers | Passive voice, language like "evidence suggests", no superlatives, APA-style structure |
+| `aggressive` | High-energy, growth-focused, provocative | VC pitches, startup strategy | Bold openers, startup vernacular ("land-grab", "dominate"), confident assertions, opportunity-first framing |
+| `online_explainer` | Conversational, accessible, structured | Video scripts, how-to articles, blog posts | Short paragraphs (2-3 sentences), numbered steps, plain English, rhetorical questions, zero passive voice — ready to use as a script with minimal editing |
+
+### Analytical Frameworks — What Each Does
+
+Frameworks are injected as an additional analytical lens over the research. They do not replace section prompts; they add a structured perspective the LLMs must apply where relevant.
+
+| Framework | What It Does to the Report |
+|---|---|
+| `none` | No framework overlay — sections follow their own structure |
+| `swot` | Every strategic assessment is organised through Strengths / Weaknesses / Opportunities / Threats. Adds SWOT matrices to relevant sections. |
+| `pestle` | Market and environmental analysis is filtered through Political / Economic / Social / Technological / Legal / Environmental dimensions. Useful for macro-level market reports and regulatory-heavy topics. |
+| `lean_canvas` | Analysis is framed around the Lean Canvas model: Problem, Solution, Unique Value Proposition, Unfair Advantage, Customer Segments, Key Metrics, Channels, Cost Structure, Revenue Streams. Best for product and startup research. |
+| `porters` | Competitive analysis uses Porter's Five Forces: Threat of New Entrants, Supplier Power, Buyer Power, Threat of Substitutes, Competitive Rivalry. Best for market entry or competitive strategy reports. |
+
+### Citation Formats — What Each Produces
+
+| Format | What It Looks Like in the Report | Best For |
+|---|---|---|
+| `inline` | `[Source: McKinsey, 2024]` after every claim | Internal reports, quick reads |
+| `apa` | `(McKinsey, 2024)` in-text + full reference list at the end (`McKinsey & Company. (2024). Title.`) | Academic papers, formal reports |
+| `mla` | `(McKinsey 42)` in-text + Works Cited list at the end | Humanities, literature-heavy research |
+| `hyperlink` | `[Source: Report Title](https://url.com)` — clickable links embedded in text | Digital reports, web-published content, when sources have stable URLs |
 
 ---
 
@@ -143,7 +183,7 @@ The future standalone website (not EchoForge.biz) POSTs to the same API with API
 | Phase | Goal | Status |
 |---|---|---|
 | Phase 1 | Report format controls (depth/style/framework/citation) for BI sector | ✅ built |
-| Phase 2 | New sectors: Academic, VC Due Diligence, Product Discovery (section libraries in registry) | ✅ built |
+| Phase 2 | New sectors: Academic, Product Discovery, Legal, Medical; online_explainer style; online search instruction; page-count depth estimates | ✅ built |
 | Phase 3 | External website order surface (API-key auth, webhook callback) | 🔲 planned |
 | Phase 4 | URL + PDF data ingestion as research source; whitepaper depth (50+ pages) | 🔲 planned |
 

@@ -2456,20 +2456,22 @@ function SessionDetailDrawer({
 
 const SECTORS_DISPLAY: Record<string, string> = {
   business_intelligence: "Business Intelligence",
-  academic: "Academic & Research",
-  vc_due_diligence: "VC Due Diligence",
-  product_discovery: "Product Discovery",
+  academic:              "Academic & Research",
+  product_discovery:     "Product Discovery",
+  legal_research:        "Legal Research",
+  medical_research:      "Medical & Health",
 }
 
 const OUTPUT_DEPTHS = [
-  { value: "executive", label: "Executive", hint: "Concise, ~4k tokens" },
-  { value: "standard",  label: "Standard",  hint: "Balanced, ~8k tokens" },
-  { value: "exhaustive",label: "Exhaustive",hint: "Deep-dive, ~16k tokens" },
+  { value: "executive",  label: "Executive",  hint: "~5-10 pages / ~3,000 words" },
+  { value: "standard",   label: "Standard",   hint: "~20-35 pages / ~12,000 words" },
+  { value: "exhaustive", label: "Exhaustive", hint: "~50-80 pages / ~30,000 words" },
 ]
 const WRITING_STYLES = [
-  { value: "corporate",  label: "Corporate" },
-  { value: "academic",   label: "Academic" },
-  { value: "aggressive", label: "Aggressive" },
+  { value: "corporate",        label: "Corporate" },
+  { value: "academic",         label: "Academic" },
+  { value: "aggressive",       label: "Aggressive" },
+  { value: "online_explainer", label: "Online Explainer" },
 ]
 const FRAMEWORKS = [
   { value: "none",        label: "No Framework" },
@@ -2681,6 +2683,11 @@ export function MarketResearchTab({ initialSessionId }: { initialSessionId?: str
           </div>
           {productsData?.sectors?.[selectedSector]?.description && (
             <p className="text-xs text-gray-400 mt-1.5">{productsData.sectors[selectedSector].description}</p>
+          )}
+          {selectedSector === "legal_research" && (
+            <p className="text-xs text-amber-600 mt-1 font-medium">
+              ⚠ Jurisdiction is critical — include the country/state in your research topic (e.g. "Employment dismissal law in New South Wales, Australia").
+            </p>
           )}
         </div>
 

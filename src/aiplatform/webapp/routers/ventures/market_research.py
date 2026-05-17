@@ -462,3 +462,41 @@ def rerun_session(
     db.commit()
 
     return _to_summary(new_record)
+
+
+@router.post("/sessions/{session_id}/clone", status_code=status.HTTP_202_ACCEPTED)
+def clone_session(
+    session_id: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_auth),
+) -> ResearchSummary:
+    """Clone a session with identical config and start it from scratch (no prior results carried over)."""
+    from aiplatform.worker import run_market_research as celery_task
+
+    try:
+        record_id = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+
+    original = db.get(MarketResearch, record_id)
+    if not original:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    new_record = MarketResearch(
+        topic=original.topic,
+        selected_llms=original.selected_llms,
+        critic_llm=original.critic_llm,
+        client_email=original.client_email,
+        section_config=original.section_config,
+        report_config=original.report_config,
+        status="pending",
+    )
+    db.add(new_record)
+    db.commit()
+    db.refresh(new_record)
+
+    task = celery_task.delay(str(new_record.id))
+    new_record.celery_task_id = task.id
+    db.commit()
+
+    return _to_summary(new_record)

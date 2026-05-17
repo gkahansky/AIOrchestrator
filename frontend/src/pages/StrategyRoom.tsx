@@ -13,8 +13,8 @@ import {
   triggerAdvisor, chatWithAdvisors,
   fetchAvailableLlms, createMarketResearchSession, uploadResearchDocs,
   fetchMarketResearchSessions, fetchMarketResearchSession, rerunResearchSession,
-  retryResearchSession, fetchSectionLibrary, fetchSectionDetail, fetchResearchHistory,
-  fetchSectorLibrary, fetchProducts,
+  retryResearchSession, cloneResearchSession, fetchSectionLibrary, fetchSectionDetail,
+  fetchResearchHistory, fetchSectorLibrary, fetchProducts,
 } from "../api"
 import type {
   MarketResearchDetail, V2OptimizedPrompts,
@@ -2141,17 +2141,20 @@ function SessionDetailDrawer({
   onClose,
   onRerun,
   onRetry,
+  onClone,
 }: {
   session: MarketResearchDetail | null
   isLoading: boolean
   onClose: () => void
   onRerun: (topic: string, prompts: Record<string, string>, selectedLlms: string[], criticLlm: string) => void
   onRetry: () => void
+  onClone: () => void
 }) {
   const [tab, setTab] = useState<"report" | "sections" | "citations" | "critic" | "prompts" | "history">("report")
   const [rerunMode, setRerunMode] = useState(false)
   const [editedPrompts, setEditedPrompts] = useState<Record<string, string>>({})
   const [retrying, setRetrying] = useState(false)
+  const [cloning, setCloning] = useState(false)
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
 
   const isV3 = !!session?.section_config
@@ -2387,22 +2390,36 @@ function SessionDetailDrawer({
           <div className="shrink-0 px-6 py-4 border-t bg-red-50 rounded-b-2xl flex items-center justify-between gap-3">
             <p className="text-xs text-gray-500">
               {session?.status === "failed"
-                ? "This session failed — retry to run it again."
+                ? "This session failed — retry to resume, or rerun from scratch."
                 : session?.status === "pending"
                   ? "This session has been pending for a while — retry to re-queue it."
                   : `This session has been ${session?.status} for over 45 minutes — retry to resume from last checkpoint.`
               }
             </p>
-            <button
-              disabled={retrying}
-              onClick={async () => {
-                setRetrying(true)
-                try { await onRetry() } finally { setRetrying(false) }
-              }}
-              className="shrink-0 flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50">
-              <span className="material-symbols-outlined text-sm">replay</span>
-              {retrying ? "Retrying..." : "Retry Now"}
-            </button>
+            <div className="flex gap-2">
+              {session?.status === "failed" && (
+                <button
+                  disabled={cloning}
+                  onClick={async () => {
+                    setCloning(true)
+                    try { await onClone(); onClose() } finally { setCloning(false) }
+                  }}
+                  className="shrink-0 flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg border border-primary text-primary font-medium hover:bg-primary/5 disabled:opacity-50">
+                  <span className="material-symbols-outlined text-sm">content_copy</span>
+                  {cloning ? "Starting..." : "Rerun from Scratch"}
+                </button>
+              )}
+              <button
+                disabled={retrying}
+                onClick={async () => {
+                  setRetrying(true)
+                  try { await onRetry() } finally { setRetrying(false) }
+                }}
+                className="shrink-0 flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50">
+                <span className="material-symbols-outlined text-sm">replay</span>
+                {retrying ? "Retrying..." : "Retry Now"}
+              </button>
+            </div>
           </div>
         )}
 
@@ -2447,6 +2464,23 @@ function SessionDetailDrawer({
                 </button>
               </>
             )}
+          </div>
+        )}
+
+        {/* Rerun from Scratch — completed sessions (pdf_ready / delivered) */}
+        {!canRetry && isDone && session?.status !== "failed" && (
+          <div className="shrink-0 px-6 py-4 border-t bg-gray-50 rounded-b-2xl flex items-center justify-between gap-3">
+            <p className="text-xs text-gray-500">Run this exact job from scratch with fresh sources.</p>
+            <button
+              disabled={cloning}
+              onClick={async () => {
+                setCloning(true)
+                try { await onClone(); onClose() } finally { setCloning(false) }
+              }}
+              className="shrink-0 flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg border border-primary text-primary font-medium hover:bg-primary/5 disabled:opacity-50">
+              <span className="material-symbols-outlined text-sm">content_copy</span>
+              {cloning ? "Starting..." : "Rerun from Scratch"}
+            </button>
           </div>
         )}
       </div>
@@ -2886,6 +2920,11 @@ export function MarketResearchTab({ initialSessionId }: { initialSessionId?: str
             queryClient.invalidateQueries({ queryKey: ["market-research-sessions"] })
             queryClient.invalidateQueries({ queryKey: ["market-research-session", detailId] })
             setPollingId(detailId)
+          }}
+          onClone={async () => {
+            const sess = await cloneResearchSession(detailId!)
+            queryClient.invalidateQueries({ queryKey: ["market-research-sessions"] })
+            setPollingId(sess.id)
           }}
         />
       )}

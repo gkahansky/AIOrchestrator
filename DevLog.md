@@ -216,3 +216,4 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-05-15 18:41 |  | 340dd9e | feat(outreach): YouTube + Instagram handlers, numeric intent score, persona templates |
 | 2026-05-15 18:42 |  | 0c6b194 | feat(market-research): productization â€” multi-sector registry, report config controls |
 | 2026-05-17 00:00 |  | 3e9181a | feat(market_research): inject live SerpAPI web search per section — LLMs now receive real current snippets to cite rather than relying on training data |
+| 2026-05-17 00:01 |  | b9cb836 | docs: update project docs post live web search integration — venture CLAUDE.md, root CLAUDE.md, ToolStack.MD |

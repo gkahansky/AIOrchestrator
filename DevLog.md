@@ -217,3 +217,9 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-05-15 18:42 |  | 0c6b194 | feat(market-research): productization â€” multi-sector registry, report config controls |
 | 2026-05-17 00:00 |  | 3e9181a | feat(market_research): inject live SerpAPI web search per section — LLMs now receive real current snippets to cite rather than relying on training data |
 | 2026-05-17 00:01 |  | b9cb836 | docs: update project docs post live web search integration — venture CLAUDE.md, root CLAUDE.md, ToolStack.MD |
+| 2026-05-16 16:00 |  | 41142bf | feat(admin-ui): productize Market Research UI — sector picker, report format panel; hide Etsy/Content Studio; Campaigns moved under Marketing tab as Paid Campaigns |
+| 2026-05-16 18:00 |  | 95c4809 | feat(market-research): legal + medical sectors, online_explainer style, online search instruction, page-count depth estimates, remove VC sector, UX polish |
+| 2026-05-16 20:22 |  | 48a30da | feat(market-research): remove prompts tab from session drawer — prompts now visible only in History tab |
+| 2026-05-17 18:13 |  | 52505a7 | feat(market-research): structured PDF layout — cover page (p.1), TOC with JS-estimated page numbers (p.2), content from p.3 |
+| 2026-05-17 18:19 |  | 1d278ab | merge: resolve StrategyRoom conflict — keep Rerun from Scratch button, drop prompts tab footer |
+| 2026-05-17 19:18 |  | 9111685 | fix(market-research): improve recency of web-grounded sources — 3 SerpAPI passes, date field in snippets, recency filter, news search, raised staleness threshold to pre-2025 |

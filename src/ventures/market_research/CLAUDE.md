@@ -87,12 +87,22 @@ Each entry in `SECTORS` has:
 
 ### Online Search Requirement
 
-All sector system prompts include `_ONLINE_SEARCH_INSTRUCTION`. Before each section's LLM calls, `_fetch_web_context()` runs two targeted SerpAPI queries (`"{topic} {section_name} {year}"` and `"{topic} {section_name} statistics data {year}"`), deduplicates results by URL, and injects a `## Live Web Research — Retrieved Now` block directly into the section prompt. LLMs are then instructed to:
-- Treat the injected results as primary sources and cite them inline with `[Source: Publication Name, Year]`
-- Fall back to training knowledge only for claims not covered by the injected results
-- Mark any pre-2024 training-data statistic explicitly as `[Pre-training data — currency unverified]`
+All sector system prompts include `_ONLINE_SEARCH_INSTRUCTION`. Before each section's LLM calls, `_fetch_web_context()` runs **three SerpAPI passes** and injects a `## Live Web Research — Retrieved {date}` block directly into the section prompt:
 
-Graceful degradation: if `SERPAPI_KEY` is not set or all queries fail, `_fetch_web_context()` returns `""` and the pipeline continues without web context.
+| Pass | Query | SerpAPI params | Purpose |
+|---|---|---|---|
+| 1 | `{topic} {section_name} {year}` | — | Broad relevance-ranked organic |
+| 2 | `{topic} {section_name} statistics data {year}` | `tbs=qdr:y` (past 12 months) | Forces recent results; bypasses authority-ranked older pages |
+| 3 | `{topic} {section_name} latest news {year}` | `tbm=nws` (Google News) | Surfaces 2025-2026 articles organic search misses |
+
+Each injected snippet includes the publication date (`published Mar 2025`) so LLMs can attribute the correct year. LLMs are instructed to:
+- Treat injected results as primary sources; cite them with `[Source: Publication Name, Year]` using the date shown
+- Note that 2025 and 2026 sources are present in the injected results
+- Mark any statistic from before 2025 as `[Pre-training data — currency unverified]`
+
+`google_search()` in `web_search.py` now accepts `tbs` and `tbm` params and extracts the `date` field from SerpAPI responses.
+
+Graceful degradation: if `SERPAPI_KEY` is not set or all passes fail, `_fetch_web_context()` returns `""` and the pipeline continues without web context.
 
 ---
 
@@ -376,7 +386,8 @@ V3 sessions are resumed by skipping sections whose status is already `"done"` or
 - **Sections tab** in `SessionDetailDrawer`: grid of section cards with live status badge + word count; clicking opens `SectionDetailPanel`
 - **SectionDetailPanel**: section draft (markdown rendered), Critic Round 1 / Round 2 collapsible panels showing missing items and uncited claims
 - **Citations tab**: all citations grouped by section, live-updated as sections complete
-- **History tab**: lazy-loaded (fetched only when tab is opened); shows run details grid (topic, LLMs, start/end, duration), uploaded filenames, errors, PDF link, collapsible cross-module system prompt, collapsible per-section prompts
+- **History tab**: lazy-loaded; shows run details grid (topic, LLMs, start/end, duration), uploaded filenames, errors, PDF link, collapsible cross-module system prompt, collapsible per-section prompts. **This is the only place prompts are exposed** — they are not shown elsewhere in the UI and never embedded in the PDF.
+- **Rerun from Scratch**: button in the session drawer footer for completed sessions (`pdf_ready` / `delivered`) — clones the session with fresh sources and queues it immediately
 
 **Polling:** existing 4s polling on session detail updates section statuses in real time.
 
@@ -421,6 +432,7 @@ Same as V2 — Qdrant-backed, injected into section prompts if documents uploade
 - V3 has no `reflecting` status — the per-section critic replaces the final-pass critic
 - The citations appendix is built from `[Source: ...]` regex matches — authors are instructed to use this exact format in all section prompts
 - PDF generation reads `final_report` which equals `merged_report` for V3 (same concatenated output)
+- **PDF structure:** `_build_pdf()` produces a three-section document: (1) **Cover page** — sector type + topic title + date; (2) **Table of Contents** — section names with dotted leaders and JS-estimated page numbers (Playwright doesn't support CSS `target-counter`, so page numbers are calculated via `offsetTop / ~1033px` after layout — approximate ±1 page); (3) **Content** — Executive Summary first, then sections, then Citations appendix. Each `<h2>` gets an anchor ID so TOC entries are clickable links in the PDF viewer.
 - **Styled tables:** `CROSS_MODULE_SYSTEM_PROMPT` instructs all LLMs to use Markdown table syntax (`| col | col |` with separator row). `_build_pdf()` uses `render_markdown.py` to convert Markdown tables to styled HTML `<table>` elements (blue `#1e3a5f` header, alternating rows, `break-inside: avoid`) — no ASCII art reaches the PDF.
 - **Visual content:** LLMs may embed `[SCREENSHOT: url | caption]` or `[GENERATE IMAGE: description | caption]` markers. At PDF build time, `_build_pdf()` scans for markers, captures each (Playwright screenshot or Gemini Imagen chart), base64-encodes as data URIs, and passes to `render_markdown.py` for `<figure>` embedding. Markers with failed captures are silently dropped.
 - `render_markdown.py` and `capture_visual.py` are venture-agnostic platform skills — they live in `/aiplatform/skills/media/` and are not Market Research-specific.
@@ -441,14 +453,14 @@ Same as V2 — Qdrant-backed, injected into section prompts if documents uploade
 | V2 agentic work-package pipeline | ✅ live | Backwards compat |
 | V1 rerun mode | ✅ live | Backwards compat |
 | Critic/reflection (V3) | ✅ built | Per-section; checks required_items + citations; 2 rounds max; disclaimer fallback |
-| Live web search pre-fetch (V3 + V2) | ✅ live | `_fetch_web_context()` fires 2 SerpAPI queries per section before LLM dispatch; injects current snippets as grounding context; graceful degradation if SERPAPI_KEY absent |
+| Live web search pre-fetch (V3 + V2) | ✅ live | `_fetch_web_context()` fires 3 passes (organic + recency-filtered + Google News); includes publication date in each snippet; raises staleness threshold to pre-2025; graceful degradation if SERPAPI_KEY absent |
 | Citation enforcement | ✅ built | Inline `[Source: ...]` tags; citations appendix in final doc |
 | Reference context (cross-module) | ✅ built | 2-sentence summaries passed to each subsequent section |
 | Executive Summary | ✅ built | Generated post-loop from per-section key_takeaways; inserted first in assembled doc |
-| Table of Contents | ✅ built | Programmatic TOC from section list at assembly time; includes Citations entry |
+| Table of Contents | ✅ built | Programmatic TOC from section list at assembly time; includes Citations entry; rendered as HTML TOC page in PDF with dotted leaders and JS-estimated page numbers |
 | Section-level status UI | ✅ built | Cards with live status badges; word count; click to open SectionDetailPanel |
 | Citations tab | ✅ built | All citations grouped by section in drawer |
-| PDF generation | ✅ live | Playwright HTML→PDF |
+| PDF generation | ✅ live | Playwright HTML→PDF; structured layout: cover page (p.1), TOC with page numbers (p.2), content from p.3 |
 | Styled HTML tables in PDF | ✅ live | render_markdown.py converts Markdown tables to styled HTML |
 | Visual content in PDF | ✅ live | capture_visual.py (Playwright screenshots + Gemini Imagen charts); markers resolved to base64 data URIs at PDF build time |
 | Drive upload | ✅ live | `DRIVE_MARKET_RESEARCH_ID` folder |

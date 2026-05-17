@@ -25,22 +25,33 @@ def _get_key() -> str:
     return key
 
 
-def google_search(query: str, num_results: int = 10) -> dict:
+def google_search(
+    query: str,
+    num_results: int = 10,
+    tbs: str = "",
+    tbm: str = "",
+) -> dict:
     """
     Run a Google search and return organic results.
+
+    Args:
+        tbs: SerpAPI time-based search filter (e.g. "qdr:y" = past year, "qdr:m6" = past 6 months,
+             "cdr:1,cd_min:2025-01-01" = custom date range).
+        tbm: SerpAPI search type override (e.g. "nws" = Google News).
 
     Returns:
         {
             query         (str),
             total_results (int),
-            organic_results: [{ title, link, snippet }]
+            organic_results: [{ title, link, snippet, date }]
         }
     """
-    resp = requests.get(
-        SERPAPI_BASE,
-        params={"engine": "google", "q": query, "num": num_results, "api_key": _get_key()},
-        timeout=30,
-    )
+    params: dict = {"engine": "google", "q": query, "num": num_results, "api_key": _get_key()}
+    if tbs:
+        params["tbs"] = tbs
+    if tbm:
+        params["tbm"] = tbm
+    resp = requests.get(SERPAPI_BASE, params=params, timeout=30)
     resp.raise_for_status()
     data = resp.json()
 
@@ -54,7 +65,12 @@ def google_search(query: str, num_results: int = 10) -> dict:
         "query": query,
         "total_results": total,
         "organic_results": [
-            {"title": r.get("title", ""), "link": r.get("link", ""), "snippet": r.get("snippet", "")}
+            {
+                "title":   r.get("title", ""),
+                "link":    r.get("link", ""),
+                "snippet": r.get("snippet", ""),
+                "date":    r.get("date", ""),   # e.g. "Mar 15, 2025" — present on most results
+            }
             for r in data.get("organic_results", [])
         ],
     }

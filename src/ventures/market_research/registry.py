@@ -25,10 +25,13 @@ backwards compatibility.  All pipeline code should import from config.py or here
 _ONLINE_SEARCH_INSTRUCTION = (
     "\n\nRECENT DATA REQUIREMENT — CRITICAL: "
     "Live web search results are injected into the user prompt under "
-    "'## Live Web Research — Retrieved Now'. Treat these as your PRIMARY sources — "
-    "cite them inline using [Source: Publication Name, Year] format. "
-    "For any claim not covered by the injected results, use the most recent knowledge "
-    "available from your training, but mark any pre-2024 statistic or fact explicitly as: "
+    "'## Live Web Research — Retrieved Now'. Treat these as your PRIMARY sources. "
+    "Each injected result shows its publication date (e.g. 'published Mar 2025'). "
+    "Use that date when forming your citation: [Source: Publication Name, Year]. "
+    "Injected results include sources from 2024, 2025, and 2026 — cite the year shown, "
+    "not the year you would have guessed from training data. "
+    "For any claim NOT covered by the injected results, you may draw on training knowledge, "
+    "but mark any statistic or fact from before 2025 explicitly as: "
     "[Pre-training data — currency unverified, recommend independent verification]. "
     "Never fabricate URLs, publication names, or statistics."
 )

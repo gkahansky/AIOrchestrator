@@ -37,6 +37,7 @@ from aiplatform.skills.research.multi_llm_research import (
     available_llms,
 )
 from aiplatform.skills.research.rag_store import retrieve_context
+from aiplatform.skills.research.web_search import google_search
 from aiplatform.skills.storage.drive_write import drive_write
 from aiplatform.skills.comms.send_email import send_email
 from ventures.market_research.config import (
@@ -67,6 +68,51 @@ def _set_status(db: Session, record: MarketResearch, status: str) -> None:
     record.status = status
     record.updated_at = datetime.now(timezone.utc)
     db.commit()
+
+
+def _fetch_web_context(topic: str, section_name: str, num_results: int = 5) -> str:
+    """
+    Run two targeted SerpAPI queries for this topic+section and return formatted
+    results for injection into the LLM prompt as grounding context.
+    Returns empty string if SERPAPI_KEY is not configured or all queries fail.
+    """
+    if not os.environ.get("SERPAPI_KEY"):
+        logger.info("web search skipped — SERPAPI_KEY not set")
+        return ""
+
+    year = datetime.now(timezone.utc).year
+    queries = [
+        f"{topic} {section_name} {year}",
+        f"{topic} {section_name} statistics data {year}",
+    ]
+
+    seen_urls: set[str] = set()
+    snippets: list[str] = []
+
+    for query in queries:
+        try:
+            results = google_search(query, num_results=num_results)
+            for r in results.get("organic_results", []):
+                url = r.get("link", "")
+                title = r.get("title", "").strip()
+                snippet = r.get("snippet", "").strip()
+                if not snippet or url in seen_urls:
+                    continue
+                seen_urls.add(url)
+                snippets.append(f"**{title}**\n{url}\n> {snippet}")
+        except Exception as exc:
+            logger.warning("web search failed for query '%s': %s", query, exc)
+
+    if not snippets:
+        return ""
+
+    return (
+        "## Live Web Research — Retrieved Now\n"
+        "The following sources were fetched via live web search. "
+        "Cite these directly using [Source: Publication Name, Year] format and "
+        "prioritise them over any training-data knowledge.\n\n"
+        + "\n\n".join(snippets)
+    )
 
 
 def _claude_sync(system: str, user: str, max_tokens: int = 4096) -> str:
@@ -214,8 +260,9 @@ def _decompose_packages(topic: str, session_id: str) -> list[dict]:
     return data.get("packages", [])
 
 
-def _build_package_prompt(package: dict, carry_forward: str = "") -> str:
+def _build_package_prompt(package: dict, carry_forward: str = "", web_context: str = "") -> str:
     sections_list = "\n".join(f"- {s}" for s in package["sections"])
+    web_block = f"\n\n{web_context}" if web_context else ""
     carry = (
         f"\n\nContext already covered in prior sections (do NOT repeat these points):\n"
         f"...{carry_forward}"
@@ -228,7 +275,9 @@ def _build_package_prompt(package: dict, carry_forward: str = "") -> str:
         f"- Use the exact ## section headers listed above\n"
         f"- Provide specific data: named companies, USD figures, CAGR %, market sizes\n"
         f"- Cover every section completely — do not skip or abbreviate any section\n"
-        f"- Minimum 300 words per section{carry}"
+        f"- Minimum 300 words per section"
+        f"{web_block}"
+        f"{carry}"
     )
 
 
@@ -347,7 +396,8 @@ def _run_v2(
 
         logger.info("run_market_research: package %s — %s", pkg_id, package["name"])
 
-        pkg_prompt = _build_package_prompt(package, carry_forward)
+        web_context = _fetch_web_context(topic, package["name"])
+        pkg_prompt = _build_package_prompt(package, carry_forward, web_context)
         llm_prompts = {llm: pkg_prompt for llm in selected}
 
         outcome = run_parallel_research_sync(
@@ -409,8 +459,10 @@ def _build_section_research_prompt(
     ref_context: str,
     system_prompt: str,
     report_config: dict | None = None,
+    web_context: str = "",
 ) -> str:
     """Build the per-section research prompt injected into all LLM calls."""
+    web_block = f"\n\n{web_context}" if web_context else ""
     ref_block = (
         f"\n\n## Already Covered in Prior Sections (do NOT repeat — reference and build on these)\n"
         f"{ref_context}"
@@ -421,6 +473,7 @@ def _build_section_research_prompt(
         f"Research topic context: see system prompt.\n\n"
         f"Section to research: {section['name']}\n\n"
         f"{section['prompt']}"
+        f"{web_block}"
         f"{ref_block}\n\n"
         f"Cross-module instruction: {system_prompt}"
         f"{directives_block}"
@@ -604,9 +657,12 @@ def _run_v3(
         record.research_results = {"version": 3, "sections": section_store}
         db.commit()
 
+        # Fetch live web search results to ground LLMs with current data
+        web_context = _fetch_web_context(topic, section["name"])
+
         # Stage: all LLMs research section in parallel
         research_prompt = _build_section_research_prompt(
-            section, ref_context, session_system_prompt, report_config
+            section, ref_context, session_system_prompt, report_config, web_context
         )
         llm_prompts = {llm: research_prompt for llm in selected}
 

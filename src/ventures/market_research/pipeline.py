@@ -798,9 +798,89 @@ def _build_pdf(record: MarketResearch, output_path: str) -> str:
                         marker_type, content[:80], result.get("error", "unknown"),
                     )
 
+    import re as _re
+
+    from ventures.market_research.registry import SECTORS
+
+    # ── Strip markdown TOC block (V3 embeds it at the top of final_report) ────
+    # We rebuild it as proper HTML with anchor links and JS-estimated page numbers.
+    report_body = report
+    md_toc_names: list[str] = []
+    toc_match = _re.match(
+        r"# Table of Contents\n\n([\s\S]*?)(?=\n\n---\n\n|\Z)", report
+    )
+    if toc_match:
+        for line in toc_match.group(1).strip().splitlines():
+            m = _re.match(r"^\d+\.\s+(.+)$", line.strip())
+            if m:
+                md_toc_names.append(m.group(1).strip())
+        # Remove the TOC block + its trailing separator from the body
+        tail = report[toc_match.end():]
+        report_body = tail[5:] if tail.startswith("\n\n---\n\n") else tail.lstrip()
+
     # ── Convert markdown to HTML ───────────────────────────────────────────────
-    body_html   = markdown_to_html(report, visuals=visuals)
+    body_html   = markdown_to_html(report_body, visuals=visuals)
     critic_html = markdown_to_html(critic) if critic else ""
+
+    # ── Add IDs to <h2> elements so TOC anchor links resolve ─────────────────
+    _slug_seen: dict[str, int] = {}
+
+    def _slugify(text: str) -> str:
+        s = _re.sub(r"[^a-z0-9]+", "-", _re.sub(r"<[^>]+>", "", text).lower()).strip("-")
+        if s in _slug_seen:
+            _slug_seen[s] += 1
+            s = f"{s}-{_slug_seen[s]}"
+        else:
+            _slug_seen[s] = 0
+        return s
+
+    h2_order: list[tuple[str, str]] = []  # [(display_text, anchor_id), ...]
+
+    def _inject_id(m: _re.Match) -> str:
+        inner = m.group(1)
+        plain = _re.sub(r"<[^>]+>", "", inner)
+        hid = "sec-" + _slugify(plain)
+        h2_order.append((plain, hid))
+        return f'<h2 id="{hid}">{inner}</h2>'
+
+    body_html = _re.sub(r"<h2>(.*?)</h2>", _inject_id, body_html, flags=_re.DOTALL)
+
+    # ── Build TOC entry list: prefer MD names (keep order), fall back to h2s ──
+    if md_toc_names and h2_order:
+        toc_entries = [
+            (md_toc_names[i] if i < len(md_toc_names) else h2_order[i][0], h2_order[i][1])
+            for i in range(len(h2_order))
+        ]
+    else:
+        toc_entries = list(h2_order)
+
+    # ── Cover page ────────────────────────────────────────────────────────────
+    sector_key     = record.sector or "business_intelligence"
+    sector_display = SECTORS.get(sector_key, {}).get("display_name", "Market Research")
+
+    cover_html = f"""<div class="cover-page">
+  <div class="cover-brand">Plan B AI Platform</div>
+  <div class="cover-type">{sector_display}</div>
+  <div class="cover-title">{topic}</div>
+  <div class="cover-meta">Generated: {now}</div>
+  <div class="cover-confidential">Confidential &mdash; Internal Use Only</div>
+</div>"""
+
+    # ── TOC page ──────────────────────────────────────────────────────────────
+    toc_rows = "".join(
+        f'<div class="toc-row">'
+        f'<a href="#{hid}" class="toc-label">'
+        f'<span class="toc-num">{i}.</span> {name}</a>'
+        f'<span class="toc-fill"></span>'
+        f'<span class="toc-pg" data-target="{hid}">—</span>'
+        f'</div>\n'
+        for i, (name, hid) in enumerate(toc_entries, 1)
+    )
+    toc_page_html = f"""<div class="toc-page">
+  <h2 class="toc-heading">Table of Contents</h2>
+  <div class="toc-entries">
+{toc_rows}  </div>
+</div>"""
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -904,13 +984,117 @@ def _build_pdf(record: MarketResearch, output_path: str) -> str:
     font-style: italic;
   }}
 
-  /* ── Page chrome ─────────────────────────────────────────────────────────── */
-  .meta {{
-    color: #6b7280;
-    font-size: 0.9em;
-    margin-bottom: 28px;
-    font-family: Helvetica, Arial, sans-serif;
+  /* ── Cover page ─────────────────────────────────────────────────────────── */
+  .cover-page {{
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 90vh;
+    padding: 0 0 60px;
+    page-break-after: always;
   }}
+  .cover-brand {{
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 0.82em;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #3b82f6;
+    margin-bottom: 48px;
+  }}
+  .cover-type {{
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 0.9em;
+    font-weight: 600;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 20px;
+  }}
+  .cover-title {{
+    font-family: Georgia, serif;
+    font-size: 2.4em;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.2;
+    margin: 0 0 48px;
+    max-width: 80%;
+    border-bottom: 4px solid #3b82f6;
+    padding-bottom: 24px;
+  }}
+  .cover-meta {{
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 0.88em;
+    color: #94a3b8;
+    margin-bottom: 12px;
+  }}
+  .cover-confidential {{
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 0.78em;
+    color: #cbd5e1;
+    letter-spacing: 0.05em;
+  }}
+
+  /* ── TOC page ────────────────────────────────────────────────────────────── */
+  .toc-page {{
+    page-break-after: always;
+    padding-top: 12px;
+  }}
+  .toc-heading {{
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 1.15em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #1e3a5f;
+    border-bottom: 3px solid #3b82f6;
+    padding-bottom: 10px;
+    margin-bottom: 28px;
+    margin-top: 0;
+  }}
+  .toc-entries {{ display: table; width: 100%; border-spacing: 0; }}
+  .toc-row {{
+    display: table-row;
+    page-break-inside: avoid;
+  }}
+  .toc-label {{
+    display: table-cell;
+    font-family: Georgia, serif;
+    font-size: 0.97em;
+    color: #1e3a5f;
+    text-decoration: none;
+    padding: 7px 0;
+    white-space: nowrap;
+    padding-right: 8px;
+  }}
+  .toc-label:hover {{ text-decoration: underline; }}
+  .toc-num {{
+    font-weight: 600;
+    margin-right: 6px;
+    color: #3b82f6;
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 0.88em;
+  }}
+  .toc-fill {{
+    display: table-cell;
+    width: 100%;
+    border-bottom: 1.5px dotted #cbd5e1;
+    position: relative;
+    top: -6px;
+  }}
+  .toc-pg {{
+    display: table-cell;
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 0.9em;
+    font-weight: 600;
+    color: #475569;
+    padding: 7px 0 7px 12px;
+    text-align: right;
+    white-space: nowrap;
+  }}
+
+  /* ── Critic appendix ─────────────────────────────────────────────────────── */
   .critic-section {{
     background: #f0fdf4;
     border-left: 4px solid #22c55e;
@@ -932,15 +1116,32 @@ def _build_pdf(record: MarketResearch, output_path: str) -> str:
 </style>
 </head>
 <body>
-<h1>Market Research for {topic}</h1>
-<div class="meta">
-  Generated: {now}
-</div>
+{cover_html}
+{toc_page_html}
 {body_html}
-{{"<div class='critic-section'><h3>Critic Review</h3>" + critic_html + "</div>" if critic_html else ""}}
+{f"<div class='critic-section'><h3>Critic Review</h3>{critic_html}</div>" if critic_html else ""}
 <footer>Confidential &mdash; Generated by Plan B AI Platform</footer>
 </body>
 </html>"""
+
+    # JS that estimates page numbers and fills the TOC placeholders before PDF export.
+    # A4 at 96 dpi with 0.65in top+bottom margins → ~1033px usable height per page.
+    # Page 1 = cover, Page 2 = TOC, content starts at page 3 → offset of 2.
+    _toc_page_js = """
+(function () {
+  var PAGE_H = 1033;
+  var OFFSET = 2;
+  document.querySelectorAll('.toc-pg').forEach(function (el) {
+    var id = el.dataset.target;
+    var target = document.getElementById(id);
+    if (!target) return;
+    var top = 0;
+    var node = target;
+    while (node) { top += node.offsetTop; node = node.offsetParent; }
+    el.textContent = String(OFFSET + Math.ceil(top / PAGE_H));
+  });
+})();
+"""
 
     from playwright.sync_api import sync_playwright
 
@@ -954,6 +1155,7 @@ def _build_pdf(record: MarketResearch, output_path: str) -> str:
         )
         page = browser.new_page()
         page.set_content(html, wait_until="networkidle")
+        page.evaluate(_toc_page_js)
         page.pdf(
             path=str(out),
             print_background=True,

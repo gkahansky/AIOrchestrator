@@ -23,13 +23,14 @@ backwards compatibility.  All pipeline code should import from config.py or here
 # ── Shared instruction appended to every sector system prompt ─────────────────
 
 _ONLINE_SEARCH_INSTRUCTION = (
-    "\n\nRECENT DATA REQUIREMENT — CRITICAL: Do not rely solely on pre-training knowledge. "
-    "You must actively search for and reference recent publications, studies, news, and data "
-    "sources from the last 12-24 months. For every statistic, trend, or claim that may have "
-    "changed recently, state the publication date of the most recent source you found. "
-    "If you cannot find a recent source for a claim, mark it explicitly: "
+    "\n\nRECENT DATA REQUIREMENT — CRITICAL: "
+    "Live web search results are injected into the user prompt under "
+    "'## Live Web Research — Retrieved Now'. Treat these as your PRIMARY sources — "
+    "cite them inline using [Source: Publication Name, Year] format. "
+    "For any claim not covered by the injected results, use the most recent knowledge "
+    "available from your training, but mark any pre-2024 statistic or fact explicitly as: "
     "[Pre-training data — currency unverified, recommend independent verification]. "
-    "Search queries used or sources consulted should be briefly noted where relevant."
+    "Never fabricate URLs, publication names, or statistics."
 )
 
 # ── Product registry ──────────────────────────────────────────────────────────

@@ -87,10 +87,12 @@ Each entry in `SECTORS` has:
 
 ### Online Search Requirement
 
-All sector system prompts include `_ONLINE_SEARCH_INSTRUCTION`, which instructs all LLMs:
-- Do not rely on pre-training data alone
-- Actively search for publications, studies, and data from the last 12-24 months
-- Mark any claim that cannot be verified with a recent source as `[Pre-training data — currency unverified]`
+All sector system prompts include `_ONLINE_SEARCH_INSTRUCTION`. Before each section's LLM calls, `_fetch_web_context()` runs two targeted SerpAPI queries (`"{topic} {section_name} {year}"` and `"{topic} {section_name} statistics data {year}"`), deduplicates results by URL, and injects a `## Live Web Research — Retrieved Now` block directly into the section prompt. LLMs are then instructed to:
+- Treat the injected results as primary sources and cite them inline with `[Source: Publication Name, Year]`
+- Fall back to training knowledge only for claims not covered by the injected results
+- Mark any pre-2024 training-data statistic explicitly as `[Pre-training data — currency unverified]`
+
+Graceful degradation: if `SERPAPI_KEY` is not set or all queries fail, `_fetch_web_context()` returns `""` and the pipeline continues without web context.
 
 ---
 
@@ -183,9 +185,10 @@ The future standalone website (not EchoForge.biz) POSTs to the same API with API
 | Phase | Goal | Status |
 |---|---|---|
 | Phase 1 | Report format controls (depth/style/framework/citation) for BI sector | ✅ built |
-| Phase 2 | New sectors: Academic, Product Discovery, Legal, Medical; online_explainer style; online search instruction; page-count depth estimates | ✅ built |
-| Phase 3 | External website order surface (API-key auth, webhook callback) | 🔲 planned |
-| Phase 4 | URL + PDF data ingestion as research source; whitepaper depth (50+ pages) | 🔲 planned |
+| Phase 2 | New sectors: Academic, Product Discovery, Legal, Medical; online_explainer style; page-count depth estimates | ✅ built |
+| Phase 3 | Live SerpAPI web search injected per section — real current sources replace training-data-only citations | ✅ built |
+| Phase 4 | External website order surface (API-key auth, webhook callback) | 🔲 planned |
+| Phase 5 | URL + PDF data ingestion as research source; whitepaper depth (50+ pages) | 🔲 planned |
 
 ---
 
@@ -200,6 +203,7 @@ A session uses V3 when `record.section_config` is not null. The `section_config`
 [User selects sections + edits prompts] → saved as section_config
          ↓
 [For each enabled section (sequential)]:
+    pre-fetch:   2 SerpAPI queries for topic+section → injected as live web context block
     drafting:    All selected LLMs research section in parallel (8192 tokens each)
     merging:     Level-1 merge of LLM outputs (same as _merge_package)
     reviewing_1: Critic checks (a) required_items present? (b) every quantitative claim cited?
@@ -332,7 +336,8 @@ V3 sessions are resumed by skipping sections whose status is already `"done"` or
 | Function | Purpose |
 |---|---|
 | `_run_v3(record, db, session_id, topic, selected)` | Outer loop over enabled sections |
-| `_build_section_research_prompt(section, ref_context, system_prompt)` | Builds per-section LLM prompt with reference context + cross-module instructions |
+| `_fetch_web_context(topic, section_name)` | Runs 2 SerpAPI queries and returns formatted live-search block; returns `""` if SERPAPI_KEY absent |
+| `_build_section_research_prompt(section, ref_context, system_prompt, report_config, web_context)` | Builds per-section LLM prompt with live web context, reference context, and cross-module instructions |
 | `_merge_section(topic, section, llm_results)` | Level-1 merge of all LLM outputs for one section |
 | `_critic_section(section, draft)` | Runs critic against required_items + citation check → returns verdict dict |
 | `_fill_section_gaps(topic, section, draft, critic_result)` | Author pass: appends targeted improvements |
@@ -436,6 +441,7 @@ Same as V2 — Qdrant-backed, injected into section prompts if documents uploade
 | V2 agentic work-package pipeline | ✅ live | Backwards compat |
 | V1 rerun mode | ✅ live | Backwards compat |
 | Critic/reflection (V3) | ✅ built | Per-section; checks required_items + citations; 2 rounds max; disclaimer fallback |
+| Live web search pre-fetch (V3 + V2) | ✅ live | `_fetch_web_context()` fires 2 SerpAPI queries per section before LLM dispatch; injects current snippets as grounding context; graceful degradation if SERPAPI_KEY absent |
 | Citation enforcement | ✅ built | Inline `[Source: ...]` tags; citations appendix in final doc |
 | Reference context (cross-module) | ✅ built | 2-sentence summaries passed to each subsequent section |
 | Executive Summary | ✅ built | Generated post-loop from per-section key_takeaways; inserted first in assembled doc |

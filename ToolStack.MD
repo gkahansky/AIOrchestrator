@@ -24,7 +24,7 @@ Complete inventory of every third-party tool, service, API, and library used acr
 | **Google OAuth 2.0** (`google-auth`, `google-auth-oauthlib`) | User-level Drive auth (5TB quota) | Preferred auth method at runtime; materialised from `GOOGLE_DRIVE_TOKEN_JSON` env var on Railway startup |
 | **Google Service Account** (`google-auth`) | Fallback Drive auth | Used when OAuth token is not configured; limited to 15GB service account quota |
 | **Google Identity Services** | Web app login | Google OAuth login for the management console (`planBadmin.com`) |
-| **SerpAPI** | Google Search + Trends proxy | Etsy theme research (demand/competition scoring), competitor price monitoring, keyword trend analysis; outreach fallback for LinkedIn, IndieHackers, Instagram (`site:` searches) |
+| **SerpAPI** | Google Search + Trends proxy | Etsy theme research (demand/competition scoring), competitor price monitoring, keyword trend analysis; outreach fallback for LinkedIn, IndieHackers, Instagram (`site:` searches); Market Research live section pre-fetch (`_fetch_web_context` — 2 queries per section, injects current web snippets into LLM prompts) |
 | **YouTube Data API v3** (REST via `requests`) | Video search + comment discovery | Cold Outreach lead discovery — `search.list` finds relevant videos by keyword, `commentThreads.list` extracts top comments as high-intent lead signals. `YOUTUBE_API_KEY` required. |
 
 ---

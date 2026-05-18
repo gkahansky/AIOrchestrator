@@ -828,3 +828,11 @@ export async function cloneResearchSession(sessionId: string): Promise<MarketRes
   })
   return handleResponse<MarketResearchSession>(res)
 }
+
+export async function abortResearchSession(sessionId: string): Promise<MarketResearchSession> {
+  const res = await fetch(`${BASE}/api/ventures/market-research/sessions/${sessionId}/abort`, {
+    method: "POST",
+    headers: getHeaders(),
+  })
+  return handleResponse<MarketResearchSession>(res)
+}

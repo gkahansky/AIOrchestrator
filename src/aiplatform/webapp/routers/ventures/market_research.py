@@ -500,3 +500,36 @@ def clone_session(
     db.commit()
 
     return _to_summary(new_record)
+
+
+@router.post("/sessions/{session_id}/abort", status_code=status.HTTP_200_OK)
+def abort_session(
+    session_id: str,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_auth),
+) -> ResearchSummary:
+    """Stop a running session immediately. Revokes the Celery task and marks status as aborted."""
+    try:
+        record_id = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+
+    record = db.get(MarketResearch, record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    _ABORTABLE = {"pending", "optimizing", "researching", "merging", "reflecting", "reviewing_1", "reviewing_2", "generating_pdf"}
+    if record.status not in _ABORTABLE:
+        raise HTTPException(status_code=400, detail=f"Session cannot be aborted in status: {record.status}")
+
+    # Revoke the Celery task — terminate=True sends SIGTERM to the worker process
+    if record.celery_task_id:
+        from celery.app.control import Control
+        from aiplatform.worker import celery_app
+        Control(celery_app).revoke(record.celery_task_id, terminate=True)
+
+    record.status = "aborted"
+    record.error = "Aborted by user"
+    db.commit()
+    db.refresh(record)
+    return _to_summary(record)

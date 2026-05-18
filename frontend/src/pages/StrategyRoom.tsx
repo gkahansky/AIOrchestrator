@@ -13,11 +13,11 @@ import {
   triggerAdvisor, chatWithAdvisors,
   fetchAvailableLlms, createMarketResearchSession, uploadResearchDocs,
   fetchMarketResearchSessions, fetchMarketResearchSession, rerunResearchSession,
-  retryResearchSession, cloneResearchSession, fetchSectionLibrary, fetchSectionDetail,
+  retryResearchSession, cloneResearchSession, abortResearchSession, fetchSectionLibrary, fetchSectionDetail,
   fetchResearchHistory, fetchSectorLibrary, fetchProducts,
 } from "../api"
 import type {
-  MarketResearchDetail, V2OptimizedPrompts,
+  MarketResearchDetail,
   SectionLibraryEntry, SectionConfigEntry, SectionConfig,
   V3ResearchResults, V3SectionStatus, SectionDetail,
   MarketResearchHistory,
@@ -1623,6 +1623,7 @@ const MR_STATUS_LABELS: Record<string, string> = {
   delivering:     "Delivering…",
   delivered:      "Delivered",
   failed:         "Failed",
+  aborted:        "Aborted",
   // V3 section-level
   drafting:       "Drafting…",
   reviewing_1:    "Critic round 1…",
@@ -1632,12 +1633,14 @@ const MR_STATUS_LABELS: Record<string, string> = {
 }
 
 function MrStatusBadge({ status }: { status: string }) {
-  const active = ["optimizing","researching","merging","reflecting","generating_pdf","delivering"].includes(status)
-  const done   = ["pdf_ready","delivered"].includes(status)
-  const failed = status === "failed"
-  const cls = active ? "bg-blue-100 text-blue-700 animate-pulse"
+  const active   = ["optimizing","researching","merging","reflecting","generating_pdf","delivering"].includes(status)
+  const done     = ["pdf_ready","delivered"].includes(status)
+  const failed   = status === "failed"
+  const aborted  = status === "aborted"
+  const cls = active  ? "bg-blue-100 text-blue-700 animate-pulse"
              : done   ? "bg-green-100 text-green-700"
              : failed ? "bg-red-100 text-red-700"
+             : aborted? "bg-orange-100 text-orange-700"
              :          "bg-gray-100 text-gray-600"
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${cls}`}>
@@ -2139,9 +2142,10 @@ function SessionDetailDrawer({
   session,
   isLoading,
   onClose,
-  onRerun,
+  onRerun: _onRerun,
   onRetry,
   onClone,
+  onAbort,
 }: {
   session: MarketResearchDetail | null
   isLoading: boolean
@@ -2149,14 +2153,16 @@ function SessionDetailDrawer({
   onRerun: (topic: string, prompts: Record<string, string>, selectedLlms: string[], criticLlm: string) => void
   onRetry: () => void
   onClone: () => void
+  onAbort: () => void
 }) {
   const [tab, setTab] = useState<"report" | "sections" | "citations" | "critic" | "history">("report")
   const [retrying, setRetrying] = useState(false)
   const [cloning, setCloning] = useState(false)
+  const [aborting, setAborting] = useState(false)
+  const [confirmAbort, setConfirmAbort] = useState(false)
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
 
   const isV3 = !!session?.section_config
-  const isV2 = !isV3 && (session?.optimized_prompts as V2OptimizedPrompts | null)?.version === 2
 
   const { data: history, isLoading: historyLoading } = useQuery<MarketResearchHistory>({
     queryKey: ["mrHistory", session?.id],
@@ -2362,6 +2368,44 @@ function SessionDetailDrawer({
                 {retrying ? "Retrying..." : "Retry Now"}
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Abort — actively running sessions */}
+        {session && !["failed", "aborted", "pdf_ready", "delivering", "delivered"].includes(session.status) && !canRetry && (
+          <div className="shrink-0 px-6 py-4 border-t border-red-100 bg-red-50/60 rounded-b-2xl flex items-center justify-between gap-3">
+            {confirmAbort ? (
+              <>
+                <p className="text-xs text-red-700 font-medium">Stop this research session? Progress will be lost.</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setConfirmAbort(false)}
+                    className="px-3 py-1.5 text-xs rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 transition-colors">
+                    Cancel
+                  </button>
+                  <button
+                    disabled={aborting}
+                    onClick={async () => {
+                      setAborting(true)
+                      try { await onAbort(); onClose() } finally { setAborting(false) }
+                    }}
+                    className="px-3 py-1.5 text-xs rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700 disabled:opacity-50 transition-colors flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm">stop_circle</span>
+                    {aborting ? "Aborting..." : "Yes, Abort"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-gray-500">Research is in progress — you can stop it at any time.</p>
+                <button
+                  onClick={() => setConfirmAbort(true)}
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-red-300 text-red-600 font-medium hover:bg-red-50 transition-colors">
+                  <span className="material-symbols-outlined text-sm">stop_circle</span>
+                  Abort
+                </button>
+              </>
+            )}
           </div>
         )}
 
@@ -2833,6 +2877,11 @@ export function MarketResearchTab({ initialSessionId }: { initialSessionId?: str
             const sess = await cloneResearchSession(detailId!)
             queryClient.invalidateQueries({ queryKey: ["market-research-sessions"] })
             setPollingId(sess.id)
+          }}
+          onAbort={async () => {
+            await abortResearchSession(detailId!)
+            queryClient.invalidateQueries({ queryKey: ["market-research-sessions"] })
+            queryClient.invalidateQueries({ queryKey: ["market-research-session", detailId] })
           }}
         />
       )}

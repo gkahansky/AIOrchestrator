@@ -223,3 +223,4 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-05-17 18:13 |  | 52505a7 | feat(market-research): structured PDF layout — cover page (p.1), TOC with JS-estimated page numbers (p.2), content from p.3 |
 | 2026-05-17 18:19 |  | 1d278ab | merge: resolve StrategyRoom conflict — keep Rerun from Scratch button, drop prompts tab footer |
 | 2026-05-17 19:18 |  | 9111685 | fix(market-research): improve recency of web-grounded sources — 3 SerpAPI passes, date field in snippets, recency filter, news search, raised staleness threshold to pre-2025 |
+| 2026-05-19 00:00 |  | 5693479 | feat(accessibility-audit): enforce URL/email domain match — Pydantic model_validator in backend + client-side guard in admin frontend reject orders where customer email domain differs from target website domain |

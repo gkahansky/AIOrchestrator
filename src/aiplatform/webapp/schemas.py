@@ -8,7 +8,9 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from urllib.parse import urlparse
+
+from pydantic import BaseModel, Field, model_validator
 
 
 # ── Shared ─────────────────────────────────────────────────────────────────────
@@ -239,4 +241,24 @@ class AccessibilityAuditRequest(BaseModel):
     is_bundled: bool | None = False
     is_testing: bool | None = False
     tier: str = Field("standard", pattern="^(single_page|sample|standard|premium)$")
+
+    @model_validator(mode="after")
+    def email_domain_matches_url(self) -> "AccessibilityAuditRequest":
+        email = self.client_email or self.client_id
+        if not email or "@" not in email:
+            return self
+        try:
+            url_host = urlparse(self.url).hostname or ""
+            url_domain = url_host.removeprefix("www.")
+            email_domain = email.split("@", 1)[1].lower()
+            if url_domain.lower() != email_domain:
+                raise ValueError(
+                    f"Email domain '{email_domain}' must match the website domain '{url_domain}'. "
+                    "The audit can only be ordered for a domain you have access to."
+                )
+        except ValueError:
+            raise
+        except Exception:
+            pass
+        return self
 

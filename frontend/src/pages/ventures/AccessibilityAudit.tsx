@@ -78,9 +78,36 @@ function NewOrder({ onSuccess }: { onSuccess: () => void }) {
     onError: (err: any) => setErrorMsg(err.message || String(err)),
   })
 
+  function getUrlDomain(rawUrl: string): string {
+    try {
+      const host = new URL(rawUrl).hostname
+      return host.replace(/^www\./, "").toLowerCase()
+    } catch {
+      return ""
+    }
+  }
+
+  function getEmailDomain(email: string): string {
+    const parts = email.split("@")
+    return parts.length === 2 ? parts[1].toLowerCase() : ""
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setErrorMsg("")
+
+    if (clientEmail) {
+      const urlDomain = getUrlDomain(url)
+      const emailDomain = getEmailDomain(clientEmail)
+      if (urlDomain && emailDomain && urlDomain !== emailDomain) {
+        setErrorMsg(
+          `Email domain "${emailDomain}" must match the website domain "${urlDomain}". ` +
+          "The audit can only be ordered for a domain you have access to."
+        )
+        return
+      }
+    }
+
     submitMut.mutate({
       url,
       tier,
@@ -128,7 +155,9 @@ function NewOrder({ onSuccess }: { onSuccess: () => void }) {
         </div>
 
         <div>
-           <label className="block text-sm font-label font-bold text-on-surface mb-1">Client Email (Optional)</label>
+           <label className="block text-sm font-label font-bold text-on-surface mb-1">
+             Client Email <span className="text-on-surface-variant font-normal">(Optional — must share the same domain as the target URL)</span>
+           </label>
            <input
              type="email"
              value={clientEmail}

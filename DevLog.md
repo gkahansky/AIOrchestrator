@@ -225,3 +225,4 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-05-17 19:18 |  | 9111685 | fix(market-research): improve recency of web-grounded sources — 3 SerpAPI passes, date field in snippets, recency filter, news search, raised staleness threshold to pre-2025 |
 | 2026-05-19 00:00 |  | 5693479 | feat(accessibility-audit): enforce URL/email domain match — Pydantic model_validator in backend + client-side guard in admin frontend reject orders where customer email domain differs from target website domain |
 | 2026-05-19 00:05 |  | (merge) | merge to main + add prompts/echoforge-accessibility-domain-match.md for echoforge.biz implementation |
+| 2026-05-20 00:00 |  | d7af2b5 | Add clone campaign button — POST /campaigns/{id}/clone copies all config fields and sources into a new draft campaign; frontend Clone button auto-selects the new campaign |

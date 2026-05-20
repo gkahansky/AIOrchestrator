@@ -619,7 +619,7 @@ function DraftCard({ draft, onUpdate }: { draft: any; onUpdate: () => void }) {
 
 const SEARCH_TIMEOUT_MS = 120_000
 
-function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDeleted: () => void }) {
+function CampaignDetail({ campaignId, onDeleted, onCloned }: { campaignId: string; onDeleted: () => void; onCloned: (id: string) => void }) {
   const qc = useQueryClient()
   const { data: campaign, isLoading } = useCampaign(campaignId)
   const [searchingLeads, setSearchingLeads] = useState(false)
@@ -631,6 +631,7 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
   const [showFindLeads, setShowFindLeads] = useState(false)
   const [showAddSource, setShowAddSource] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [cloning, setCloning] = useState(false)
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevLeadCountRef = useRef<number>(0)
   const stableCountSinceRef = useRef<number | null>(null)
@@ -679,6 +680,22 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
     await fetch(`${API}/api/outreach/campaigns/${campaignId}`, { method: "DELETE", headers: authHeader() })
     qc.invalidateQueries({ queryKey: ["campaigns"] })
     onDeleted()
+  }
+
+  async function cloneCampaign() {
+    setCloning(true)
+    try {
+      const r = await fetch(`${API}/api/outreach/campaigns/${campaignId}/clone`, {
+        method: "POST",
+        headers: authHeader(),
+      })
+      if (!r.ok) { const e = await r.json(); alert(e.detail || "Failed to clone campaign"); return }
+      const cloned = await r.json()
+      qc.invalidateQueries({ queryKey: ["campaigns"] })
+      onCloned(cloned.id)
+    } finally {
+      setCloning(false)
+    }
   }
 
   async function patchCampaign(patch: any) {
@@ -826,6 +843,11 @@ function CampaignDetail({ campaignId, onDeleted }: { campaignId: string; onDelet
                 className="flex items-center gap-1.5 px-3 py-2 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity">
                 <span className="material-symbols-outlined text-[14px]">send</span>
                 {actionLoading === "send" ? "Sending…" : "Send Approved"}
+              </button>
+              <button onClick={cloneCampaign} disabled={cloning || !!actionLoading}
+                className="flex items-center gap-1.5 px-3 py-2 bg-surface-container text-on-surface text-xs font-label font-semibold rounded-lg hover:bg-surface-dim disabled:opacity-50 transition-colors">
+                <span className="material-symbols-outlined text-[14px]">content_copy</span>
+                {cloning ? "Cloning…" : "Clone"}
               </button>
               <button onClick={deleteCampaign} disabled={deleting}
                 className="flex items-center gap-1.5 px-3 py-2 border border-error/30 text-error text-xs font-label font-semibold rounded-lg hover:bg-error-container disabled:opacity-50 transition-colors">
@@ -1437,7 +1459,7 @@ export default function Marketing() {
             {/* Detail */}
             <div className="lg:col-span-8">
               {selectedCampaignId ? (
-                <CampaignDetail campaignId={selectedCampaignId} onDeleted={() => setSelectedCampaignId(null)} />
+                <CampaignDetail campaignId={selectedCampaignId} onDeleted={() => setSelectedCampaignId(null)} onCloned={id => setSelectedCampaignId(id)} />
               ) : (
                 <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-12 text-center">
                   <span className="material-symbols-outlined text-[48px] text-on-surface-variant/20 block mb-4">campaign</span>

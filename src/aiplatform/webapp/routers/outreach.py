@@ -4,6 +4,7 @@ Outreach router — persona-driven campaign management + unified contact CRM.
 Endpoints:
   GET/POST        /api/outreach/campaigns
   GET/PATCH/DELETE /api/outreach/campaigns/{id}
+  POST            /api/outreach/campaigns/{id}/clone
   PATCH           /api/outreach/campaigns/{id}/schedule
   POST            /api/outreach/campaigns/{id}/generate-prompt
   POST            /api/outreach/campaigns/{id}/find-leads
@@ -439,6 +440,45 @@ def delete_campaign(
     c = _campaign_or_404(campaign_id, db)
     db.delete(c)
     db.commit()
+
+
+@router.post("/campaigns/{campaign_id}/clone", status_code=status.HTTP_201_CREATED)
+def clone_campaign(
+    campaign_id: str, _: str = Depends(require_auth), db=Depends(get_db),
+) -> dict:
+    original = _campaign_or_404(campaign_id, db)
+    cloned = OutreachCampaign(
+        venture=original.venture,
+        name=f"{original.name} (Copy)",
+        goal=original.goal,
+        status="draft",
+        platform=original.platform,
+        personas=original.personas,
+        target_prompt=original.target_prompt,
+        user_search_instructions=original.user_search_instructions,
+        auto_search_enabled=False,
+        search_interval_hours=original.search_interval_hours,
+        use_mock_leads=original.use_mock_leads,
+        dry_run=original.dry_run,
+    )
+    db.add(cloned)
+    db.flush()
+
+    for src in original.sources:
+        db.add(CampaignSource(
+            campaign_id=cloned.id,
+            platform=src.platform,
+            name=src.name,
+            keywords=src.keywords,
+            config=src.config,
+            enabled=src.enabled,
+        ))
+
+    db.commit()
+    db.refresh(cloned)
+    result = _campaign_to_dict(cloned, db)
+    result["sources"] = [_source_to_dict(s) for s in cloned.sources]
+    return result
 
 
 # ── Sources endpoints ─────────────────────────────────────────────

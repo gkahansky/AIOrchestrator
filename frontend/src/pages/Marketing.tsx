@@ -707,6 +707,19 @@ function CampaignDetail({ campaignId, onDeleted, onCloned }: { campaignId: strin
     qc.invalidateQueries({ queryKey: ["campaign", campaignId] })
   }
 
+  async function patchSchedule(intervalHours: number | null) {
+    await fetch(`${API}/api/outreach/campaigns/${campaignId}/schedule`, {
+      method: "PATCH",
+      headers: { ...authHeader(), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        auto_search_enabled: intervalHours !== null,
+        search_interval_hours: intervalHours,
+      }),
+    })
+    qc.invalidateQueries({ queryKey: ["campaign", campaignId] })
+    qc.invalidateQueries({ queryKey: ["campaigns"] })
+  }
+
   async function patchSource(id: string, patch: any) {
     await fetch(`${API}/api/outreach/sources/${id}`, {
       method: "PATCH",
@@ -827,6 +840,20 @@ function CampaignDetail({ campaignId, onDeleted, onCloned }: { campaignId: strin
                     className="w-3.5 h-3.5 accent-violet-600" />
                   <span className="text-xs font-label text-on-surface">Dry-run sends</span>
                 </label>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-outline-variant/10">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[11px]">schedule</span>Search Schedule
+                </span>
+                {SEARCH_INTERVALS.map(opt => {
+                  const current = campaign.auto_search_enabled ? campaign.search_interval_hours ?? null : null
+                  return (
+                    <button key={String(opt.value)} onClick={() => patchSchedule(opt.value)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-label font-semibold border transition-colors ${current === opt.value ? "border-primary bg-primary/5 text-primary" : "border-outline-variant/20 text-on-surface-variant hover:border-primary/30"}`}>
+                      {opt.label}
+                    </button>
+                  )
+                })}
               </div>
             </div>
             <div className="flex flex-wrap items-start gap-2">

@@ -227,3 +227,4 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-05-19 00:05 |  | (merge) | merge to main + add prompts/echoforge-accessibility-domain-match.md for echoforge.biz implementation |
 | 2026-05-20 00:00 |  | d7af2b5 | Add clone campaign button — POST /campaigns/{id}/clone copies all config fields and sources into a new draft campaign; frontend Clone button auto-selects the new campaign |
 | 2026-05-23 00:00 |  | 98894f3 | Add search schedule editor to campaign detail header — wires the existing /campaigns/{id}/schedule PATCH endpoint to a UI interval selector so the schedule can be changed (or set to manual) after creation |
+| 2026-05-23 00:10 |  | (merge) | Merge campaign-publication-workflow to main; document post-creation schedule editing in root CLAUDE.md outreach section |

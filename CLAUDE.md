@@ -147,6 +147,8 @@ The Cold Outreach system is a **platform-level feature** (not a venture). It is 
 | `run_send_approved_drafts(campaign_id)` | Manual (UI) | Sends all `approved` drafts; enforces spam guard (30-day cooldown + unsubscribe check); upserts Contacts |
 | `run_scheduled_searches()` | Celery Beat every 30 min | Finds campaigns with `auto_search_enabled=True` and `next_search_at ≤ now`; fires `run_find_leads` + `run_compose_pending`; advances `next_search_at` |
 
+**Search schedule:** the auto-search interval (manual / 6h / daily / weekly) is set at creation and can be changed afterwards from the campaign detail view, which calls `PATCH /api/outreach/campaigns/{id}/schedule`. Selecting "manual" disables auto-search and clears `next_search_at`.
+
 **Human review gate:** drafts start as `pending_review`. The operator approves (optionally editing subject/body), rejects, or bulk-approves from the Drafts tab. `run_send_approved_drafts` only processes `approved` status. No auto-send path exists.
 
 **API router** — `src/aiplatform/webapp/routers/outreach.py`:

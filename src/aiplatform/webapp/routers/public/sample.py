@@ -47,6 +47,29 @@ def _check_rate_limit(email: str, venture: str, db) -> None:
             )
 
 
+def _ingest_sample_contact(email: str, venture: str) -> None:
+    """Upsert the requester into the CRM at the `sample` stage. CRM module (H-11).
+
+    Uses its own session (the request's get_db session is not committed for the
+    podcast/audit flows). Blocks suppressed/unsubscribed emails with a 403 — a
+    sample is an email, so we must not send one to someone who has opted out.
+    """
+    from aiplatform.database.crm_ops import upsert_contact, ContactSuppressed
+    try:
+        upsert_contact(
+            email=email,
+            lifecycle_stage="sample",
+            primary_source=f"sample_{venture}",
+            venture=venture,
+            block_if_suppressed=True,
+        )
+    except ContactSuppressed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This email address has opted out and cannot receive samples.",
+        )
+
+
 def _upload_audio_to_drive(file: UploadFile, order_id: str) -> tuple[str, str]:
     """
     Save uploaded file to a temp path, upload to Drive, return (drive_file_id, suffix).
@@ -87,6 +110,7 @@ async def request_podcast_sample(
     One request per email per 24 hours.
     """
     _check_rate_limit(email, "content_studio", db)
+    _ingest_sample_contact(email, "content_studio")
 
     order_id = f"sample-pod-{uuid.uuid4().hex[:10]}"
     use_demo = audio is None or not audio.filename
@@ -172,6 +196,7 @@ def request_audit_sample(
         url = "https://" + url
 
     _check_rate_limit(email, "marketing_audit", db)
+    _ingest_sample_contact(email, "marketing_audit")
 
     order_id = f"sample-aud-{uuid.uuid4().hex[:10]}"
     order: dict = {
@@ -215,6 +240,7 @@ def request_accessibility_sample(
         url = "https://" + url
 
     _check_rate_limit(email, "accessibility_audit", db)
+    _ingest_sample_contact(email, "accessibility_audit")
 
     order_id = f"sample-acc-{uuid.uuid4().hex[:10]}"
     audit_id = str(uuid.uuid4())

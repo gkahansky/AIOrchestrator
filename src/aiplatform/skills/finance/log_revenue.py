@@ -54,6 +54,20 @@ def log_revenue(
             db.add(event)
             db.flush()
             event_id = event.id
+
+            # CRM ingestion (H-11): propagate revenue to the contact's lifetime
+            # value and advance customer→repeat. Looked up via the parent job's
+            # client_email. Best-effort — never fails the revenue write.
+            if parsed_job_id is not None:
+                try:
+                    from aiplatform.database.models import Job
+                    from aiplatform.database.crm_ops import add_revenue_to_contact
+                    job = db.get(Job, parsed_job_id)
+                    email = (job.input_data or {}).get("client_email") if job else None
+                    if email:
+                        add_revenue_to_contact(email, int(round(net_usd * 100)), db=db)
+                except Exception as exc:
+                    print(f"[log_revenue] CRM LTV propagation skipped: {exc}")
         return {
             "logged": True,
             "venture": venture,

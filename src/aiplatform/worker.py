@@ -918,7 +918,9 @@ def run_nurture_email(self, email: str, service: str, order_id: str, day: int) -
                     "<p>— EchoForge</p>"
                 )
 
-        result_send = send_email(to=email, subject=subject, body_html=body)
+        result_send = send_email(to=email, subject=subject, body_html=body, consent_type="marketing")
+        if isinstance(result_send, dict) and result_send.get("suppressed"):
+            return {"email": email, "service": service, "day": day, "status": "suppressed"}
         venture_map = {"podcast": "content_studio", "accessibility": "accessibility_audit"}
         log_contact_message(
             email=email,
@@ -1002,6 +1004,7 @@ def run_weekly_digest(self) -> dict:
                 to=recipient,
                 subject=f"{label} Weekly — {d['jobs']} jobs · ${d['revenue']:.2f}",
                 body_html=body,
+                skip_suppression=True,  # internal operator digest — never drop
             )
             emails_sent.append(f"{label} → {recipient}")
 
@@ -1019,6 +1022,7 @@ def run_weekly_digest(self) -> dict:
                 to=platform_email,
                 subject=f"Platform Weekly — {total_jobs} jobs · ${total_revenue:.2f} revenue",
                 body_html=body,
+                skip_suppression=True,  # internal operator digest — never drop
             )
             emails_sent.append(f"Platform → {platform_email}")
 
@@ -1261,11 +1265,14 @@ def run_find_leads(
             ).all()
         }
 
+        import logging as _logging
+        from aiplatform.database.crm_ops import upsert_contact
+
         new_count = 0
         for lead_data in raw_leads:
             if lead_data.get("source_url") in existing_urls:
                 continue
-            db.add(Lead(
+            lead = Lead(
                 venture=lead_data["venture"],
                 source_channel=lead_data["source_channel"],
                 source_url=lead_data.get("source_url"),
@@ -1280,7 +1287,29 @@ def run_find_leads(
                 intent_score=lead_data.get("intent_score"),
                 status="new",
                 campaign_id=campaign_uuid,
-            ))
+            )
+            db.add(lead)
+            db.flush()
+
+            # CRM ingestion (H-11): promote the lead to a unified Contact and link it.
+            email = lead_data.get("email")
+            username = lead_data.get("platform_username")
+            if email or username:
+                try:
+                    usernames = {lead_data["source_channel"]: username} if username else None
+                    contact = upsert_contact(
+                        email=email,
+                        usernames=usernames,
+                        name=lead_data.get("name"),
+                        lifecycle_stage="lead",
+                        primary_source=f"outreach_{lead_data['source_channel']}",
+                        venture=lead_data["venture"],
+                        db=db,
+                    )
+                    lead.contact_id = contact.id
+                except Exception:
+                    _logging.getLogger(__name__).exception(
+                        "CRM upsert failed for lead %s", lead_data.get("source_url"))
             new_count += 1
 
         db.commit()
@@ -1411,10 +1440,8 @@ def run_send_approved_drafts(self, campaign_id: str) -> dict:
                     continue
                 contact = db.query(Contact).filter(Contact.email == lead.email).first()
                 if contact:
-                    if contact.status == "unsubscribed":
-                        lead.status = "unsubscribed"
-                        skipped_spam += 1
-                        continue
+                    # Unsubscribed / erased / do-not-contact suppression is now enforced
+                    # centrally inside send_email (CRM module H-11). Keep only the cooldown.
                     if contact.last_activity_at and (now - contact.last_activity_at).days < cooldown_days:
                         skipped_spam += 1
                         continue
@@ -1435,8 +1462,13 @@ def run_send_approved_drafts(self, campaign_id: str) -> dict:
                     subject=draft.subject or f"Quick question about your {campaign.venture.replace('_', ' ')}",
                     body_html=body_html,
                     body_text=body_text,
+                    consent_type="outreach",
                 )
                 if result.get("error"):
+                    continue
+                if result.get("suppressed"):
+                    lead.status = "unsubscribed"
+                    skipped_spam += 1
                     continue
                 message_id = result.get("message_id", "")
             else:
@@ -1458,24 +1490,28 @@ def run_send_approved_drafts(self, campaign_id: str) -> dict:
             lead.status = "email_sent"
             sent_count += 1
 
-            # Upsert Contact
+            # CRM ingestion (H-11): record the outreach on the unified Contact.
             if lead.email:
-                contact = db.query(Contact).filter(Contact.email == lead.email).first()
-                if contact:
-                    contact.last_activity_at = now
-                    ventures = list(contact.ventures_approached or [])
-                    if campaign.venture not in ventures:
-                        ventures.append(campaign.venture)
-                        contact.ventures_approached = ventures
-                    if contact.status not in ("unsubscribed", "purchased", "inquired"):
-                        contact.status = "approached"
-                else:
-                    db.add(Contact(
-                        email=lead.email, name=lead.name, company=lead.company,
-                        website_url=lead.website_url, status="approached",
-                        ventures_approached=[campaign.venture],
-                        last_activity_at=now,
-                    ))
+                from aiplatform.database.crm_ops import upsert_contact
+                from aiplatform.database.models import ContactMessage
+                contact = upsert_contact(
+                    email=lead.email,
+                    name=lead.name,
+                    lifecycle_stage="lead",
+                    primary_source=f"outreach_{campaign.platform}",
+                    venture=campaign.venture,
+                    db=db,
+                )
+                if lead.contact_id is None:
+                    lead.contact_id = contact.id
+                db.add(ContactMessage(
+                    contact_id=contact.id,
+                    venture=campaign.venture,
+                    message_type="outreach",
+                    subject=draft.subject or "Outreach",
+                    body_snippet=(draft.message_body or "")[:200],
+                    message_id=message_id,
+                ))
 
         db.commit()
         return {"campaign_id": campaign_id, "sent": sent_count,
@@ -1637,10 +1673,14 @@ def run_send_outreach(self, campaign_id: str, lead_ids: list | None = None, temp
                 subject=template.subject,
                 body_html=body_html,
                 body_text=body_text,
+                consent_type="outreach",
             )
 
             if result.get("error"):
                 continue  # keep lead as "new" for retry
+            if result.get("suppressed"):
+                lead.status = "unsubscribed"
+                continue
 
             # Record the send
             send_record = OutreachSend(

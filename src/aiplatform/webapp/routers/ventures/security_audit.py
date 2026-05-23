@@ -162,6 +162,11 @@ def create_security_audit_order(
     db.commit()
     db.refresh(job)
 
+    # CRM ingestion (H-11): record the paying customer (skips when testing/empty).
+    from aiplatform.database.crm_ops import ingest_customer
+    if not req.is_testing:
+        ingest_customer(req.client_email or None, "security_audit")
+
     # Send scope verification email — best-effort, never block order creation
     try:
         _send_scope_verification_email(

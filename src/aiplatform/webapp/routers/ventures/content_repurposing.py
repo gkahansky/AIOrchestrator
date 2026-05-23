@@ -251,6 +251,10 @@ async def create_cr_job(
     db.add(job)
     db.commit()
 
+    # CRM ingestion (H-11): record the paying customer.
+    from aiplatform.database.crm_ops import ingest_customer
+    ingest_customer(client_email or None, "content_repurposing")
+
     from aiplatform.worker import run_cr_job
     task = run_cr_job.delay(str(job_id), order)
 

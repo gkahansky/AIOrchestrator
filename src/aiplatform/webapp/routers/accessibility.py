@@ -51,6 +51,11 @@ def initiate_scan(request: AccessibilityAuditRequest, db: Session = Depends(get_
     db.refresh(new_job)
     job_id = str(new_job.id)
 
+    # CRM ingestion (H-11): record the paying customer (skips when testing/empty).
+    from aiplatform.database.crm_ops import ingest_customer
+    if not request.is_testing:
+        ingest_customer(client_email or None, "accessibility_audit")
+
     # Log cost (compute/server time estimate) 
     # Log revenue if not a demo test and not already bundled into Marketing Audit's revenue
     if not request.is_testing:

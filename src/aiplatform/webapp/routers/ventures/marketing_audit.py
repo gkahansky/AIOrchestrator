@@ -48,6 +48,10 @@ def create_audit_order(
     from aiplatform.database.models import Job
     upsert_job(order, "marketing_audit")
 
+    # CRM ingestion (H-11): record the paying customer (skips when testing/empty).
+    from aiplatform.database.crm_ops import ingest_customer
+    ingest_customer(order["client_email"], "marketing_audit")
+
     task = celery_task.delay(order)
     # Update the job row with the Celery task ID now that we have it.
     upsert_job(order, "marketing_audit", celery_task_id=task.id)

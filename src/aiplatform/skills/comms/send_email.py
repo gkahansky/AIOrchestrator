@@ -32,20 +32,41 @@ def send_email(
     body_html: str,
     attachments: list[str] | None = None,
     body_text: str | None = None,
+    consent_type: str = "transactional",
+    skip_suppression: bool = False,
 ) -> dict:
     """
     Send an email via the Resend HTTP API.
 
     Args:
-        to:           Recipient address (or comma-separated list)
-        subject:      Email subject line
-        body_html:    HTML body (required)
-        attachments:  Optional list of local file paths to attach
-        body_text:    Optional plain-text fallback (auto-stripped from HTML if omitted)
+        to:               Recipient address (or comma-separated list)
+        subject:          Email subject line
+        body_html:        HTML body (required)
+        attachments:      Optional list of local file paths to attach
+        body_text:        Optional plain-text fallback (auto-stripped from HTML if omitted)
+        consent_type:     transactional | marketing | outreach — categorises the message
+                          for the consent ledger. Suppression applies regardless.
+        skip_suppression: Set True only for purely internal/operator mail (digests,
+                          error alerts) that must never be silently dropped.
 
     Returns:
-        {message_id, to, subject} on success, {error} on failure.
+        {message_id, to, subject} on success, {error} on failure,
+        {suppressed: True, ...} when every recipient is on the suppression list.
+
+    Compliance (CRM module H-11): every recipient is checked against the CRM
+    suppression list (unsubscribed / erased / do-not-contact window) before the
+    Resend call. Suppressed recipients are dropped. The lookup fails open (sends
+    anyway, with a loud error log) if the database is unreachable, so a DB blip
+    never blocks transactional delivery.
     """
+    recipients = [r.strip() for r in to.split(",") if r.strip()]
+
+    if not skip_suppression:
+        recipients = _filter_suppressed(recipients)
+        if not recipients:
+            log.warning("send_email: all recipients suppressed for subject %r", subject)
+            return {"suppressed": True, "to": to, "subject": subject}
+
     api_key   = os.environ.get("RESEND_API_KEY", "")
     from_addr = os.environ.get("EMAIL_FROM", "")
 
@@ -53,8 +74,6 @@ def send_email(
         raise RuntimeError("RESEND_API_KEY is not set — email cannot be sent.")
     if not from_addr:
         raise RuntimeError("EMAIL_FROM is not set — email cannot be sent.")
-
-    recipients = [r.strip() for r in to.split(",")]
 
     payload: dict = {
         "from":    from_addr,
@@ -110,6 +129,26 @@ def send_email(
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
+
+def _filter_suppressed(recipients: list[str]) -> list[str]:
+    """Drop recipients on the CRM suppression list. Fails open on DB error."""
+    try:
+        from aiplatform.database.crm_ops import is_suppressed
+    except Exception as exc:  # import-time failure — never block delivery
+        log.error("send_email: suppression check unavailable (%s) — sending anyway", exc)
+        return recipients
+
+    allowed = []
+    for r in recipients:
+        try:
+            if is_suppressed(r):
+                log.warning("send_email: recipient suppressed, skipping: %s", r)
+                continue
+        except Exception as exc:  # DB blip — fail open for this recipient
+            log.error("send_email: suppression lookup failed for %s (%s) — sending", r, exc)
+        allowed.append(r)
+    return allowed
+
 
 def _strip_html(html: str) -> str:
     """Very light HTML → plain text for the fallback part."""

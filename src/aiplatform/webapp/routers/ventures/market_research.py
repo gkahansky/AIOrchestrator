@@ -156,6 +156,10 @@ def create_session(
     db.commit()
     db.refresh(record)
 
+    # CRM ingestion (H-11): record the paying customer.
+    from aiplatform.database.crm_ops import ingest_customer
+    ingest_customer(req.client_email, "market_research")
+
     task = celery_task.delay(str(record.id))
     record.celery_task_id = task.id
     db.commit()

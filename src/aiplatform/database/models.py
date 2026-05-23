@@ -26,6 +26,7 @@ from sqlalchemy import (
     Text,
     ForeignKey,
     Boolean,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -352,6 +353,10 @@ class Lead(Base):
     matched_persona = Column(String(100), nullable=True)  # which persona name this lead matches
     intent_score   = Column(Integer, nullable=True)       # 0–100 intent signal strength from Claude Haiku
 
+    # CRM module (H-11): links a discovered lead to its unified Contact record.
+    contact_id     = Column(UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"),
+                            nullable=True, index=True)
+
     campaign = relationship("OutreachCampaign", back_populates="leads")
     sends    = relationship("OutreachSend", back_populates="lead", cascade="all, delete-orphan")
     drafts   = relationship("LeadDraft", back_populates="lead", cascade="all, delete-orphan")
@@ -505,6 +510,24 @@ class Contact(Base):
     purchased_at      = Column(DateTime(timezone=True), nullable=True)
     unsubscribed_at   = Column(DateTime(timezone=True), nullable=True)
 
+    # ── CRM module (H-11) ──────────────────────────────────────────────
+    # Supersedes `status`. lead | sample | customer | repeat | dormant | unsubscribed | erased
+    lifecycle_stage      = Column(String(20), nullable=False, default="lead",
+                                  server_default="lead", index=True)
+    # Sum of net revenue across linked jobs, in USD cents.
+    lifetime_value_cents = Column(Integer, nullable=False, default=0, server_default="0")
+    tags                 = Column(JSONB, nullable=False, default=list)
+    # Reserved for future multi-user. Today: always ALLOWED_EMAIL.
+    owner_user           = Column(String(255), nullable=True)
+    # Hard suppression cut-off. Set far-future on bounce/complaint/permanent opt-out.
+    do_not_contact_until = Column(DateTime(timezone=True), nullable=True, index=True)
+    # GDPR right-to-erasure timestamp. When set, PII fields are nulled.
+    gdpr_erasure_at      = Column(DateTime(timezone=True), nullable=True)
+    # SHA-256 of lowercased email — retained post-erasure to block re-ingest.
+    email_hash           = Column(String(64), nullable=True, index=True)
+    # Highest-weight origin channel, e.g. "outreach_reddit", "sample_podcast", "order_etsy".
+    primary_source       = Column(String(50), nullable=True, index=True)
+
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -544,6 +567,59 @@ class ContactMessage(Base):
     sent_at     = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     contact     = relationship("Contact", backref="messages")
+
+
+class CrmAuditLog(Base):
+    """
+    Append-only audit trail for every CRM write that touches PII or compliance
+    state (status change, edit, merge, note, suppress, export, erase, bounce,
+    complaint, consent grant/revoke). Never updated except PII-scrubbing on
+    GDPR erasure. CRM module (H-11).
+    """
+    __tablename__ = "crm_audit_log"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    actor_user  = Column(String(255), nullable=False, index=True)  # ALLOWED_EMAIL today; "system" for automated
+    contact_id  = Column(UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="SET NULL"),
+                         nullable=True, index=True)
+    # status_change | edit | merge | note | suppress | export | erase |
+    # bounce | complaint | consent_grant | consent_revoke | webhook_in
+    action      = Column(String(50), nullable=False, index=True)
+    before      = Column(JSONB, nullable=True)
+    after       = Column(JSONB, nullable=True)
+    reason      = Column(Text, nullable=True)
+
+    at          = Column(DateTime(timezone=True), nullable=False,
+                         default=lambda: datetime.now(timezone.utc), index=True)
+
+    contact     = relationship("Contact", backref="audit_log")
+
+
+class CrmConsent(Base):
+    """
+    Per-venture, per-channel granular consent ledger (GDPR Art. 6/7).
+    Revocation never deletes — it stamps revoked_at. CRM module (H-11).
+    """
+    __tablename__ = "crm_consent"
+    __table_args__ = (
+        UniqueConstraint("contact_id", "venture", "channel", "consent_type",
+                         name="uq_crm_consent_scope"),
+    )
+
+    id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    contact_id    = Column(UUID(as_uuid=True), ForeignKey("contacts.id", ondelete="CASCADE"),
+                           nullable=False, index=True)
+    venture       = Column(String(50), nullable=False, index=True)
+    channel       = Column(String(20), nullable=False)            # email | sms | platform_dm
+    consent_type  = Column(String(20), nullable=False)            # transactional | marketing | outreach
+    lawful_basis  = Column(String(30), nullable=False)            # explicit | implicit | legitimate_interest | revoked
+    source        = Column(String(100), nullable=True)            # "order_form", "outreach_reply", "manual", "unsubscribe"
+    granted_at    = Column(DateTime(timezone=True), nullable=True)
+    revoked_at    = Column(DateTime(timezone=True), nullable=True)
+    ip_address    = Column(String(64), nullable=True)
+    user_agent    = Column(String(500), nullable=True)
+
+    contact       = relationship("Contact", backref="consents")
 
 
 # ── Campaign Sources ─────────────────────────────────────────────────────

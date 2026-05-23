@@ -206,6 +206,10 @@ async def create_podcast_order(
     from aiplatform.database.job_ops import upsert_job
     upsert_job(order, "content_studio")
 
+    # CRM ingestion (H-11): record the paying customer.
+    from aiplatform.database.crm_ops import ingest_customer
+    ingest_customer(order.get("client_email"), "content_studio")
+
     task = celery_task.delay(order)
     upsert_job(order, "content_studio", celery_task_id=task.id)
 

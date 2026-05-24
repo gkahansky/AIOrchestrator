@@ -44,6 +44,14 @@ const SEARCH_INTERVALS = [
   { value: 168,   label: "Weekly" },
 ]
 
+type SourceObj = {
+  platform: string
+  name: string
+  keywords: string[]
+  config: Record<string, any>
+  enabled: boolean
+}
+
 const STATUS_COLORS: Record<string, string> = {
   new:            "bg-surface-container text-on-surface-variant",
   email_sent:     "bg-primary/10 text-primary",
@@ -282,10 +290,11 @@ function SourceRow({ source, onSave, onDelete }: {
 
 // ── Add source modal ─────────────────────────────────────────────────────────────────────
 
-function AddSourceModal({ campaignId, onClose, onAdded }: {
-  campaignId: string
+function AddSourceModal({ campaignId, onClose, onAdded, onSubmit }: {
+  campaignId?: string
   onClose: () => void
-  onAdded: () => void
+  onAdded?: () => void
+  onSubmit?: (source: SourceObj) => void
 }) {
   const [platform, setPlatform] = useState("reddit")
   const [name, setName] = useState("")
@@ -299,7 +308,6 @@ function AddSourceModal({ campaignId, onClose, onAdded }: {
 
   async function save() {
     if (!name.trim() || !keywords.trim()) { setError("Name and keywords are required."); return }
-    setSaving(true)
     const config: Record<string, any> = {}
     if (platform === "reddit" && subreddits.trim()) {
       config.subreddits = subreddits.split(",").map(s => s.trim()).filter(Boolean)
@@ -307,17 +315,21 @@ function AddSourceModal({ campaignId, onClose, onAdded }: {
     if (platform === "facebook" && groupUrls.trim()) {
       config.group_urls = groupUrls.split(",").map(u => u.trim()).filter(Boolean)
     }
+    const source: SourceObj = {
+      platform, name: name.trim(),
+      keywords: keywords.split(",").map(k => k.trim()).filter(Boolean),
+      config, enabled: true,
+    }
+    // Collect mode (new campaign — no id yet): hand the source to the parent
+    if (onSubmit) { onSubmit(source); onClose(); return }
+    setSaving(true)
     const r = await fetch(`${API}/api/outreach/campaigns/${campaignId}/sources`, {
       method: "POST",
       headers: { ...authHeader(), "Content-Type": "application/json" },
-      body: JSON.stringify({
-        platform, name: name.trim(),
-        keywords: keywords.split(",").map(k => k.trim()).filter(Boolean),
-        config, enabled: true,
-      }),
+      body: JSON.stringify(source),
     })
     setSaving(false)
-    if (r.ok) { onAdded(); onClose() } else { setError("Failed to add source.") }
+    if (r.ok) { onAdded?.(); onClose() } else { setError("Failed to add source.") }
   }
 
   return (
@@ -1221,7 +1233,8 @@ function NewCampaignForm({ onCreated, onCancel }: {
   const [product, setProduct] = useState("marketing_audit")
   const [name, setName] = useState("")
   const [goal, setGoal] = useState("")
-  const [platform, setPlatform] = useState("email")
+  const [sources, setSources] = useState<SourceObj[]>([])
+  const [showAddSource, setShowAddSource] = useState(false)
   const [targetPrompt, setTargetPrompt] = useState("")
   const [userInstructions, setUserInstructions] = useState("")
   const [personas, setPersonas] = useState<{ name: string; description: string }[]>([])
@@ -1229,6 +1242,7 @@ function NewCampaignForm({ onCreated, onCancel }: {
   const [useMockLeads, setUseMockLeads] = useState(false)
   const [dryRun, setDryRun] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [error, setError] = useState("")
   const [templates, setTemplates] = useState<any[]>([])
 
   useEffect(() => {
@@ -1246,13 +1260,16 @@ function NewCampaignForm({ onCreated, onCancel }: {
   }
 
   async function create() {
-    if (!name.trim()) return
+    if (!name.trim()) { setError("Campaign name is required."); return }
+    if (sources.length === 0) { setError("Add at least one search source before saving."); return }
+    setError("")
     setCreating(true)
     const r = await fetch(`${API}/api/outreach/campaigns`, {
       method: "POST",
       headers: { ...authHeader(), "Content-Type": "application/json" },
       body: JSON.stringify({
-        venture: product, name: name.trim(), goal: goal.trim() || null, platform,
+        venture: product, name: name.trim(), goal: goal.trim() || null,
+        sources,
         personas: personas.filter(p => p.name.trim()),
         target_prompt: targetPrompt.trim() || null,
         user_search_instructions: userInstructions.trim() || null,
@@ -1266,11 +1283,18 @@ function NewCampaignForm({ onCreated, onCancel }: {
     if (r.ok) {
       const created = await r.json()
       onCreated(created.id)
+    } else {
+      const e = await r.json().catch(() => ({}))
+      setError(e.detail || "Failed to create campaign.")
     }
   }
 
   return (
     <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-4 space-y-4">
+      {showAddSource && (
+        <AddSourceModal onClose={() => setShowAddSource(false)}
+          onSubmit={(s) => setSources(prev => [...prev, s])} />
+      )}
       {/* Persona templates */}
       {templates.length > 0 && (
         <div>
@@ -1298,20 +1322,43 @@ function NewCampaignForm({ onCreated, onCancel }: {
         </select>
       </div>
 
-      {/* Name + platform */}
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Campaign Name</label>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Reddit Q2 Outreach"
-            className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface" />
-        </div>
-        <div>
-          <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Outreach Platform</label>
-          <select value={platform} onChange={e => setPlatform(e.target.value)}
-            className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface">
-            {OUTREACH_PLATFORMS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-          </select>
-        </div>
+      {/* Name */}
+      <div>
+        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Campaign Name</label>
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Reddit Q2 Outreach"
+          className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface" />
+      </div>
+
+      {/* Search sources */}
+      <div>
+        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+          Search Sources
+          <span className="ml-1 text-on-surface-variant/60 normal-case font-normal">(where we look for leads — at least one required)</span>
+        </label>
+        {sources.length > 0 && (
+          <div className="space-y-1.5 mb-2">
+            {sources.map((s, i) => {
+              const info = SOURCE_PLATFORMS.find(p => p.id === s.platform)
+              return (
+                <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-container-low border border-outline-variant/20">
+                  <span className="material-symbols-outlined text-[15px] text-primary">{info?.icon || "travel_explore"}</span>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs font-label font-semibold text-on-surface">{s.name}</span>
+                    <span className="text-[10px] text-on-surface-variant ml-1.5">{info?.label || s.platform} · {s.keywords.length} keyword{s.keywords.length === 1 ? "" : "s"}</span>
+                  </div>
+                  <button onClick={() => setSources(prev => prev.filter((_, j) => j !== i))}
+                    className="text-on-surface-variant hover:text-error">
+                    <span className="material-symbols-outlined text-[16px]">close</span>
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        <button onClick={() => setShowAddSource(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-label font-semibold border border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 transition-colors">
+          <span className="material-symbols-outlined text-[14px]">add</span>Add Source
+        </button>
       </div>
 
       {/* Goal */}
@@ -1391,8 +1438,10 @@ function NewCampaignForm({ onCreated, onCancel }: {
         </label>
       </div>
 
+      {error && <p className="text-xs text-error">{error}</p>}
+
       <div className="flex gap-2 pt-1">
-        <button onClick={create} disabled={creating || !name.trim()}
+        <button onClick={create} disabled={creating}
           className="px-4 py-1.5 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg disabled:opacity-50">
           {creating ? "Creating…" : "Create Campaign"}
         </button>

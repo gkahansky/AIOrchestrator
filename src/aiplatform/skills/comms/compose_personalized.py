@@ -56,8 +56,50 @@ _PLATFORM_RULES: dict[str, str] = {
     ),
 }
 
+# Maps a lead's discovery channel (source_channel) to the outreach platform we
+# would naturally reply on. Channels that aren't messaging surfaces (search /
+# directory listings) map to email, since the lead is reached by email.
+SOURCE_TO_OUTREACH: dict[str, str] = {
+    "reddit": "reddit",
+    "linkedin": "linkedin",
+    "facebook": "facebook",
+    "instagram": "instagram",
+    "fiverr": "fiverr",
+    "google": "email",
+    "hackernews": "email",
+    "indiehackers": "email",
+    "listennotes": "email",
+    "youtube": "email",
+}
 
-def compose_for_lead(lead: dict, campaign: dict) -> dict:
+# Platforms with a working delivery path. Email is the only wired channel today;
+# add platforms here as native send paths are built and both message style and
+# delivery will switch to them automatically.
+DELIVERABLE_PLATFORMS: set[str] = {"email"}
+
+
+def outreach_platform_for_source(source_platform: str | None) -> str:
+    """Map a source/discovery platform to the outreach platform to reply on."""
+    return SOURCE_TO_OUTREACH.get((source_platform or "").lower(), "email")
+
+
+def resolve_effective_platform(
+    source_channel: str | None, campaign_platform: str = "email"
+) -> str:
+    """
+    Resolve the platform used for BOTH message style and delivery for one lead.
+
+    Prefers the platform the lead was found on; falls back to the campaign
+    default for unmapped channels; then collapses to email when the preferred
+    platform has no delivery path yet (see DELIVERABLE_PLATFORMS).
+    """
+    desired = SOURCE_TO_OUTREACH.get(
+        (source_channel or "").lower(), campaign_platform or "email"
+    )
+    return desired if desired in DELIVERABLE_PLATFORMS else "email"
+
+
+def compose_for_lead(lead: dict, campaign: dict, platform: str | None = None) -> dict:
     """
     Write a personalized outreach message for a single lead.
 
@@ -75,7 +117,7 @@ def compose_for_lead(lead: dict, campaign: dict) -> dict:
 
     client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
 
-    platform = campaign.get("platform", "email")
+    platform = platform or campaign.get("platform", "email")
     platform_rules = _PLATFORM_RULES.get(platform, _PLATFORM_RULES["email"])
 
     # Find the matched persona details

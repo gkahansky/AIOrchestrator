@@ -346,9 +346,17 @@ def create_campaign(
         if src.platform not in VALID_SOURCE_PLATFORMS:
             raise HTTPException(status_code=400, detail=f"source platform must be one of {VALID_SOURCE_PLATFORMS}")
 
+    # Align the campaign's default outreach platform with its primary source
+    # (e.g. a Facebook source → reply on Facebook). Channels that aren't
+    # messaging surfaces map to email. Falls back to the requested platform.
+    platform = req.platform
+    if req.sources:
+        from aiplatform.skills.comms.compose_personalized import outreach_platform_for_source
+        platform = outreach_platform_for_source(req.sources[0].platform)
+
     c = OutreachCampaign(
         venture=req.venture, name=req.name, goal=req.goal,
-        status="draft", platform=req.platform,
+        status="draft", platform=platform,
         personas=[p.model_dump() for p in req.personas] if req.personas else [],
         target_prompt=req.target_prompt,
         user_search_instructions=req.user_search_instructions,
@@ -730,9 +738,12 @@ def compose_for_lead(
     if existing:
         db.delete(existing)
 
-    from aiplatform.skills.comms.compose_personalized import compose_for_lead as _compose
+    from aiplatform.skills.comms.compose_personalized import (
+        compose_for_lead as _compose, resolve_effective_platform,
+    )
     campaign_dict = _campaign_to_dict(c, db)
-    composed = _compose(_lead_to_dict(lead), campaign_dict)
+    effective_platform = resolve_effective_platform(lead.source_channel, c.platform)
+    composed = _compose(_lead_to_dict(lead), campaign_dict, platform=effective_platform)
 
     draft = LeadDraft(
         lead_id=lead.id, campaign_id=c.id,

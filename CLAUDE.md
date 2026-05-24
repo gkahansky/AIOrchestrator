@@ -138,6 +138,8 @@ The Cold Outreach system is a **platform-level feature** (not a venture). It is 
 1. **Qualification** (`find_leads.py` → `_qualify_post`) — Claude Haiku evaluates each raw post against the campaign's `search_prompt` and `personas`. Returns `is_lead`, `confidence`, `matched_persona`, `notes`, `intent_score` (0-100). Skipped for Listen Notes (pre-structured).
 2. **Composition** (`compose_personalized.py` → `compose_for_lead`) — Claude Sonnet 4.6 writes a unique outreach message grounded in the lead's specific post (`context` field). `_PLATFORM_RULES` dict enforces platform-appropriate tone/format/length. Returns `{subject, message_body, context_used}`.
 
+**Platform alignment (style + delivery):** outreach follows the platform a lead was found on. `compose_personalized.py` holds the single source of truth: `SOURCE_TO_OUTREACH` maps a lead's `source_channel` to a reply platform (non-messaging channels like google/hackernews/youtube → email), and `resolve_effective_platform(source_channel, campaign_platform)` returns one platform used for **both** message style and delivery. It collapses to email whenever the preferred platform isn't in `DELIVERABLE_PLATFORMS` (currently `{"email"}` — email is the only wired send path). Adding a platform to `DELIVERABLE_PLATFORMS` switches both style and delivery to it automatically. Campaign creation seeds `campaign.platform` from the primary source via `outreach_platform_for_source()` so the campaign default is source-aligned; per-lead resolution still overrides it at compose/send time. (Future: per-recipient delivery mechanisms from the contacts module will drive this dynamically.)
+
 **Celery tasks in `worker.py`:**
 
 | Task | Trigger | What it does |

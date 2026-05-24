@@ -1301,7 +1301,9 @@ def run_compose_pending(self, campaign_id: str) -> dict:
     have a pending_review draft yet. Runs inline (not chunked) — kept small
     by max_leads caps on find_leads.
     """
-    from aiplatform.skills.comms.compose_personalized import compose_for_lead
+    from aiplatform.skills.comms.compose_personalized import (
+        compose_for_lead, resolve_effective_platform,
+    )
     from aiplatform.database.models import Lead, LeadDraft, OutreachCampaign
     from aiplatform.database.session import SessionLocal
     from aiplatform.webapp.routers.outreach import _campaign_to_dict, _lead_to_dict
@@ -1333,7 +1335,12 @@ def run_compose_pending(self, campaign_id: str) -> dict:
 
         for lead in leads:
             try:
-                result = compose_for_lead(_lead_to_dict(lead), campaign_dict)
+                effective_platform = resolve_effective_platform(
+                    lead.source_channel, campaign.platform
+                )
+                result = compose_for_lead(
+                    _lead_to_dict(lead), campaign_dict, platform=effective_platform
+                )
                 db.add(LeadDraft(
                     lead_id=lead.id,
                     campaign_id=campaign_uuid,
@@ -1366,6 +1373,7 @@ def run_send_approved_drafts(self, campaign_id: str) -> dict:
     Enforces the same cross-venture spam guard as run_send_outreach.
     """
     from aiplatform.skills.comms.send_email import send_email
+    from aiplatform.skills.comms.compose_personalized import resolve_effective_platform
     from aiplatform.database.models import (
         Contact, Lead, LeadDraft, OutreachCampaign, OutreachSend,
     )
@@ -1405,8 +1413,14 @@ def run_send_approved_drafts(self, campaign_id: str) -> dict:
                 sent_count += 1
                 continue
 
+            # Reply on the platform the lead came from; falls back to email
+            # when that platform has no delivery path yet.
+            effective_platform = resolve_effective_platform(
+                lead.source_channel, campaign.platform
+            )
+
             # Spam guard (email platform only)
-            if campaign.platform == "email":
+            if effective_platform == "email":
                 if not lead.email:
                     continue
                 contact = db.query(Contact).filter(Contact.email == lead.email).first()
@@ -1421,7 +1435,7 @@ def run_send_approved_drafts(self, campaign_id: str) -> dict:
 
             send_id = str(uuid.uuid4())
 
-            if campaign.platform == "email" and lead.email:
+            if effective_platform == "email" and lead.email:
                 pixel_url = f"{base_url}/api/outreach/track/open/{send_id}"
                 unsub_url = f"{base_url}/api/outreach/unsubscribe/{send_id}"
                 body_text = draft.message_body.replace("{{UNSUBSCRIBE_URL}}", unsub_url)

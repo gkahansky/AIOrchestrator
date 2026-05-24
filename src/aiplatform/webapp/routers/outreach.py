@@ -85,6 +85,13 @@ class PersonaSchema(BaseModel):
     name: str
     description: str
 
+class SourceCreate(BaseModel):
+    platform: str
+    name: str
+    keywords: list[str] = []
+    config: dict = {}
+    enabled: bool = True
+
 class CampaignCreate(BaseModel):
     venture: str
     name: str
@@ -97,6 +104,7 @@ class CampaignCreate(BaseModel):
     search_interval_hours: int | None = None
     use_mock_leads: bool = False
     dry_run: bool = False
+    sources: list[SourceCreate] | None = None
 
 class CampaignPatch(BaseModel):
     name: str | None = None
@@ -112,13 +120,6 @@ class CampaignPatch(BaseModel):
 class SchedulePatch(BaseModel):
     auto_search_enabled: bool
     search_interval_hours: int | None = None  # 6 | 24 | 168 | None (manual)
-
-class SourceCreate(BaseModel):
-    platform: str
-    name: str
-    keywords: list[str] = []
-    config: dict = {}
-    enabled: bool = True
 
 class SourcePatch(BaseModel):
     name: str | None = None
@@ -341,6 +342,9 @@ def create_campaign(
         raise HTTPException(status_code=400, detail=f"venture must be one of {VALID_VENTURES}")
     if req.platform not in VALID_PLATFORMS:
         raise HTTPException(status_code=400, detail=f"platform must be one of {VALID_PLATFORMS}")
+    for src in (req.sources or []):
+        if src.platform not in VALID_SOURCE_PLATFORMS:
+            raise HTTPException(status_code=400, detail=f"source platform must be one of {VALID_SOURCE_PLATFORMS}")
 
     c = OutreachCampaign(
         venture=req.venture, name=req.name, goal=req.goal,
@@ -359,17 +363,29 @@ def create_campaign(
     db.add(c)
     db.flush()  # get c.id before seeding sources
 
-    # Seed default sources for this venture
-    from aiplatform.skills.research.find_leads import VENTURE_DEFAULT_SOURCES
-    for src_def in VENTURE_DEFAULT_SOURCES.get(req.venture, []):
-        db.add(CampaignSource(
-            campaign_id=c.id,
-            platform=src_def["platform"],
-            name=src_def["name"],
-            keywords=src_def["keywords"],
-            config=src_def.get("config") or {},
-            enabled=True,
-        ))
+    if req.sources:
+        # User-defined sources from the creation form
+        for src in req.sources:
+            db.add(CampaignSource(
+                campaign_id=c.id,
+                platform=src.platform,
+                name=src.name,
+                keywords=src.keywords,
+                config=src.config or {},
+                enabled=src.enabled,
+            ))
+    else:
+        # Fall back to venture default sources (API callers that omit sources)
+        from aiplatform.skills.research.find_leads import VENTURE_DEFAULT_SOURCES
+        for src_def in VENTURE_DEFAULT_SOURCES.get(req.venture, []):
+            db.add(CampaignSource(
+                campaign_id=c.id,
+                platform=src_def["platform"],
+                name=src_def["name"],
+                keywords=src_def["keywords"],
+                config=src_def.get("config") or {},
+                enabled=True,
+            ))
 
     db.commit()
     db.refresh(c)

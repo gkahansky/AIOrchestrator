@@ -1220,6 +1220,181 @@ def purge_old_security_audits() -> dict:
 
 # ── Outreach tasks ─────────────────────────────────────────────────────────────
 
+def _compose_draft_for_lead(db, lead, campaign, campaign_dict):
+    """Compose a single pending_review draft for one lead.
+
+    Returns the LeadDraft (added to the session, not committed) or None on
+    failure. Shared by run_find_leads (inline at find time) and
+    run_compose_pending (idempotent back-stop). Caller commits.
+    """
+    from aiplatform.skills.comms.compose_personalized import (
+        compose_for_lead, resolve_effective_platform,
+    )
+    from aiplatform.database.models import LeadDraft
+    from aiplatform.webapp.routers.outreach import _lead_to_dict
+    try:
+        effective_platform = resolve_effective_platform(lead.source_channel, campaign.platform)
+        result = compose_for_lead(_lead_to_dict(lead), campaign_dict, platform=effective_platform)
+        draft = LeadDraft(
+            lead_id=lead.id,
+            campaign_id=lead.campaign_id,
+            subject=result.get("subject"),
+            message_body=result["message_body"],
+            context_used=result.get("context_used"),
+            status="pending_review",
+        )
+        db.add(draft)
+        return draft
+    except Exception as e:
+        log.warning("compose draft failed for lead %s: %s", lead.id, e)
+        return None
+
+
+def _upsert_contact(db, lead, campaign, platform, now):
+    """Upsert a CRM Contact for a finalised send. Matches by email, or by
+    usernames[platform] for social sends without an email. Returns the Contact
+    (existing or newly added) or None when the lead has no reachable identifier.
+    """
+    from aiplatform.database.models import Contact
+    contact = None
+    if lead.email:
+        contact = db.query(Contact).filter(Contact.email == lead.email).first()
+    elif lead.platform_username:
+        contact = db.query(Contact).filter(
+            Contact.usernames[platform].astext == lead.platform_username
+        ).first()
+    else:
+        return None
+
+    if contact:
+        contact.last_activity_at = now
+        ventures = list(contact.ventures_approached or [])
+        if campaign.venture not in ventures:
+            ventures.append(campaign.venture)
+            contact.ventures_approached = ventures
+        if contact.status not in ("unsubscribed", "purchased", "inquired"):
+            contact.status = "approached"
+        if lead.platform_username:
+            usernames = dict(contact.usernames or {})
+            usernames.setdefault(platform, lead.platform_username)
+            contact.usernames = usernames
+        return contact
+
+    contact = Contact(
+        email=lead.email, name=lead.name, company=lead.company,
+        website_url=lead.website_url, status="approached",
+        usernames={platform: lead.platform_username} if lead.platform_username else None,
+        ventures_approached=[campaign.venture],
+        last_activity_at=now,
+    )
+    db.add(contact)
+    return contact
+
+
+def _finalise_sent(db, draft, lead, campaign, platform, send_id, message_id, now):
+    """Write the OutreachSend + contact-history bookkeeping for a delivered
+    message. Shared by the email send path and assisted-send confirmation.
+    """
+    from aiplatform.database.models import OutreachSend, ContactMessage
+    import uuid
+    db.add(OutreachSend(
+        id=uuid.UUID(send_id), lead_id=lead.id, template_id=None,
+        campaign_id=campaign.id, message_id=message_id or "", status="sent",
+    ))
+    draft.status = "sent"
+    draft.sent_at = now
+    draft.send_record_id = uuid.UUID(send_id)
+    lead.status = "email_sent"
+
+    contact = _upsert_contact(db, lead, campaign, platform, now)
+    if contact is not None:
+        db.flush()  # ensure contact.id for the message FK
+        db.add(ContactMessage(
+            contact_id=contact.id, venture=campaign.venture,
+            message_type="outreach",
+            subject=(draft.subject or "Outreach message")[:500],
+            body_snippet=(draft.message_body or "")[:1000],
+            message_id=message_id or None,
+        ))
+
+
+def _send_one_draft(db, draft, lead, campaign, base_url, cooldown_days, now, dry_run):
+    """Send (or stage) one approved draft, dispatching through the send-handler
+    registry. Mutates draft/lead/contact records but does NOT commit.
+
+    Returns {"status": sent|test_sent|awaiting_manual|failed|skipped, "platform", ...}.
+    """
+    from aiplatform.skills.comms.compose_personalized import resolve_effective_platform
+    from aiplatform.skills.comms.senders import HANDLERS
+    from aiplatform.skills.comms.senders.base import SendRequest
+    from aiplatform.database.models import Contact
+    import uuid
+
+    if dry_run:
+        draft.status = "test_sent"
+        draft.sent_at = now
+        lead.status = "email_sent"
+        return {"status": "test_sent", "platform": "email"}
+
+    effective_platform = resolve_effective_platform(lead.source_channel, campaign.platform)
+
+    # Spam guard — email only (other platforms have no shared CRM identifier path).
+    if effective_platform == "email":
+        if not lead.email:
+            return {"status": "skipped", "reason": "no_email", "platform": "email"}
+        contact = db.query(Contact).filter(Contact.email == lead.email).first()
+        if contact:
+            if contact.status == "unsubscribed":
+                lead.status = "unsubscribed"
+                return {"status": "skipped", "reason": "unsubscribed", "platform": "email"}
+            if contact.last_activity_at and (now - contact.last_activity_at).days < cooldown_days:
+                return {"status": "skipped", "reason": "cooldown", "platform": "email"}
+
+    send_id = str(uuid.uuid4())
+    meta = {}
+    if effective_platform == "email":
+        meta = {
+            "pixel_url": f"{base_url}/api/outreach/track/open/{send_id}",
+            "unsub_url": f"{base_url}/api/outreach/unsubscribe/{send_id}",
+        }
+
+    req = SendRequest(
+        message_body=draft.message_body,
+        venture=campaign.venture,
+        to_email=lead.email,
+        platform_username=lead.platform_username,
+        subject=draft.subject,
+        deep_link_hint=lead.source_url,
+        lead_name=lead.name,
+        meta=meta,
+    )
+    handler = HANDLERS.get(effective_platform) or HANDLERS["email"]
+    result = handler.send(req, None)
+
+    if result.status == "failed":
+        return {"status": "failed", "platform": effective_platform, "error": result.error}
+
+    if result.status == "awaiting_manual":
+        draft.status = "awaiting_send"
+        draft.send_deep_link = result.deep_link
+        draft.send_platform = effective_platform
+        return {"status": "awaiting_manual", "platform": effective_platform,
+                "draft_id": str(draft.id), "deep_link": result.deep_link,
+                "instructions": result.instructions}
+
+    _finalise_sent(db, draft, lead, campaign, effective_platform, send_id, result.message_id, now)
+    return {"status": "sent", "platform": effective_platform}
+
+
+def confirm_manual_send(db, draft, lead, campaign, now=None):
+    """Finalise an assisted send after the operator sent it in the native app."""
+    from datetime import datetime as _dt, timezone as _tz
+    import uuid
+    now = now or _dt.now(_tz.utc)
+    _finalise_sent(db, draft, lead, campaign, draft.send_platform or "email",
+                   str(uuid.uuid4()), "", now)
+
+
 @celery_app.task(bind=True, name="outreach.find_leads", max_retries=1)
 def run_find_leads(
     self,
@@ -1242,8 +1417,8 @@ def run_find_leads(
 
     db = SessionLocal()
     try:
-        campaign_for_mock = db.get(OutreachCampaign, uuid.UUID(campaign_id))
-        use_mock = bool(campaign_for_mock and campaign_for_mock.use_mock_leads)
+        campaign = db.get(OutreachCampaign, uuid.UUID(campaign_id))
+        use_mock = bool(campaign and campaign.use_mock_leads)
         raw_leads = find_leads(
             sources=sources or [],
             max_leads=max_leads,
@@ -1261,11 +1436,11 @@ def run_find_leads(
             ).all()
         }
 
-        new_count = 0
+        new_leads = []
         for lead_data in raw_leads:
             if lead_data.get("source_url") in existing_urls:
                 continue
-            db.add(Lead(
+            lead = Lead(
                 venture=lead_data["venture"],
                 source_channel=lead_data["source_channel"],
                 source_url=lead_data.get("source_url"),
@@ -1280,11 +1455,24 @@ def run_find_leads(
                 intent_score=lead_data.get("intent_score"),
                 status="new",
                 campaign_id=campaign_uuid,
-            ))
-            new_count += 1
+            )
+            db.add(lead)
+            new_leads.append(lead)
+
+        # Auto-compose a suggestion draft per new lead at find time. Drafts land
+        # in pending_review — the human review gate is preserved.
+        composed = 0
+        if new_leads and campaign:
+            from aiplatform.webapp.routers.outreach import _campaign_to_dict
+            db.flush()  # assign lead ids before composing
+            campaign_dict = _campaign_to_dict(campaign, db)
+            for lead in new_leads:
+                if _compose_draft_for_lead(db, lead, campaign, campaign_dict):
+                    composed += 1
 
         db.commit()
-        return {"campaign_id": campaign_id, "leads_found": len(raw_leads), "leads_added": new_count}
+        return {"campaign_id": campaign_id, "leads_found": len(raw_leads),
+                "leads_added": len(new_leads), "drafts_composed": composed}
 
     except Exception as exc:
         if self.request.retries < self.max_retries:
@@ -1301,12 +1489,9 @@ def run_compose_pending(self, campaign_id: str) -> dict:
     have a pending_review draft yet. Runs inline (not chunked) — kept small
     by max_leads caps on find_leads.
     """
-    from aiplatform.skills.comms.compose_personalized import (
-        compose_for_lead, resolve_effective_platform,
-    )
     from aiplatform.database.models import Lead, LeadDraft, OutreachCampaign
     from aiplatform.database.session import SessionLocal
-    from aiplatform.webapp.routers.outreach import _campaign_to_dict, _lead_to_dict
+    from aiplatform.webapp.routers.outreach import _campaign_to_dict
     import uuid
 
     db = SessionLocal()
@@ -1334,24 +1519,9 @@ def run_compose_pending(self, campaign_id: str) -> dict:
         errors = 0
 
         for lead in leads:
-            try:
-                effective_platform = resolve_effective_platform(
-                    lead.source_channel, campaign.platform
-                )
-                result = compose_for_lead(
-                    _lead_to_dict(lead), campaign_dict, platform=effective_platform
-                )
-                db.add(LeadDraft(
-                    lead_id=lead.id,
-                    campaign_id=campaign_uuid,
-                    subject=result.get("subject"),
-                    message_body=result["message_body"],
-                    context_used=result.get("context_used"),
-                    status="pending_review",
-                ))
+            if _compose_draft_for_lead(db, lead, campaign, campaign_dict):
                 composed_count += 1
-            except Exception as e:
-                log.warning("compose_pending: failed for lead %s: %s", lead.id, e)
+            else:
                 errors += 1
 
         db.commit()
@@ -1368,17 +1538,12 @@ def run_compose_pending(self, campaign_id: str) -> dict:
 @celery_app.task(bind=True, name="outreach.send_approved_drafts", max_retries=1)
 def run_send_approved_drafts(self, campaign_id: str) -> dict:
     """
-    Send all approved LeadDraft records via Resend (email platform) or log
-    the send event for non-email platforms (Reddit, LinkedIn, etc.).
-    Enforces the same cross-venture spam guard as run_send_outreach.
+    Send all approved LeadDraft records, dispatching each through the
+    send-handler registry (email delivers via Resend; social platforms stage an
+    assisted send). Enforces the cross-venture email spam guard.
     """
-    from aiplatform.skills.comms.send_email import send_email
-    from aiplatform.skills.comms.compose_personalized import resolve_effective_platform
-    from aiplatform.database.models import (
-        Contact, Lead, LeadDraft, OutreachCampaign, OutreachSend,
-    )
+    from aiplatform.database.models import Lead, LeadDraft, OutreachCampaign
     from aiplatform.database.session import SessionLocal
-    from datetime import timedelta
     import uuid, os
 
     db = SessionLocal()
@@ -1396,104 +1561,35 @@ def run_send_approved_drafts(self, campaign_id: str) -> dict:
         base_url = os.environ.get("RAILWAY_PUBLIC_URL", "https://api.planbadmin.com")
         cooldown_days = 30
         now = datetime.now(timezone.utc)
+        is_dry_run = bool(campaign.dry_run)
+
         sent_count = 0
         skipped_spam = 0
-        is_dry_run = bool(campaign.dry_run)
+        failed = 0
+        awaiting_manual = []
 
         for draft in drafts:
             lead = db.get(Lead, draft.lead_id)
             if not lead:
                 continue
-
-            # Dry-run: mark test_sent and skip all real sends / spam checks
-            if is_dry_run:
-                draft.status = "test_sent"
-                draft.sent_at = now
-                lead.status = "email_sent"
+            r = _send_one_draft(db, draft, lead, campaign, base_url, cooldown_days, now, is_dry_run)
+            status = r["status"]
+            if status in ("sent", "test_sent"):
                 sent_count += 1
-                continue
-
-            # Reply on the platform the lead came from; falls back to email
-            # when that platform has no delivery path yet.
-            effective_platform = resolve_effective_platform(
-                lead.source_channel, campaign.platform
-            )
-
-            # Spam guard (email platform only)
-            if effective_platform == "email":
-                if not lead.email:
-                    continue
-                contact = db.query(Contact).filter(Contact.email == lead.email).first()
-                if contact:
-                    if contact.status == "unsubscribed":
-                        lead.status = "unsubscribed"
-                        skipped_spam += 1
-                        continue
-                    if contact.last_activity_at and (now - contact.last_activity_at).days < cooldown_days:
-                        skipped_spam += 1
-                        continue
-
-            send_id = str(uuid.uuid4())
-
-            if effective_platform == "email" and lead.email:
-                pixel_url = f"{base_url}/api/outreach/track/open/{send_id}"
-                unsub_url = f"{base_url}/api/outreach/unsubscribe/{send_id}"
-                body_text = draft.message_body.replace("{{UNSUBSCRIBE_URL}}", unsub_url)
-                body_html = (
-                    f"<p>{draft.message_body.replace(chr(10), '<br>')}</p>"
-                    f'\n<p style="font-size:11px;color:#999;"><a href="{unsub_url}">Unsubscribe</a></p>'
-                    f'\n<img src="{pixel_url}" width="1" height="1" style="display:none" alt="" />'
-                )
-                result = send_email(
-                    to=lead.email,
-                    subject=draft.subject or f"Quick question about your {campaign.venture.replace('_', ' ')}",
-                    body_html=body_html,
-                    body_text=body_text,
-                )
-                if result.get("error"):
-                    continue
-                message_id = result.get("message_id", "")
+            elif status == "awaiting_manual":
+                awaiting_manual.append({
+                    "draft_id": r["draft_id"], "deep_link": r["deep_link"],
+                    "platform": r["platform"],
+                })
+            elif status == "failed":
+                failed += 1
             else:
-                # Non-email platforms: create a send record as a dispatch log
-                message_id = ""
-
-            send_record = OutreachSend(
-                id=uuid.UUID(send_id),
-                lead_id=lead.id,
-                template_id=None,      # draft-based send — no template
-                campaign_id=campaign_uuid,
-                message_id=message_id,
-                status="sent",
-            )
-            db.add(send_record)
-            draft.status = "sent"
-            draft.sent_at = now
-            draft.send_record_id = uuid.UUID(send_id)
-            lead.status = "email_sent"
-            sent_count += 1
-
-            # Upsert Contact
-            if lead.email:
-                contact = db.query(Contact).filter(Contact.email == lead.email).first()
-                if contact:
-                    contact.last_activity_at = now
-                    ventures = list(contact.ventures_approached or [])
-                    if campaign.venture not in ventures:
-                        ventures.append(campaign.venture)
-                        contact.ventures_approached = ventures
-                    if contact.status not in ("unsubscribed", "purchased", "inquired"):
-                        contact.status = "approached"
-                else:
-                    db.add(Contact(
-                        email=lead.email, name=lead.name, company=lead.company,
-                        website_url=lead.website_url, status="approached",
-                        ventures_approached=[campaign.venture],
-                        last_activity_at=now,
-                    ))
+                skipped_spam += 1
 
         db.commit()
         return {"campaign_id": campaign_id, "sent": sent_count,
-                "skipped_spam_or_cooldown": skipped_spam, "total_drafts": len(drafts)}
+                "skipped_spam_or_cooldown": skipped_spam, "failed": failed,
+                "awaiting_manual": awaiting_manual, "total_drafts": len(drafts)}
 
     except Exception as exc:
         if self.request.retries < self.max_retries:
@@ -1512,6 +1608,7 @@ def run_scheduled_searches() -> dict:
     """
     from aiplatform.database.models import OutreachCampaign, CampaignSource
     from aiplatform.database.session import SessionLocal
+    from aiplatform.webapp.routers.outreach import _campaign_personas
     from datetime import timedelta
 
     db = SessionLocal()
@@ -1538,7 +1635,7 @@ def run_scheduled_searches() -> dict:
             search_prompt = c.user_search_instructions or c.target_prompt or None
             # Chain so compose_pending only runs after find_leads commits its leads
             (
-                run_find_leads.si(str(c.id), c.venture, 20, sources, search_prompt, c.personas or [])
+                run_find_leads.si(str(c.id), c.venture, 20, sources, search_prompt, _campaign_personas(c, db))
                 | run_compose_pending.si(str(c.id))
             ).delay()
 

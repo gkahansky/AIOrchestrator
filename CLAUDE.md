@@ -107,12 +107,15 @@ The Cold Outreach system is a **platform-level feature** (not a venture). It is 
 
 | Table | Purpose |
 |---|---|
-| `outreach_campaigns` | One per venture, holds personas (JSONB), target_prompt, schedule config, platform |
+| `outreach_campaigns` | One per venture, holds target_prompt, schedule config, platform. Personas are linked via `campaign_personas` (the legacy `personas` JSONB column is kept as a fallback during cut-over) |
+| `personas` | Reusable per-venture persona library (`name`, `description`, `venture`). Edited in place — a live reference shared across every linked campaign |
+| `campaign_personas` | Many-to-many join between `outreach_campaigns` and `personas` |
 | `campaign_sources` | One-to-many per campaign — each row is a search source with its own platform, keywords (JSONB), and config (JSONB) |
 | `leads` | Raw qualified leads; `context` (Text) stores the original post/query for message grounding; `matched_persona` links to the campaign persona |
-| `lead_drafts` | AI-written drafts per lead; status flow: `pending_review → approved / rejected → sent` |
-| `outreach_sends` | Send records (Resend); linked from `lead_drafts.send_record_id` |
-| `contacts` | CRM — upserted on send; tracks all contacts across ventures |
+| `lead_drafts` | AI-written drafts per lead; status flow: `pending_review → approved / rejected → (awaiting_send) → sent`. `send_deep_link`/`send_platform` hold the assisted-send target |
+| `outreach_sends` | Send records (`template_id` nullable for draft-based sends); linked from `lead_drafts.send_record_id` |
+| `contacts` | CRM — upserted on send (by email, or `usernames[platform]` for social); tracks all contacts across ventures |
+| `contact_messages` | Per-contact message history; one row logged per finalised send |
 
 **Source handler registry** — `src/aiplatform/skills/research/sources/`:
 
@@ -133,39 +136,55 @@ The Cold Outreach system is a **platform-level feature** (not a venture). It is 
 
 **VENTURE_DEFAULT_SOURCES** in `find_leads.py` seeds source rows when a new campaign is created (via the API) and acts as fallback when no `CampaignSource` rows exist. Currently defined for `marketing_audit`, `content_studio`, `accessibility_audit`, and `content_repurposing`.
 
+**Reusable personas:** personas live in a per-venture library (`personas` table) and link to campaigns many-to-many via `campaign_personas`. `_campaign_personas(c, db)` in `outreach.py` is the single read seam — it resolves a campaign's personas as `[{name, description}]` from the link table, falling back to the legacy `personas` JSONB column when no links exist (so deploys are order-independent). Qualify (`_qualify_post`) and compose (`compose_for_lead`) receive that same list shape, so they never touch the DB. Editing a persona updates every campaign linked to it.
+
+**Send handler registry** — `src/aiplatform/skills/comms/senders/` (mirrors the source-handler pattern). Each handler exposes `send(req: SendRequest, config) -> SendResult`; `HANDLERS` dict in `senders/__init__.py` is the extension point.
+
+| Handler | Platform | Method |
+|---|---|---|
+| `email.py` | Email | Resend via `send_email` — delivers immediately; builds tracking pixel + unsubscribe HTML |
+| `linkedin.py` / `instagram.py` / `facebook.py` | LinkedIn / Instagram / Facebook | **Assisted send** — returns `awaiting_manual` + a deep link; the operator sends in the native app and confirms. No official cold-DM API exists for these. |
+
+`senders/providers/resolve_provider(platform, config)` is the per-platform slot for a future native API (e.g. Unipile): return an adapter there and that platform switches from assisted to automated delivery with no changes to the registry, worker, or router. Send dispatch and contact bookkeeping live in the worker (`_send_one_draft`, `_finalise_sent`, `confirm_manual_send`); handlers stay venture-agnostic and never touch the DB.
+
 **Two-stage AI pipeline:**
 
 1. **Qualification** (`find_leads.py` → `_qualify_post`) — Claude Haiku evaluates each raw post against the campaign's `search_prompt` and `personas`. Returns `is_lead`, `confidence`, `matched_persona`, `notes`, `intent_score` (0-100). Skipped for Listen Notes (pre-structured).
-2. **Composition** (`compose_personalized.py` → `compose_for_lead`) — Claude Sonnet 4.6 writes a unique outreach message grounded in the lead's specific post (`context` field). `_PLATFORM_RULES` dict enforces platform-appropriate tone/format/length. Returns `{subject, message_body, context_used}`.
+2. **Composition** (`compose_personalized.py` → `compose_for_lead`) — Claude Sonnet 4.6 writes a unique outreach message grounded in the lead's specific post (`context` field). `_PLATFORM_RULES` dict enforces platform-appropriate tone/format/length. Returns `{subject, message_body, context_used}`. A `pending_review` suggestion draft is composed **inline at find time** (`run_find_leads` calls the shared `_compose_draft_for_lead`); `run_compose_pending` remains the idempotent back-stop.
 
-**Platform alignment (style + delivery):** outreach follows the platform a lead was found on. `compose_personalized.py` holds the single source of truth: `SOURCE_TO_OUTREACH` maps a lead's `source_channel` to a reply platform (non-messaging channels like google/hackernews/youtube → email), and `resolve_effective_platform(source_channel, campaign_platform)` returns one platform used for **both** message style and delivery. It collapses to email whenever the preferred platform isn't in `DELIVERABLE_PLATFORMS` (currently `{"email"}` — email is the only wired send path). Adding a platform to `DELIVERABLE_PLATFORMS` switches both style and delivery to it automatically. Campaign creation seeds `campaign.platform` from the primary source via `outreach_platform_for_source()` so the campaign default is source-aligned; per-lead resolution still overrides it at compose/send time. (Future: per-recipient delivery mechanisms from the contacts module will drive this dynamically.)
+**Platform alignment (style + delivery):** outreach follows the platform a lead was found on. `compose_personalized.py` holds the single source of truth: `SOURCE_TO_OUTREACH` maps a lead's `source_channel` to a reply platform (non-messaging channels like google/hackernews/youtube → email), and `resolve_effective_platform(source_channel, campaign_platform)` returns one platform used for **both** message style and delivery. It collapses to email whenever the preferred platform isn't in `DELIVERABLE_PLATFORMS` (currently `{"email", "linkedin", "instagram", "facebook"}` — email delivers via Resend, the social platforms via assisted send through the send-handler registry). Adding a platform to `DELIVERABLE_PLATFORMS` switches both style and delivery to it automatically. Campaign creation seeds `campaign.platform` from the primary source via `outreach_platform_for_source()` so the campaign default is source-aligned; per-lead resolution still overrides it at compose/send time. (Future: per-recipient delivery mechanisms from the contacts module will drive this dynamically.)
 
 **Celery tasks in `worker.py`:**
 
 | Task | Trigger | What it does |
 |---|---|---|
-| `run_find_leads(campaign_id, ...)` | Manual (UI) or Beat scheduler | Searches all active `CampaignSource` rows, qualifies via Claude Haiku, inserts Lead records |
-| `run_compose_pending(campaign_id)` | Manual (UI) or chained after `run_find_leads` | Composes a `LeadDraft` for every `new` lead without an existing pending draft |
-| `run_send_approved_drafts(campaign_id)` | Manual (UI) | Sends all `approved` drafts; enforces spam guard (30-day cooldown + unsubscribe check); upserts Contacts |
+| `run_find_leads(campaign_id, ...)` | Manual (UI) or Beat scheduler | Searches all active `CampaignSource` rows, qualifies via Claude Haiku, inserts Lead records, and composes a `pending_review` draft per new lead inline |
+| `run_compose_pending(campaign_id)` | Chained after `run_find_leads` (back-stop) | Composes a `LeadDraft` for every `new` lead without an existing pending draft |
+| `run_send_approved_drafts(campaign_id)` | Manual (UI) | Sends all `approved` drafts via the send-handler registry (`_send_one_draft`); email enforces the spam guard (30-day cooldown + unsubscribe), social drafts go to `awaiting_send`; upserts Contacts + logs `contact_messages` |
 | `run_scheduled_searches()` | Celery Beat every 30 min | Finds campaigns with `auto_search_enabled=True` and `next_search_at ≤ now`; fires `run_find_leads` + `run_compose_pending`; advances `next_search_at` |
 
 **Search schedule:** the auto-search interval (manual / 6h / daily / weekly) is set at creation and can be changed afterwards from the campaign detail view, which calls `PATCH /api/outreach/campaigns/{id}/schedule`. Selecting "manual" disables auto-search and clears `next_search_at`.
 
-**Human review gate:** drafts start as `pending_review`. The operator approves (optionally editing subject/body), rejects, or bulk-approves from the Drafts tab. `run_send_approved_drafts` only processes `approved` status. No auto-send path exists.
+**Human review gate:** drafts start as `pending_review`. The operator approves (optionally editing subject/body), rejects, or bulk-approves from the Drafts tab, then sends per-lead ("Send now") or in bulk ("Send approved"). Only `approved` drafts are sent; no auto-send path exists. Assisted (social) sends add a second gate: the draft moves to `awaiting_send` with a deep link, and the operator confirms via `/drafts/{id}/confirm-sent` after sending in the native app — only then is the `outreach_sends` + `contact_messages` record written.
 
 **API router** — `src/aiplatform/webapp/routers/outreach.py`:
 
 ```
 GET/POST   /api/outreach/campaigns
-GET/PATCH  /api/outreach/campaigns/{id}
+GET/PATCH  /api/outreach/campaigns/{id}        (create/patch accept persona_ids or legacy personas)
 PATCH      /api/outreach/campaigns/{id}/schedule
 POST       /api/outreach/campaigns/{id}/find-leads
 POST       /api/outreach/campaigns/{id}/compose-pending
 POST       /api/outreach/campaigns/{id}/compose-lead/{lead_id}
 POST       /api/outreach/campaigns/{id}/send-approved
+POST       /api/outreach/campaigns/{id}/drafts/{draft_id}/send   (single-lead send)
+POST       /api/outreach/drafts/{id}/confirm-sent                (assisted-send confirm)
+GET/POST   /api/outreach/personas               ?venture=
+PATCH/DEL  /api/outreach/personas/{id}           (DELETE ?force=true to unlink everywhere)
+GET/PUT    /api/outreach/campaigns/{id}/personas (PUT body {persona_ids:[…]} replaces links)
 GET/POST   /api/outreach/campaigns/{id}/sources
 PATCH/DEL  /api/outreach/sources/{id}
-GET        /api/outreach/campaigns/{id}/drafts   ?status=pending_review|approved|rejected
+GET        /api/outreach/campaigns/{id}/drafts   ?status=pending_review|approved|awaiting_send|rejected
 PATCH      /api/outreach/drafts/{id}
 GET        /api/outreach/campaigns/{id}/leads
 GET        /api/outreach/campaigns/{id}/stats

@@ -41,10 +41,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+from sqlalchemy import func
 
 from aiplatform.database.models import (
-    CampaignSource, Contact, Lead, LeadDraft,
-    OutreachCampaign, OutreachTemplate, OutreachSend,
+    CampaignPersona, CampaignSource, Contact, Lead, LeadDraft,
+    OutreachCampaign, OutreachTemplate, OutreachSend, Persona,
 )
 from aiplatform.database.session import get_db
 from aiplatform.webapp.auth import require_auth
@@ -85,6 +86,19 @@ class PersonaSchema(BaseModel):
     name: str
     description: str
 
+class PersonaCreate(BaseModel):
+    name: str
+    description: str
+    venture: str | None = None
+
+class PersonaPatch(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    venture: str | None = None
+
+class CampaignPersonaLink(BaseModel):
+    persona_ids: list[str]
+
 class SourceCreate(BaseModel):
     platform: str
     name: str
@@ -97,7 +111,8 @@ class CampaignCreate(BaseModel):
     name: str
     goal: str | None = None
     platform: str = "email"
-    personas: list[PersonaSchema] | None = None
+    personas: list[PersonaSchema] | None = None   # legacy inline — upserted to library
+    persona_ids: list[str] | None = None           # preferred — link library personas
     target_prompt: str | None = None
     user_search_instructions: str | None = None
     auto_search_enabled: bool = False
@@ -111,7 +126,8 @@ class CampaignPatch(BaseModel):
     status: str | None = None
     goal: str | None = None
     platform: str | None = None
-    personas: list[PersonaSchema] | None = None
+    personas: list[PersonaSchema] | None = None   # legacy inline — upserted to library
+    persona_ids: list[str] | None = None           # preferred — replaces link set
     target_prompt: str | None = None
     user_search_instructions: str | None = None
     use_mock_leads: bool | None = None
@@ -215,6 +231,8 @@ def _draft_to_dict(d: LeadDraft, lead: Lead | None = None) -> dict:
         "message_body": d.message_body,
         "context_used": d.context_used,
         "status":       d.status,
+        "send_deep_link": d.send_deep_link,
+        "send_platform":  d.send_platform,
         "generated_at": d.generated_at.isoformat(),
         "reviewed_at":  d.reviewed_at.isoformat() if d.reviewed_at else None,
         "sent_at":      d.sent_at.isoformat() if d.sent_at else None,
@@ -287,7 +305,7 @@ def _campaign_to_dict(c: OutreachCampaign, db: Any) -> dict:
     return {
         "id": str(c.id), "venture": c.venture, "name": c.name,
         "status": c.status, "goal": c.goal, "platform": c.platform or "email",
-        "personas": c.personas or [],
+        "personas": _campaign_personas(c, db),
         "target_prompt": c.target_prompt,
         "user_search_instructions": c.user_search_instructions,
         "auto_search_enabled": c.auto_search_enabled,
@@ -306,6 +324,75 @@ def _campaign_to_dict(c: OutreachCampaign, db: Any) -> dict:
     }
 
 
+def _persona_to_dict(p: Persona) -> dict:
+    return {
+        "id": str(p.id), "venture": p.venture,
+        "name": p.name, "description": p.description,
+        "created_at": p.created_at.isoformat(), "updated_at": p.updated_at.isoformat(),
+    }
+
+
+def _campaign_personas(c: OutreachCampaign, db: Any) -> list[dict]:
+    """Resolve a campaign's personas as [{name, description}] from the reusable
+    persona library (campaign_personas links). Falls back to the legacy JSONB
+    column when no links exist, so deploys are order-independent during cut-over.
+    """
+    rows = (
+        db.query(Persona)
+        .join(CampaignPersona, CampaignPersona.persona_id == Persona.id)
+        .filter(CampaignPersona.campaign_id == c.id)
+        .all()
+    )
+    if rows:
+        return [{"name": p.name, "description": p.description} for p in rows]
+    return c.personas or []
+
+
+def _upsert_persona(db: Any, venture: str | None, name: str, description: str) -> Persona:
+    """Find a persona by (venture, lower(name)) or create it. Updates description."""
+    existing = (
+        db.query(Persona)
+        .filter(Persona.venture == venture, func.lower(Persona.name) == name.lower())
+        .first()
+    )
+    if existing:
+        if description:
+            existing.description = description
+        return existing
+    p = Persona(venture=venture, name=name, description=description or "")
+    db.add(p)
+    db.flush()
+    return p
+
+
+def _set_campaign_personas(db: Any, campaign: OutreachCampaign,
+                           persona_ids: list[str] | None = None,
+                           persona_dicts: list[dict] | None = None) -> None:
+    """Replace a campaign's persona link set. Accepts library ids and/or inline
+    {name, description} dicts (legacy) — dicts are upserted into the library."""
+    ids: list = []
+    for pid in (persona_ids or []):
+        try:
+            ids.append(_uuid.UUID(str(pid)))
+        except ValueError:
+            continue
+    for d in (persona_dicts or []):
+        name = (d.get("name") or "").strip()
+        if not name:
+            continue
+        ids.append(_upsert_persona(db, campaign.venture, name, d.get("description") or "").id)
+
+    # Replace links (dedupe, preserve order)
+    db.query(CampaignPersona).filter(CampaignPersona.campaign_id == campaign.id).delete()
+    db.flush()
+    seen: set = set()
+    for pid in ids:
+        if pid in seen:
+            continue
+        seen.add(pid)
+        db.add(CampaignPersona(campaign_id=campaign.id, persona_id=pid))
+
+
 # ── Persona templates ────────────────────────────────────────────
 
 def _load_persona_templates() -> list[dict]:
@@ -318,6 +405,92 @@ def _load_persona_templates() -> list[dict]:
 def get_persona_templates(_: str = Depends(require_auth)) -> dict:
     """Return pre-built campaign templates for each target audience segment."""
     return {"items": _load_persona_templates()}
+
+
+# ── Persona library (reusable personas) ──────────────────────────────
+
+@router.get("/personas")
+def list_personas(
+    venture: str | None = Query(None),
+    _: str = Depends(require_auth), db=Depends(get_db),
+) -> dict:
+    q = db.query(Persona)
+    if venture:
+        q = q.filter(Persona.venture == venture)
+    items = q.order_by(Persona.name.asc()).all()
+    return {"items": [_persona_to_dict(p) for p in items], "total": len(items)}
+
+
+@router.post("/personas", status_code=status.HTTP_201_CREATED)
+def create_persona(
+    req: PersonaCreate, _: str = Depends(require_auth), db=Depends(get_db),
+) -> dict:
+    p = Persona(venture=req.venture, name=req.name, description=req.description)
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return _persona_to_dict(p)
+
+
+@router.patch("/personas/{persona_id}")
+def patch_persona(
+    persona_id: str, req: PersonaPatch,
+    _: str = Depends(require_auth), db=Depends(get_db),
+) -> dict:
+    p = db.get(Persona, _uuid.UUID(persona_id))
+    if not p:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    if req.name is not None:        p.name = req.name
+    if req.description is not None: p.description = req.description
+    if req.venture is not None:     p.venture = req.venture
+    db.commit()
+    db.refresh(p)
+    return _persona_to_dict(p)
+
+
+@router.delete("/personas/{persona_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_persona(
+    persona_id: str, force: bool = Query(False),
+    _: str = Depends(require_auth), db=Depends(get_db),
+):
+    p = db.get(Persona, _uuid.UUID(persona_id))
+    if not p:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    usage = db.query(CampaignPersona).filter(
+        CampaignPersona.persona_id == p.id).count()
+    if usage and not force:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Persona is linked to {usage} campaign(s). Re-send with ?force=true to delete and unlink.",
+        )
+    db.delete(p)
+    db.commit()
+
+
+@router.get("/campaigns/{campaign_id}/personas")
+def list_campaign_personas(
+    campaign_id: str, _: str = Depends(require_auth), db=Depends(get_db),
+) -> dict:
+    c = _campaign_or_404(campaign_id, db)
+    rows = (
+        db.query(Persona)
+        .join(CampaignPersona, CampaignPersona.persona_id == Persona.id)
+        .filter(CampaignPersona.campaign_id == c.id)
+        .order_by(Persona.name.asc())
+        .all()
+    )
+    return {"items": [_persona_to_dict(p) for p in rows]}
+
+
+@router.put("/campaigns/{campaign_id}/personas")
+def set_campaign_personas(
+    campaign_id: str, req: CampaignPersonaLink,
+    _: str = Depends(require_auth), db=Depends(get_db),
+) -> dict:
+    c = _campaign_or_404(campaign_id, db)
+    _set_campaign_personas(db, c, persona_ids=req.persona_ids)
+    db.commit()
+    return {"items": _campaign_personas(c, db)}
 
 
 # ── Campaign endpoints ────────────────────────────────────────────
@@ -357,7 +530,6 @@ def create_campaign(
     c = OutreachCampaign(
         venture=req.venture, name=req.name, goal=req.goal,
         status="draft", platform=platform,
-        personas=[p.model_dump() for p in req.personas] if req.personas else [],
         target_prompt=req.target_prompt,
         user_search_instructions=req.user_search_instructions,
         auto_search_enabled=req.auto_search_enabled,
@@ -369,7 +541,12 @@ def create_campaign(
         c.next_search_at = datetime.now(timezone.utc) + timedelta(hours=req.search_interval_hours)
 
     db.add(c)
-    db.flush()  # get c.id before seeding sources
+    db.flush()  # get c.id before seeding sources / persona links
+
+    _set_campaign_personas(
+        db, c, persona_ids=req.persona_ids,
+        persona_dicts=[p.model_dump() for p in req.personas] if req.personas else None,
+    )
 
     if req.sources:
         # User-defined sources from the creation form
@@ -427,7 +604,11 @@ def patch_campaign(
         if req.platform not in VALID_PLATFORMS:
             raise HTTPException(status_code=400, detail=f"platform must be one of {VALID_PLATFORMS}")
         c.platform = req.platform
-    if req.personas is not None:           c.personas = [p.model_dump() for p in req.personas]
+    if req.persona_ids is not None:
+        _set_campaign_personas(db, c, persona_ids=req.persona_ids)
+    elif req.personas is not None:
+        _set_campaign_personas(
+            db, c, persona_dicts=[p.model_dump() for p in req.personas])
     if req.target_prompt is not None:      c.target_prompt = req.target_prompt
     if req.user_search_instructions is not None:
         c.user_search_instructions = req.user_search_instructions
@@ -477,7 +658,6 @@ def clone_campaign(
         goal=original.goal,
         status="draft",
         platform=original.platform,
-        personas=original.personas,
         target_prompt=original.target_prompt,
         user_search_instructions=original.user_search_instructions,
         auto_search_enabled=False,
@@ -487,6 +667,10 @@ def clone_campaign(
     )
     db.add(cloned)
     db.flush()
+
+    # Copy persona links (shared library references — not copies of the personas)
+    for link in original.persona_links:
+        db.add(CampaignPersona(campaign_id=cloned.id, persona_id=link.persona_id))
 
     for src in original.sources:
         db.add(CampaignSource(
@@ -663,8 +847,9 @@ def generate_search_prompt(
     platform = c.platform or "email"
 
     persona_block = ""
-    if c.personas:
-        lines = "\n".join(f"  - {p['name']}: {p.get('description','')}" for p in c.personas)
+    campaign_personas = _campaign_personas(c, db)
+    if campaign_personas:
+        lines = "\n".join(f"  - {p['name']}: {p.get('description','')}" for p in campaign_personas)
         persona_block = f"\nCUSTOMER PERSONAS:\n{lines}\n"
 
     target_block = f"\nPRODUCT/AUDIENCE CONTEXT:\n{c.target_prompt}\n" if c.target_prompt else ""
@@ -701,11 +886,17 @@ def trigger_find_leads(
 ) -> dict:
     c = _campaign_or_404(campaign_id, db)
     sources = [_source_to_dict(s) for s in c.sources if s.enabled]
-    personas = c.personas or []
-    from aiplatform.worker import run_find_leads as celery_task
-    task = celery_task.delay(campaign_id, c.venture, req.max_leads, sources,
-                             req.search_prompt, personas)
-    return {"campaign_id": campaign_id, "celery_task_id": task.id, "status": "queued"}
+    personas = _campaign_personas(c, db)
+    # Chain compose after find so a suggestion draft exists for every new lead.
+    # run_find_leads composes inline; run_compose_pending is the idempotent back-stop.
+    from aiplatform.worker import run_find_leads, run_compose_pending
+    chain = (
+        run_find_leads.si(campaign_id, c.venture, req.max_leads, sources,
+                          req.search_prompt, personas)
+        | run_compose_pending.si(campaign_id)
+    )
+    result = chain.delay()
+    return {"campaign_id": campaign_id, "celery_task_id": result.id, "status": "queued"}
 
 
 @router.post("/campaigns/{campaign_id}/compose-pending", status_code=status.HTTP_202_ACCEPTED)
@@ -773,6 +964,57 @@ def trigger_send_approved(
     task = celery_task.delay(campaign_id)
     return {"campaign_id": campaign_id, "celery_task_id": task.id,
             "approved_drafts": approved_count, "status": "queued"}
+
+
+@router.post("/campaigns/{campaign_id}/drafts/{draft_id}/send")
+def send_single_draft(
+    campaign_id: str, draft_id: str,
+    _: str = Depends(require_auth), db=Depends(get_db),
+) -> dict:
+    """Send one approved draft now. Email delivers immediately; social platforms
+    return an assisted-send deep link to open and then confirm."""
+    c = _campaign_or_404(campaign_id, db)
+    d = db.get(LeadDraft, _uuid.UUID(draft_id))
+    if not d or d.campaign_id != c.id:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    if d.status != "approved":
+        raise HTTPException(status_code=409, detail="Draft must be approved before sending.")
+    lead = db.get(Lead, d.lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    from aiplatform.worker import _send_one_draft
+    base_url = os.environ.get("RAILWAY_PUBLIC_URL", "https://api.planbadmin.com")
+    now = datetime.now(timezone.utc)
+    result = _send_one_draft(db, d, lead, c, base_url, 30, now, bool(c.dry_run))
+    db.commit()
+    db.refresh(d)
+    out = _draft_to_dict(d, lead)
+    out["send_result"] = result
+    return out
+
+
+@router.post("/drafts/{draft_id}/confirm-sent")
+def confirm_draft_sent(
+    draft_id: str, _: str = Depends(require_auth), db=Depends(get_db),
+) -> dict:
+    """Operator confirmation for an assisted send: the message was sent manually
+    in the native app. Finalises the send and logs it to contact history."""
+    d = db.get(LeadDraft, _uuid.UUID(draft_id))
+    if not d:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    if d.status != "awaiting_send":
+        raise HTTPException(status_code=409, detail="Draft is not awaiting a manual send.")
+    lead = db.get(Lead, d.lead_id)
+    campaign = db.get(OutreachCampaign, d.campaign_id)
+    if not lead or not campaign:
+        raise HTTPException(status_code=404, detail="Lead or campaign not found")
+
+    from aiplatform.worker import confirm_manual_send
+    confirm_manual_send(db, d, lead, campaign)
+    db.commit()
+    db.refresh(d)
+    return _draft_to_dict(d, lead)
 
 
 # ── Legacy A/B endpoints (kept for existing campaigns) ────────────────────────

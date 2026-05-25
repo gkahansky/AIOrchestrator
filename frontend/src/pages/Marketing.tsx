@@ -67,6 +67,7 @@ const STATUS_COLORS: Record<string, string> = {
   pending_review: "bg-amber-100 text-amber-700",
   approved:       "bg-emerald-100 text-emerald-700",
   rejected:       "bg-error/10 text-error",
+  awaiting_send:  "bg-sky-100 text-sky-700",
   sent:           "bg-primary/10 text-primary",
   test_sent:      "bg-violet-100 text-violet-700",
   approached:     "bg-primary/10 text-primary",
@@ -207,6 +208,115 @@ function PersonaEditor({ personas, onChange }: {
           <span className="material-symbols-outlined text-[14px]">add</span>Add Persona
         </button>
       )}
+    </div>
+  )
+}
+
+// ── Persona library (reusable, linked to campaigns) ─────────────────────────────────────
+
+function PersonaLibrary({ campaignId, venture }: { campaignId: string; venture: string }) {
+  const [library, setLibrary] = useState<any[]>([])
+  const [linkedIds, setLinkedIds] = useState<Set<string>>(new Set())
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [newName, setNewName] = useState("")
+  const [newDesc, setNewDesc] = useState("")
+
+  async function load() {
+    setLoading(true)
+    const [lib, linked] = await Promise.all([
+      fetch(`${API}/api/outreach/personas?venture=${venture}`, { headers: authHeader() }).then(r => r.json()),
+      fetch(`${API}/api/outreach/campaigns/${campaignId}/personas`, { headers: authHeader() }).then(r => r.json()),
+    ])
+    setLibrary(lib.items || [])
+    setLinkedIds(new Set((linked.items || []).map((p: any) => p.id)))
+    setLoading(false)
+  }
+  useEffect(() => { load() }, [campaignId, venture])
+
+  async function saveLinks(ids: Set<string>) {
+    setSaving(true)
+    await fetch(`${API}/api/outreach/campaigns/${campaignId}/personas`, {
+      method: "PUT", headers: { ...authHeader(), "Content-Type": "application/json" },
+      body: JSON.stringify({ persona_ids: [...ids] }),
+    })
+    setSaving(false)
+  }
+  async function toggle(id: string) {
+    const next = new Set(linkedIds)
+    next.has(id) ? next.delete(id) : next.add(id)
+    setLinkedIds(next)
+    await saveLinks(next)
+  }
+  async function createPersona() {
+    if (!newName.trim()) return
+    setSaving(true)
+    await fetch(`${API}/api/outreach/personas`, {
+      method: "POST", headers: { ...authHeader(), "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newName.trim(), description: newDesc.trim(), venture }),
+    })
+    setNewName(""); setNewDesc(""); setSaving(false)
+    await load()
+  }
+  async function editPersona(p: any) {
+    const name = window.prompt("Persona name", p.name)
+    if (name === null) return
+    const description = window.prompt("Description (applies to every campaign using this persona)", p.description)
+    if (description === null) return
+    await fetch(`${API}/api/outreach/personas/${p.id}`, {
+      method: "PATCH", headers: { ...authHeader(), "Content-Type": "application/json" },
+      body: JSON.stringify({ name, description }),
+    })
+    await load()
+  }
+  async function deletePersona(p: any) {
+    if (!window.confirm(`Delete persona "${p.name}"? It will be unlinked from all campaigns.`)) return
+    const r = await fetch(`${API}/api/outreach/personas/${p.id}?force=true`, {
+      method: "DELETE", headers: authHeader(),
+    })
+    if (r.ok || r.status === 204) await load()
+  }
+
+  if (loading) return <p className="text-sm text-on-surface-variant">Loading personas…</p>
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-on-surface-variant">
+        Personas are reusable across campaigns. Check the ones this campaign targets.
+        Editing a persona's text updates it everywhere it's linked.
+      </p>
+
+      <div className="space-y-2">
+        {library.map(p => (
+          <div key={p.id} className="flex items-start gap-3 bg-surface-container-low rounded-lg border border-outline-variant/20 p-3">
+            <input type="checkbox" checked={linkedIds.has(p.id)} onChange={() => toggle(p.id)} disabled={saving}
+              className="mt-1 accent-primary" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-label font-semibold text-on-surface">{p.name}</p>
+              <p className="text-xs text-on-surface-variant leading-relaxed">{p.description}</p>
+            </div>
+            <button onClick={() => editPersona(p)} className="text-on-surface-variant hover:text-primary transition-colors">
+              <span className="material-symbols-outlined text-[16px]">edit</span>
+            </button>
+            <button onClick={() => deletePersona(p)} className="text-on-surface-variant hover:text-error transition-colors">
+              <span className="material-symbols-outlined text-[16px]">delete</span>
+            </button>
+          </div>
+        ))}
+        {!library.length && <p className="text-sm text-on-surface-variant">No personas yet — create one below.</p>}
+      </div>
+
+      <div className="bg-surface-container-low rounded-lg border border-outline-variant/20 p-3 space-y-2">
+        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder='New persona name (e.g. "Solo podcaster")'
+          className="w-full px-3 py-1.5 text-sm font-label bg-surface-container-lowest rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface" />
+        <textarea value={newDesc} onChange={e => setNewDesc(e.target.value)} rows={2}
+          placeholder="Describe this persona — their role, pain points, what they're usually trying to solve…"
+          className="w-full px-3 py-1.5 text-sm font-label bg-surface-container-lowest rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface resize-none" />
+        <button onClick={createPersona} disabled={saving || !newName.trim()}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-on-primary rounded-lg text-xs font-label font-semibold disabled:opacity-50 transition-colors">
+          <span className="material-symbols-outlined text-[14px]">add</span>Add to library
+        </button>
+      </div>
     </div>
   )
 }
@@ -518,8 +628,32 @@ function DraftCard({ draft, onUpdate }: { draft: any; onUpdate: () => void }) {
     setEditing(false)
   }
 
+  async function sendNow() {
+    setSaving(true)
+    await fetch(`${API}/api/outreach/campaigns/${draft.campaign_id}/drafts/${draft.id}/send`, {
+      method: "POST", headers: authHeader(),
+    })
+    setSaving(false)
+    onUpdate()
+  }
+
+  async function confirmSent() {
+    setSaving(true)
+    await fetch(`${API}/api/outreach/drafts/${draft.id}/confirm-sent`, {
+      method: "POST", headers: authHeader(),
+    })
+    setSaving(false)
+    onUpdate()
+  }
+
+  function copyMessage() {
+    const text = (isEmail && draft.subject ? draft.subject + "\n\n" : "") + (draft.message_body || "")
+    navigator.clipboard?.writeText(text)
+  }
+
   const statusColor = draft.status === "approved" ? "border-emerald-300 bg-emerald-50/50"
     : draft.status === "rejected" ? "border-error/20 bg-error/5"
+    : draft.status === "awaiting_send" ? "border-sky-300 bg-sky-50/50"
     : "border-outline-variant/20"
 
   return (
@@ -615,9 +749,42 @@ function DraftCard({ draft, onUpdate }: { draft: any; onUpdate: () => void }) {
               </div>
             )}
             {draft.status === "approved" && (
-              <div className="flex items-center gap-2 text-xs text-emerald-700">
-                <span className="material-symbols-outlined text-[14px]">check_circle</span>
-                Approved — queued to send
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <button onClick={sendNow} disabled={saving}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50">
+                  <span className="material-symbols-outlined text-[13px]">send</span>
+                  {saving ? "Sending…" : "Send now"}
+                </button>
+                <span className="flex items-center gap-1 text-xs text-emerald-700">
+                  <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                  Approved
+                </span>
+              </div>
+            )}
+            {draft.status === "awaiting_send" && (
+              <div className="space-y-2 pt-1">
+                <p className="text-xs text-sky-700 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+                  Send this manually on {draft.send_platform || "the platform"}, then mark it sent.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {draft.send_deep_link && (
+                    <a href={draft.send_deep_link} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-1 px-3 py-1.5 bg-sky-600 text-white text-xs font-label font-semibold rounded-lg hover:bg-sky-700 transition-colors">
+                      <span className="material-symbols-outlined text-[13px]">open_in_new</span>
+                      Open in {draft.send_platform || "app"}
+                    </a>
+                  )}
+                  <button onClick={copyMessage}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-surface-container text-on-surface-variant text-xs font-label font-semibold rounded-lg hover:bg-surface-dim transition-colors">
+                    <span className="material-symbols-outlined text-[13px]">content_copy</span>Copy message
+                  </button>
+                  <button onClick={confirmSent} disabled={saving}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white text-xs font-label font-semibold rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50">
+                    <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                    {saving ? "Saving…" : "Mark as sent"}
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -636,7 +803,7 @@ function CampaignDetail({ campaignId, onDeleted, onCloned }: { campaignId: strin
   const { data: campaign, isLoading } = useCampaign(campaignId)
   const [searchingLeads, setSearchingLeads] = useState(false)
   const { data: leadsData } = useLeads(campaignId, searchingLeads)
-  const [activeTab, setActiveTab] = useState<"leads" | "drafts" | "sources">("leads")
+  const [activeTab, setActiveTab] = useState<"leads" | "drafts" | "sources" | "personas">("leads")
   const [draftStatusFilter, setDraftStatusFilter] = useState("pending_review")
   const { data: draftsData, refetch: refetchDrafts } = useDrafts(campaignId, draftStatusFilter)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
@@ -788,9 +955,10 @@ function CampaignDetail({ campaignId, onDeleted, onCloned }: { campaignId: strin
     : "Manual"
 
   const tabs = [
-    { id: "leads",   label: `Leads (${leadsData?.total ?? 0})`, icon: "group" },
-    { id: "drafts",  label: `Drafts${pendingDrafts > 0 ? ` (${pendingDrafts})` : ""}`, icon: "mail" },
-    { id: "sources", label: `Sources (${sources.length})`, icon: "travel_explore" },
+    { id: "leads",    label: `Leads (${leadsData?.total ?? 0})`, icon: "group" },
+    { id: "drafts",   label: `Drafts${pendingDrafts > 0 ? ` (${pendingDrafts})` : ""}`, icon: "mail" },
+    { id: "personas", label: "Personas", icon: "groups" },
+    { id: "sources",  label: `Sources (${sources.length})`, icon: "travel_explore" },
   ]
 
   return (
@@ -999,6 +1167,7 @@ function CampaignDetail({ campaignId, onDeleted, onCloned }: { campaignId: strin
                 {[
                   { id: "pending_review", label: "Pending" },
                   { id: "approved", label: "Approved" },
+                  { id: "awaiting_send", label: "To Send" },
                   { id: "rejected", label: "Rejected" },
                   { id: "test_sent", label: "Test Sent" },
                   { id: "", label: "All" },
@@ -1036,6 +1205,11 @@ function CampaignDetail({ campaignId, onDeleted, onCloned }: { campaignId: strin
               </div>
             )}
           </div>
+        )}
+
+        {/* Personas tab */}
+        {activeTab === "personas" && (
+          <PersonaLibrary campaignId={campaignId} venture={campaign.venture} />
         )}
 
         {/* Sources tab */}

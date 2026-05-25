@@ -72,10 +72,11 @@ SOURCE_TO_OUTREACH: dict[str, str] = {
     "youtube": "email",
 }
 
-# Platforms with a working delivery path. Email is the only wired channel today;
-# add platforms here as native send paths are built and both message style and
-# delivery will switch to them automatically.
-DELIVERABLE_PLATFORMS: set[str] = {"email"}
+# Platforms with a delivery path. Email delivers via Resend; linkedin/instagram/
+# facebook deliver via assisted send (deep link + operator confirm) through the
+# send-handler registry (aiplatform.skills.comms.senders). Adding a platform here
+# switches both message style and delivery to it automatically.
+DELIVERABLE_PLATFORMS: set[str] = {"email", "linkedin", "instagram", "facebook"}
 
 
 def outreach_platform_for_source(source_platform: str | None) -> str:

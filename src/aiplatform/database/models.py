@@ -403,6 +403,11 @@ class OutreachCampaign(Base):
     sources   = relationship("CampaignSource", back_populates="campaign", cascade="all, delete-orphan",
                              order_by="CampaignSource.created_at")
     drafts    = relationship("LeadDraft", back_populates="campaign", cascade="all, delete-orphan")
+    # Many-to-many links to the reusable persona library. The legacy `personas`
+    # JSONB column above is kept as a fallback during the cut-over and is read
+    # via _campaign_personas() only when no links exist.
+    persona_links = relationship("CampaignPersona", back_populates="campaign",
+                                 cascade="all, delete-orphan")
 
 
 class OutreachTemplate(Base):
@@ -452,7 +457,8 @@ class OutreachSend(Base):
 
     id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     lead_id     = Column(UUID(as_uuid=True), ForeignKey("leads.id", ondelete="CASCADE"), nullable=False, index=True)
-    template_id = Column(UUID(as_uuid=True), ForeignKey("outreach_templates.id", ondelete="CASCADE"), nullable=False, index=True)
+    # Nullable: draft-based (persona) sends have no template; only legacy A/B sends set this.
+    template_id = Column(UUID(as_uuid=True), ForeignKey("outreach_templates.id", ondelete="CASCADE"), nullable=True, index=True)
     campaign_id = Column(UUID(as_uuid=True), ForeignKey("outreach_campaigns.id", ondelete="CASCADE"), nullable=False, index=True)
     message_id  = Column(String(255), nullable=True)   # Resend message ID for tracking
     status      = Column(String(50), nullable=False, default="sent")  # sent, opened, replied, bounced
@@ -604,16 +610,59 @@ class LeadDraft(Base):
     message_body = Column(Text, nullable=False)
     context_used = Column(Text, nullable=True)          # snapshot of lead context at compose time
     status       = Column(String(20), nullable=False, default="pending_review", index=True)
-    # pending_review | approved | rejected | sent
+    # pending_review | approved | rejected | awaiting_send | sent | test_sent
+    # awaiting_send: dispatched to an assisted (non-email) platform; the operator
+    # must send manually in the native app and then confirm, which finalises it.
 
     generated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     reviewed_at  = Column(DateTime(timezone=True), nullable=True)
     sent_at      = Column(DateTime(timezone=True), nullable=True)
     send_record_id = Column(UUID(as_uuid=True), ForeignKey("outreach_sends.id", ondelete="SET NULL"),
                             nullable=True)
+    # Assisted-send: the deep link the operator opens to send in the native app,
+    # and the platform it targets. Populated when status = awaiting_send.
+    send_deep_link = Column(String(2048), nullable=True)
+    send_platform  = Column(String(50), nullable=True)
 
     lead     = relationship("Lead", back_populates="drafts")
     campaign = relationship("OutreachCampaign", back_populates="drafts")
+
+
+# ── Reusable persona library ──────────────────────────────────────────
+
+class Persona(Base):
+    """
+    A reusable audience persona. Personas live in a per-venture library and are
+    linked to campaigns many-to-many via CampaignPersona. Editing a persona is a
+    live reference: every campaign linked to it sees the change.
+    """
+    __tablename__ = "personas"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    venture     = Column(String(50), nullable=True, index=True)
+    name        = Column(String(255), nullable=False)
+    description = Column(Text, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
+
+    campaign_links = relationship("CampaignPersona", back_populates="persona",
+                                  cascade="all, delete-orphan")
+
+
+class CampaignPersona(Base):
+    """Join row linking one campaign to one reusable persona (many-to-many)."""
+    __tablename__ = "campaign_personas"
+
+    campaign_id = Column(UUID(as_uuid=True), ForeignKey("outreach_campaigns.id", ondelete="CASCADE"),
+                         primary_key=True)
+    persona_id  = Column(UUID(as_uuid=True), ForeignKey("personas.id", ondelete="CASCADE"),
+                         primary_key=True, index=True)
+    created_at  = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    campaign = relationship("OutreachCampaign", back_populates="persona_links")
+    persona  = relationship("Persona", back_populates="campaign_links")
 
 
 # ── Security Audit ─────────────────────────────────────────────────────

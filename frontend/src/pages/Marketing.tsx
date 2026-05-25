@@ -161,53 +161,88 @@ function useContacts(page: number, search: string, statusFilter: string) {
   })
 }
 
-// ── Persona editor ─────────────────────────────────────────────────────────────────────
+// ── Persona selector (pick from library + add new) ──────────────────────────────────────
 
-function PersonaEditor({ personas, onChange }: {
-  personas: { name: string; description: string }[]
-  onChange: (p: { name: string; description: string }[]) => void
+function PersonaSelector({ venture, selectedIds, onChange }: {
+  venture: string
+  selectedIds: string[]
+  onChange: (ids: string[]) => void
 }) {
-  function add() {
-    if (personas.length >= 5) return
-    onChange([...personas, { name: "", description: "" }])
+  const [library, setLibrary] = useState<any[]>([])
+  const [adding, setAdding] = useState(false)
+  const [newName, setNewName] = useState("")
+  const [newDesc, setNewDesc] = useState("")
+  const [saving, setSaving] = useState(false)
+
+  async function load() {
+    const d = await fetch(`${API}/api/outreach/personas?venture=${venture}`, { headers: authHeader() }).then(r => r.json())
+    setLibrary(d.items || [])
   }
-  function update(i: number, field: "name" | "description", val: string) {
-    const next = personas.map((p, idx) => idx === i ? { ...p, [field]: val } : p)
-    onChange(next)
-  }
-  function remove(i: number) {
-    onChange(personas.filter((_, idx) => idx !== i))
+  useEffect(() => { load() }, [venture])
+
+  const selected = library.filter(p => selectedIds.includes(p.id))
+  const available = library.filter(p => !selectedIds.includes(p.id))
+
+  function remove(id: string) { onChange(selectedIds.filter(x => x !== id)) }
+
+  async function createPersona() {
+    if (!newName.trim()) return
+    setSaving(true)
+    const r = await fetch(`${API}/api/outreach/personas`, {
+      method: "POST", headers: { ...authHeader(), "Content-Type": "application/json" },
+      body: JSON.stringify({ venture, name: newName.trim(), description: newDesc.trim() }),
+    })
+    setSaving(false)
+    if (r.ok) {
+      const p = await r.json()
+      setNewName(""); setNewDesc(""); setAdding(false)
+      await load()
+      onChange([...selectedIds, p.id])
+    }
   }
 
   return (
-    <div className="space-y-3">
-      {personas.map((p, i) => (
-        <div key={i} className="bg-surface-container-low rounded-lg border border-outline-variant/20 p-3 space-y-2">
-          <div className="flex items-center gap-2">
-            <input
-              value={p.name}
-              onChange={e => update(i, "name", e.target.value)}
-              placeholder={`Persona ${i + 1} name (e.g. "Solo podcaster")`}
-              className="flex-1 px-3 py-1.5 text-sm font-label bg-surface-container-lowest rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface"
-            />
-            <button onClick={() => remove(i)} className="text-on-surface-variant hover:text-error transition-colors">
-              <span className="material-symbols-outlined text-[18px]">close</span>
-            </button>
-          </div>
-          <textarea
-            value={p.description}
-            onChange={e => update(i, "description", e.target.value)}
-            placeholder="Describe this persona — their role, pain points, what they're usually trying to solve…"
-            rows={2}
-            className="w-full px-3 py-1.5 text-sm font-label bg-surface-container-lowest rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface resize-none"
-          />
+    <div className="space-y-2">
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {selected.map(p => (
+            <span key={p.id} title={p.description}
+              className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-tertiary/10 text-tertiary font-label font-semibold">
+              {p.name}
+              <button onClick={() => remove(p.id)} className="hover:text-error">
+                <span className="material-symbols-outlined text-[13px]">close</span>
+              </button>
+            </span>
+          ))}
         </div>
-      ))}
-      {personas.length < 5 && (
-        <button onClick={add}
-          className="flex items-center gap-1.5 px-3 py-1.5 border border-dashed border-outline-variant/40 text-on-surface-variant hover:border-primary/30 hover:text-on-surface rounded-lg text-xs font-label font-semibold transition-colors">
-          <span className="material-symbols-outlined text-[14px]">add</span>Add Persona
+      )}
+      <div className="flex gap-2">
+        <select value="" onChange={e => { if (e.target.value) onChange([...selectedIds, e.target.value]) }}
+          className="flex-1 px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface">
+          <option value="">{available.length ? "Select a persona to add…" : "No more personas for this product"}</option>
+          {available.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <button onClick={() => setAdding(a => !a)}
+          className="flex items-center gap-1 px-3 py-2 border border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 rounded-lg text-xs font-label font-semibold transition-colors whitespace-nowrap">
+          <span className="material-symbols-outlined text-[14px]">add</span>Add persona
         </button>
+      </div>
+      {adding && (
+        <div className="bg-surface-container-low rounded-lg border border-outline-variant/20 p-3 space-y-2">
+          <input value={newName} onChange={e => setNewName(e.target.value)} placeholder='New persona name (e.g. "Solo podcaster")'
+            className="w-full px-3 py-1.5 text-sm font-label bg-surface-container-lowest rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface" />
+          <textarea value={newDesc} onChange={e => setNewDesc(e.target.value)} rows={3}
+            placeholder="Describe this persona — role, pain points, triggers… (saved to the Personas library)"
+            className="w-full px-3 py-1.5 text-sm font-label bg-surface-container-lowest rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface resize-none leading-relaxed" />
+          <div className="flex gap-2">
+            <button onClick={createPersona} disabled={saving || !newName.trim()}
+              className="px-3 py-1.5 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg disabled:opacity-50">
+              {saving ? "Saving…" : "Create & add"}
+            </button>
+            <button onClick={() => setAdding(false)}
+              className="px-3 py-1.5 bg-surface-container text-on-surface-variant text-xs font-label font-semibold rounded-lg">Cancel</button>
+          </div>
+        </div>
       )}
     </div>
   )
@@ -1276,6 +1311,7 @@ function ContactsSection() {
   const [searchInput, setSearchInput] = useState("")
   const [statusFilter, setStatusFilter] = useState("")
   const [showNewContact, setShowNewContact] = useState(false)
+  const [editContact, setEditContact] = useState<any>(null)
   const { data, isLoading } = useContacts(page, search, statusFilter)
   const qc = useQueryClient()
 
@@ -1314,8 +1350,12 @@ function ContactsSection() {
       </div>
 
       {showNewContact && (
-        <NewContactModal onClose={() => setShowNewContact(false)}
-          onCreated={() => qc.invalidateQueries({ queryKey: ["contacts"] })} />
+        <ContactModal onClose={() => setShowNewContact(false)}
+          onSaved={() => qc.invalidateQueries({ queryKey: ["contacts"] })} />
+      )}
+      {editContact && (
+        <ContactModal contact={editContact} onClose={() => setEditContact(null)}
+          onSaved={() => qc.invalidateQueries({ queryKey: ["contacts"] })} />
       )}
 
       <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 overflow-hidden">
@@ -1332,8 +1372,8 @@ function ContactsSection() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-surface-container-low border-b border-outline-variant/10">
-                  {["Name", "Email", "Company", "Status", "Test", "Ventures", "Last Activity"].map(h => (
-                    <th key={h} className="px-4 py-2.5 text-left text-[10px] font-label font-semibold uppercase tracking-wider text-on-surface-variant whitespace-nowrap">{h}</th>
+                  {["Name", "Email", "Company", "URL", "Status", "Test", "Ventures", "Last Activity", ""].map((h, i) => (
+                    <th key={i} className="px-4 py-2.5 text-left text-[10px] font-label font-semibold uppercase tracking-wider text-on-surface-variant whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -1345,6 +1385,14 @@ function ContactsSection() {
                       <a href={`mailto:${c.email}`} className="hover:underline">{c.email}</a>
                     </td>
                     <td className="px-4 py-3 text-xs text-on-surface-variant">{c.company || "—"}</td>
+                    <td className="px-4 py-3 text-xs max-w-[180px]">
+                      {c.website_url ? (
+                        <a href={c.website_url} target="_blank" rel="noopener noreferrer"
+                          title={c.website_url} className="text-primary hover:underline block truncate">
+                          {c.website_url.replace(/^https?:\/\//, "")}
+                        </a>
+                      ) : <span className="text-on-surface-variant">—</span>}
+                    </td>
                     <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
                     <td className="px-4 py-3 text-center">
                       <input type="checkbox" defaultChecked={c.is_test_user}
@@ -1356,6 +1404,12 @@ function ContactsSection() {
                     </td>
                     <td className="px-4 py-3 text-xs text-on-surface-variant whitespace-nowrap">
                       {c.last_activity_at ? new Date(c.last_activity_at).toLocaleDateString() : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button onClick={() => setEditContact(c)} title="Edit"
+                        className="text-on-surface-variant hover:text-primary transition-colors">
+                        <span className="material-symbols-outlined text-[17px]">edit</span>
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -1399,8 +1453,8 @@ function CampaignForm({ campaign, onSaved, onCancel }: {
   const [showAddSource, setShowAddSource] = useState(false)
   const [targetPrompt, setTargetPrompt] = useState(campaign?.target_prompt || "")
   const [userInstructions, setUserInstructions] = useState(campaign?.user_search_instructions || "")
-  const [personas, setPersonas] = useState<{ name: string; description: string }[]>(
-    (campaign?.personas || []).map((p: any) => ({ name: p.name, description: p.description }))
+  const [personaIds, setPersonaIds] = useState<string[]>(
+    (campaign?.personas || []).map((p: any) => p.id).filter(Boolean)
   )
   const [intervalHours, setIntervalHours] = useState<number | null>(
     campaign?.auto_search_enabled ? (campaign?.search_interval_hours ?? null) : null
@@ -1421,8 +1475,8 @@ function CampaignForm({ campaign, onSaved, onCancel }: {
 
   function applyTemplate(tpl: any) {
     setProduct(tpl.venture || "content_repurposing")
+    setPersonaIds([])
     setTargetPrompt(tpl.target_prompt || "")
-    if (tpl.personas?.length) setPersonas(tpl.personas)
     if (tpl.name && !name.trim()) setName(tpl.name)
   }
 
@@ -1434,7 +1488,7 @@ function CampaignForm({ campaign, onSaved, onCancel }: {
 
   const corePayload = () => ({
     name: name.trim(), goal: goal.trim() || null,
-    personas: personas.filter(p => p.name.trim()),
+    persona_ids: personaIds,
     target_prompt: targetPrompt.trim() || null,
     user_search_instructions: userInstructions.trim() || null,
     use_mock_leads: useMockLeads,
@@ -1518,7 +1572,7 @@ function CampaignForm({ campaign, onSaved, onCancel }: {
       {/* Product */}
       <div>
         <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Product</label>
-        <select value={product} onChange={e => setProduct(e.target.value)} disabled={isEdit}
+        <select value={product} onChange={e => { setProduct(e.target.value); setPersonaIds([]) }} disabled={isEdit}
           className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface disabled:opacity-60">
           {PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
         </select>
@@ -1588,9 +1642,9 @@ function CampaignForm({ campaign, onSaved, onCancel }: {
       <div>
         <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
           Customer Personas
-          <span className="ml-1 text-on-surface-variant/60 normal-case font-normal">(up to 5 — used to qualify and match leads)</span>
+          <span className="ml-1 text-on-surface-variant/60 normal-case font-normal">(pick from the library, or add a new one)</span>
         </label>
-        <PersonaEditor personas={personas} onChange={setPersonas} />
+        <PersonaSelector venture={product} selectedIds={personaIds} onChange={setPersonaIds} />
       </div>
 
       {/* Search instructions */}
@@ -1668,7 +1722,16 @@ function PersonasPage({ focusPersonaId }: { focusPersonaId?: string | null }) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
   const [editDesc, setEditDesc] = useState("")
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const refs = useRef<Record<string, HTMLDivElement | null>>({})
+
+  function toggleExpanded(id: string) {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
 
   async function load() {
     setLoading(true)
@@ -1681,6 +1744,7 @@ function PersonasPage({ focusPersonaId }: { focusPersonaId?: string | null }) {
 
   useEffect(() => {
     if (focusPersonaId && refs.current[focusPersonaId]) {
+      setExpanded(prev => new Set(prev).add(focusPersonaId))
       refs.current[focusPersonaId]?.scrollIntoView({ behavior: "smooth", block: "center" })
     }
   }, [focusPersonaId, items])
@@ -1772,7 +1836,13 @@ function PersonasPage({ focusPersonaId }: { focusPersonaId?: string | null }) {
                           </button>
                         </div>
                       </div>
-                      <p className="text-xs text-on-surface-variant leading-relaxed whitespace-pre-wrap">{p.description}</p>
+                      <p className={`text-xs text-on-surface-variant leading-relaxed whitespace-pre-wrap ${expanded.has(p.id) ? "" : "line-clamp-2"}`}>{p.description}</p>
+                      {(p.description || "").length > 120 && (
+                        <button onClick={() => toggleExpanded(p.id)}
+                          className="mt-1 text-[10px] font-label font-semibold text-primary hover:underline">
+                          {expanded.has(p.id) ? "Show less" : "Show more"}
+                        </button>
+                      )}
                     </>
                   )}
                 </div>
@@ -1809,38 +1879,50 @@ function PersonasPage({ focusPersonaId }: { focusPersonaId?: string | null }) {
 
 // ── New contact modal ───────────────────────────────────────────────────────────────────
 
-function NewContactModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [name, setName] = useState("")
-  const [email, setEmail] = useState("")
-  const [company, setCompany] = useState("")
-  const [website, setWebsite] = useState("")
-  const [phone, setPhone] = useState("")
-  const [statusVal, setStatusVal] = useState("approached")
+function ContactModal({ contact, onClose, onSaved }: { contact?: any; onClose: () => void; onSaved: () => void }) {
+  const isEdit = !!contact
+  const [name, setName] = useState(contact?.name || "")
+  const [email, setEmail] = useState(contact?.email || "")
+  const [company, setCompany] = useState(contact?.company || "")
+  const [website, setWebsite] = useState(contact?.website_url || "")
+  const [phone, setPhone] = useState(contact?.phone || "")
+  const [statusVal, setStatusVal] = useState(contact?.status || "approached")
   const [venture, setVenture] = useState("")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
 
   async function save() {
-    if (!name.trim() && !email.trim()) { setError("Provide at least a name or an email."); return }
+    if (!isEdit && !name.trim() && !email.trim()) { setError("Provide at least a name or an email."); return }
     setError(""); setSaving(true)
-    const r = await fetch(`${API}/api/outreach/contacts`, {
-      method: "POST", headers: { ...authHeader(), "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: name.trim() || null, email: email.trim() || null,
-        company: company.trim() || null, website_url: website.trim() || null,
-        phone: phone.trim() || null, status: statusVal, venture: venture || null,
-      }),
-    })
+    let r: Response
+    if (isEdit) {
+      r = await fetch(`${API}/api/outreach/contacts/${contact.id}`, {
+        method: "PATCH", headers: { ...authHeader(), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim() || null, company: company.trim() || null,
+          website_url: website.trim() || null, phone: phone.trim() || null, status: statusVal,
+        }),
+      })
+    } else {
+      r = await fetch(`${API}/api/outreach/contacts`, {
+        method: "POST", headers: { ...authHeader(), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim() || null, email: email.trim() || null,
+          company: company.trim() || null, website_url: website.trim() || null,
+          phone: phone.trim() || null, status: statusVal, venture: venture || null,
+        }),
+      })
+    }
     setSaving(false)
-    if (r.ok) { onCreated(); onClose() }
-    else setError((await r.json().catch(() => ({}))).detail || "Failed to create contact.")
+    if (r.ok) { onSaved(); onClose() }
+    else setError((await r.json().catch(() => ({}))).detail || "Failed to save contact.")
   }
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-float w-full max-w-md">
         <div className="px-6 py-4 border-b border-outline-variant/10 flex items-center justify-between">
-          <h3 className="font-headline font-bold text-base text-on-surface">Create Contact</h3>
+          <h3 className="font-headline font-bold text-base text-on-surface">{isEdit ? "Edit Contact" : "Create Contact"}</h3>
           <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface">
             <span className="material-symbols-outlined text-[20px]">close</span>
           </button>
@@ -1848,8 +1930,8 @@ function NewContactModal({ onClose, onCreated }: { onClose: () => void; onCreate
         <div className="p-6 space-y-3">
           <input value={name} onChange={e => setName(e.target.value)} placeholder="Name"
             className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface" />
-          <input value={email} onChange={e => setEmail(e.target.value)} placeholder="Email"
-            className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface" />
+          <input value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" disabled={isEdit}
+            className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface disabled:opacity-60" />
           <div className="grid grid-cols-2 gap-3">
             <input value={company} onChange={e => setCompany(e.target.value)} placeholder="Company"
               className="px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface" />
@@ -1866,17 +1948,19 @@ function NewContactModal({ onClose, onCreated }: { onClose: () => void; onCreate
               <option value="purchased">Purchased</option>
               <option value="unsubscribed">Unsubscribed</option>
             </select>
-            <select value={venture} onChange={e => setVenture(e.target.value)}
-              className="px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface">
-              <option value="">No product tag</option>
-              {PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-            </select>
+            {!isEdit && (
+              <select value={venture} onChange={e => setVenture(e.target.value)}
+                className="px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface">
+                <option value="">No product tag</option>
+                {PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+              </select>
+            )}
           </div>
           {error && <p className="text-xs text-error">{error}</p>}
           <div className="flex gap-2 pt-1">
             <button onClick={save} disabled={saving}
               className="px-4 py-1.5 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg disabled:opacity-50">
-              {saving ? "Saving…" : "Create Contact"}
+              {saving ? "Saving…" : isEdit ? "Save Changes" : "Create Contact"}
             </button>
             <button onClick={onClose} className="px-4 py-1.5 bg-surface-container text-on-surface-variant text-xs font-label font-semibold rounded-lg">Cancel</button>
           </div>
@@ -1996,7 +2080,7 @@ function CampaignModal({ campaignId, initialEdit, onClose, onChanged, onOpenPers
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 overflow-y-auto">
-      <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-float w-full max-w-5xl my-6">
+      <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-float w-full max-w-6xl my-6">
         <div className="px-6 py-3 border-b border-outline-variant/10 flex items-center justify-between sticky top-0 bg-surface-container-lowest z-10 rounded-t-2xl">
           <h3 className="font-headline font-bold text-base text-on-surface">
             {mode === "edit" ? "Edit Campaign" : "Campaign"}

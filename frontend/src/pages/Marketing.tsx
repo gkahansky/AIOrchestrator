@@ -45,6 +45,7 @@ const SEARCH_INTERVALS = [
 ]
 
 type SourceObj = {
+  id?: string
   platform: string
   name: string
   keywords: string[]
@@ -214,7 +215,7 @@ function PersonaEditor({ personas, onChange }: {
 
 // ── Persona library (reusable, linked to campaigns) ─────────────────────────────────────
 
-function PersonaLibrary({ campaignId, venture }: { campaignId: string; venture: string }) {
+function PersonaLibrary({ campaignId, venture, onOpenPersona }: { campaignId: string; venture: string; onOpenPersona?: (id: string) => void }) {
   const [library, setLibrary] = useState<any[]>([])
   const [linkedIds, setLinkedIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
@@ -292,8 +293,13 @@ function PersonaLibrary({ campaignId, venture }: { campaignId: string; venture: 
             <input type="checkbox" checked={linkedIds.has(p.id)} onChange={() => toggle(p.id)} disabled={saving}
               className="mt-1 accent-primary" />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-label font-semibold text-on-surface">{p.name}</p>
-              <p className="text-xs text-on-surface-variant leading-relaxed">{p.description}</p>
+              {onOpenPersona ? (
+                <button onClick={() => onOpenPersona(p.id)}
+                  className="text-sm font-label font-semibold text-primary hover:underline text-left">{p.name}</button>
+              ) : (
+                <p className="text-sm font-label font-semibold text-on-surface">{p.name}</p>
+              )}
+              <p className="text-xs text-on-surface-variant leading-relaxed line-clamp-3">{p.description}</p>
             </div>
             <button onClick={() => editPersona(p)} className="text-on-surface-variant hover:text-primary transition-colors">
               <span className="material-symbols-outlined text-[16px]">edit</span>
@@ -798,7 +804,7 @@ function DraftCard({ draft, onUpdate }: { draft: any; onUpdate: () => void }) {
 
 const SEARCH_TIMEOUT_MS = 120_000
 
-function CampaignDetail({ campaignId, onDeleted, onCloned }: { campaignId: string; onDeleted: () => void; onCloned: (id: string) => void }) {
+function CampaignDetail({ campaignId, onDeleted, onCloned, onEdit, onOpenPersona }: { campaignId: string; onDeleted: () => void; onCloned: (id: string) => void; onEdit?: () => void; onOpenPersona?: (id: string) => void }) {
   const qc = useQueryClient()
   const { data: campaign, isLoading } = useCampaign(campaignId)
   const [searchingLeads, setSearchingLeads] = useState(false)
@@ -998,9 +1004,16 @@ function CampaignDetail({ campaignId, onDeleted, onCloned }: { campaignId: strin
               {campaign.personas?.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {campaign.personas.map((p: any, i: number) => (
-                    <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-tertiary/10 text-tertiary font-bold uppercase">
-                      {p.name}
-                    </span>
+                    p.id && onOpenPersona ? (
+                      <button key={p.id} onClick={() => onOpenPersona(p.id)}
+                        className="text-[10px] px-2 py-0.5 rounded bg-tertiary/10 text-tertiary font-bold uppercase hover:bg-tertiary/20 transition-colors">
+                        {p.name}
+                      </button>
+                    ) : (
+                      <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-tertiary/10 text-tertiary font-bold uppercase">
+                        {p.name}
+                      </span>
+                    )
                   ))}
                 </div>
               )}
@@ -1051,6 +1064,13 @@ function CampaignDetail({ campaignId, onDeleted, onCloned }: { campaignId: strin
                 <span className="material-symbols-outlined text-[14px]">send</span>
                 {actionLoading === "send" ? "Sending…" : "Send Approved"}
               </button>
+              {onEdit && (
+                <button onClick={onEdit}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-surface-container text-on-surface text-xs font-label font-semibold rounded-lg hover:bg-surface-dim transition-colors">
+                  <span className="material-symbols-outlined text-[14px]">edit</span>
+                  Edit
+                </button>
+              )}
               <button onClick={cloneCampaign} disabled={cloning || !!actionLoading}
                 className="flex items-center gap-1.5 px-3 py-2 bg-surface-container text-on-surface text-xs font-label font-semibold rounded-lg hover:bg-surface-dim disabled:opacity-50 transition-colors">
                 <span className="material-symbols-outlined text-[14px]">content_copy</span>
@@ -1209,7 +1229,7 @@ function CampaignDetail({ campaignId, onDeleted, onCloned }: { campaignId: strin
 
         {/* Personas tab */}
         {activeTab === "personas" && (
-          <PersonaLibrary campaignId={campaignId} venture={campaign.venture} />
+          <PersonaLibrary campaignId={campaignId} venture={campaign.venture} onOpenPersona={onOpenPersona} />
         )}
 
         {/* Sources tab */}
@@ -1255,6 +1275,7 @@ function ContactsSection() {
   const [search, setSearch] = useState("")
   const [searchInput, setSearchInput] = useState("")
   const [statusFilter, setStatusFilter] = useState("")
+  const [showNewContact, setShowNewContact] = useState(false)
   const { data, isLoading } = useContacts(page, search, statusFilter)
   const qc = useQueryClient()
 
@@ -1286,7 +1307,16 @@ function ContactsSection() {
           <option value="unsubscribed">Unsubscribed</option>
         </select>
         <span className="text-xs text-on-surface-variant font-label">{data ? `${data.total} contacts` : ""}</span>
+        <button onClick={() => setShowNewContact(true)}
+          className="ml-auto flex items-center gap-1 px-3 py-2 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg hover:opacity-90 transition-opacity">
+          <span className="material-symbols-outlined text-[14px]">add</span>Create Contact
+        </button>
       </div>
+
+      {showNewContact && (
+        <NewContactModal onClose={() => setShowNewContact(false)}
+          onCreated={() => qc.invalidateQueries({ queryKey: ["contacts"] })} />
+      )}
 
       <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 overflow-hidden">
         {isLoading ? (
@@ -1348,83 +1378,46 @@ function ContactsSection() {
   )
 }
 
-// ── Campaign sidebar card ──────────────────────────────────────────────────────────────────
-
-function CampaignCard({ campaign, selected, onClick }: { campaign: any; selected: boolean; onClick: () => void }) {
-  const product = PRODUCTS.find(p => p.id === campaign.venture)
-  return (
-    <button onClick={onClick}
-      className={`w-full text-left p-4 rounded-xl border transition-all ${selected ? "border-primary bg-primary/5 shadow-float" : "border-outline-variant/20 bg-surface-container-lowest hover:border-primary/30"}`}>
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <p className="text-sm font-label font-semibold text-on-surface leading-tight">{campaign.name}</p>
-        <StatusBadge status={campaign.status} />
-      </div>
-      {product && (
-        <div className="mb-2">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface-container text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">
-            <span className="material-symbols-outlined text-[11px]">{product.icon}</span>
-            {product.label}
-          </span>
-        </div>
-      )}
-      <div className="flex items-center gap-2 mb-2">
-        <PlatformBadge platform={campaign.platform || "email"} small />
-        {campaign.auto_search_enabled && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-bold uppercase">Auto</span>
-        )}
-        {(campaign.use_mock_leads || campaign.dry_run) && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 font-bold uppercase flex items-center gap-0.5">
-            <span className="material-symbols-outlined text-[9px]">science</span>Test
-          </span>
-        )}
-      </div>
-      {campaign.personas?.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-2">
-          {campaign.personas.slice(0, 2).map((p: any, i: number) => (
-            <span key={i} className="text-[9px] px-1.5 py-0.5 rounded bg-tertiary/10 text-tertiary font-bold uppercase">{p.name}</span>
-          ))}
-          {campaign.personas.length > 2 && (
-            <span className="text-[9px] text-on-surface-variant">+{campaign.personas.length - 2}</span>
-          )}
-        </div>
-      )}
-      <div className="flex items-center gap-3 text-xs font-label text-on-surface-variant">
-        <span>{campaign.leads_count} leads</span>
-        {campaign.drafts_pending > 0 && (
-          <span className="text-amber-600 font-semibold">{campaign.drafts_pending} pending</span>
-        )}
-        {campaign.total_sends > 0 && <span>{campaign.reply_rate}% reply</span>}
-      </div>
-    </button>
-  )
-}
-
 // ── New Campaign form ──────────────────────────────────────────────────────────────────────
 
-function NewCampaignForm({ onCreated, onCancel }: {
-  onCreated: (id: string) => void; onCancel: () => void
+function CampaignForm({ campaign, onSaved, onCancel }: {
+  campaign?: any
+  onSaved: (id: string) => void
+  onCancel: () => void
 }) {
-  const [product, setProduct] = useState("marketing_audit")
-  const [name, setName] = useState("")
-  const [goal, setGoal] = useState("")
-  const [sources, setSources] = useState<SourceObj[]>([])
+  const isEdit = !!campaign
+  const [product, setProduct] = useState(campaign?.venture || "marketing_audit")
+  const [name, setName] = useState(campaign?.name || "")
+  const [goal, setGoal] = useState(campaign?.goal || "")
+  const [sources, setSources] = useState<SourceObj[]>(
+    (campaign?.sources || []).map((s: any) => ({
+      id: s.id, platform: s.platform, name: s.name,
+      keywords: s.keywords || [], config: s.config || {}, enabled: s.enabled ?? true,
+    }))
+  )
+  const [removedSourceIds, setRemovedSourceIds] = useState<string[]>([])
   const [showAddSource, setShowAddSource] = useState(false)
-  const [targetPrompt, setTargetPrompt] = useState("")
-  const [userInstructions, setUserInstructions] = useState("")
-  const [personas, setPersonas] = useState<{ name: string; description: string }[]>([])
-  const [intervalHours, setIntervalHours] = useState<number | null>(null)
-  const [useMockLeads, setUseMockLeads] = useState(false)
-  const [dryRun, setDryRun] = useState(false)
-  const [creating, setCreating] = useState(false)
+  const [targetPrompt, setTargetPrompt] = useState(campaign?.target_prompt || "")
+  const [userInstructions, setUserInstructions] = useState(campaign?.user_search_instructions || "")
+  const [personas, setPersonas] = useState<{ name: string; description: string }[]>(
+    (campaign?.personas || []).map((p: any) => ({ name: p.name, description: p.description }))
+  )
+  const [intervalHours, setIntervalHours] = useState<number | null>(
+    campaign?.auto_search_enabled ? (campaign?.search_interval_hours ?? null) : null
+  )
+  const [useMockLeads, setUseMockLeads] = useState(!!campaign?.use_mock_leads)
+  const [dryRun, setDryRun] = useState(!!campaign?.dry_run)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [templates, setTemplates] = useState<any[]>([])
 
   useEffect(() => {
+    if (isEdit) return
     fetch(`${API}/api/outreach/persona-templates`, { headers: authHeader() })
       .then(r => r.ok ? r.json() : { items: [] })
       .then(d => setTemplates(d.items || []))
       .catch(() => {})
-  }, [])
+  }, [isEdit])
 
   function applyTemplate(tpl: any) {
     setProduct(tpl.venture || "content_repurposing")
@@ -1433,33 +1426,68 @@ function NewCampaignForm({ onCreated, onCancel }: {
     if (tpl.name && !name.trim()) setName(tpl.name)
   }
 
-  async function create() {
+  function removeSource(i: number) {
+    const s = sources[i]
+    if (s.id) setRemovedSourceIds(prev => [...prev, s.id!])
+    setSources(prev => prev.filter((_, j) => j !== i))
+  }
+
+  const corePayload = () => ({
+    name: name.trim(), goal: goal.trim() || null,
+    personas: personas.filter(p => p.name.trim()),
+    target_prompt: targetPrompt.trim() || null,
+    user_search_instructions: userInstructions.trim() || null,
+    use_mock_leads: useMockLeads,
+    dry_run: dryRun,
+  })
+
+  async function save() {
     if (!name.trim()) { setError("Campaign name is required."); return }
     if (sources.length === 0) { setError("Add at least one search source before saving."); return }
     setError("")
-    setCreating(true)
-    const r = await fetch(`${API}/api/outreach/campaigns`, {
-      method: "POST",
-      headers: { ...authHeader(), "Content-Type": "application/json" },
-      body: JSON.stringify({
-        venture: product, name: name.trim(), goal: goal.trim() || null,
-        sources,
-        personas: personas.filter(p => p.name.trim()),
-        target_prompt: targetPrompt.trim() || null,
-        user_search_instructions: userInstructions.trim() || null,
-        auto_search_enabled: intervalHours !== null,
-        search_interval_hours: intervalHours,
-        use_mock_leads: useMockLeads,
-        dry_run: dryRun,
-      }),
-    })
-    setCreating(false)
-    if (r.ok) {
-      const created = await r.json()
-      onCreated(created.id)
-    } else {
-      const e = await r.json().catch(() => ({}))
-      setError(e.detail || "Failed to create campaign.")
+    setSaving(true)
+    try {
+      if (!isEdit) {
+        const r = await fetch(`${API}/api/outreach/campaigns`, {
+          method: "POST",
+          headers: { ...authHeader(), "Content-Type": "application/json" },
+          body: JSON.stringify({
+            venture: product, sources,
+            auto_search_enabled: intervalHours !== null,
+            search_interval_hours: intervalHours,
+            ...corePayload(),
+          }),
+        })
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || "Failed to create campaign.")
+        onSaved((await r.json()).id)
+        return
+      }
+
+      // Edit: patch core fields, schedule, then reconcile sources.
+      const id = campaign.id
+      const rc = await fetch(`${API}/api/outreach/campaigns/${id}`, {
+        method: "PATCH", headers: { ...authHeader(), "Content-Type": "application/json" },
+        body: JSON.stringify(corePayload()),
+      })
+      if (!rc.ok) throw new Error((await rc.json().catch(() => ({}))).detail || "Failed to save campaign.")
+      await fetch(`${API}/api/outreach/campaigns/${id}/schedule`, {
+        method: "PATCH", headers: { ...authHeader(), "Content-Type": "application/json" },
+        body: JSON.stringify({ auto_search_enabled: intervalHours !== null, search_interval_hours: intervalHours }),
+      })
+      for (const sid of removedSourceIds) {
+        await fetch(`${API}/api/outreach/sources/${sid}`, { method: "DELETE", headers: authHeader() })
+      }
+      for (const s of sources.filter(s => !s.id)) {
+        await fetch(`${API}/api/outreach/campaigns/${id}/sources`, {
+          method: "POST", headers: { ...authHeader(), "Content-Type": "application/json" },
+          body: JSON.stringify({ platform: s.platform, name: s.name, keywords: s.keywords, config: s.config, enabled: s.enabled }),
+        })
+      }
+      onSaved(id)
+    } catch (e: any) {
+      setError(e.message || "Failed to save campaign.")
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -1469,8 +1497,8 @@ function NewCampaignForm({ onCreated, onCancel }: {
         <AddSourceModal onClose={() => setShowAddSource(false)}
           onSubmit={(s) => setSources(prev => [...prev, s])} />
       )}
-      {/* Persona templates */}
-      {templates.length > 0 && (
+      {/* Persona templates (create only) */}
+      {!isEdit && templates.length > 0 && (
         <div>
           <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
             Start from a template
@@ -1490,8 +1518,8 @@ function NewCampaignForm({ onCreated, onCancel }: {
       {/* Product */}
       <div>
         <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Product</label>
-        <select value={product} onChange={e => setProduct(e.target.value)}
-          className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface">
+        <select value={product} onChange={e => setProduct(e.target.value)} disabled={isEdit}
+          className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface disabled:opacity-60">
           {PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
         </select>
       </div>
@@ -1520,7 +1548,7 @@ function NewCampaignForm({ onCreated, onCancel }: {
                     <span className="text-xs font-label font-semibold text-on-surface">{s.name}</span>
                     <span className="text-[10px] text-on-surface-variant ml-1.5">{info?.label || s.platform} · {s.keywords.length} keyword{s.keywords.length === 1 ? "" : "s"}</span>
                   </div>
-                  <button onClick={() => setSources(prev => prev.filter((_, j) => j !== i))}
+                  <button onClick={() => removeSource(i)}
                     className="text-on-surface-variant hover:text-error">
                     <span className="material-symbols-outlined text-[16px]">close</span>
                   </button>
@@ -1615,9 +1643,9 @@ function NewCampaignForm({ onCreated, onCancel }: {
       {error && <p className="text-xs text-error">{error}</p>}
 
       <div className="flex gap-2 pt-1">
-        <button onClick={create} disabled={creating}
+        <button onClick={save} disabled={saving}
           className="px-4 py-1.5 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg disabled:opacity-50">
-          {creating ? "Creating…" : "Create Campaign"}
+          {saving ? "Saving…" : isEdit ? "Save Changes" : "Create Campaign"}
         </button>
         <button onClick={onCancel} className="px-4 py-1.5 bg-surface-container text-on-surface-variant text-xs font-label font-semibold rounded-lg">
           Cancel
@@ -1627,17 +1655,400 @@ function NewCampaignForm({ onCreated, onCancel }: {
   )
 }
 
+// ── Personas page ───────────────────────────────────────────────────────────────────────
+
+function PersonasPage({ focusPersonaId }: { focusPersonaId?: string | null }) {
+  const [items, setItems] = useState<any[]>([])
+  const [ventureFilter, setVentureFilter] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [newVenture, setNewVenture] = useState(PRODUCTS[0].id)
+  const [newName, setNewName] = useState("")
+  const [newDesc, setNewDesc] = useState("")
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState("")
+  const [editDesc, setEditDesc] = useState("")
+  const refs = useRef<Record<string, HTMLDivElement | null>>({})
+
+  async function load() {
+    setLoading(true)
+    const q = ventureFilter ? `?venture=${ventureFilter}` : ""
+    const d = await fetch(`${API}/api/outreach/personas${q}`, { headers: authHeader() }).then(r => r.json())
+    setItems(d.items || [])
+    setLoading(false)
+  }
+  useEffect(() => { load() }, [ventureFilter])
+
+  useEffect(() => {
+    if (focusPersonaId && refs.current[focusPersonaId]) {
+      refs.current[focusPersonaId]?.scrollIntoView({ behavior: "smooth", block: "center" })
+    }
+  }, [focusPersonaId, items])
+
+  async function createPersona() {
+    if (!newName.trim()) return
+    setSaving(true)
+    await fetch(`${API}/api/outreach/personas`, {
+      method: "POST", headers: { ...authHeader(), "Content-Type": "application/json" },
+      body: JSON.stringify({ venture: newVenture, name: newName.trim(), description: newDesc.trim() }),
+    })
+    setNewName(""); setNewDesc(""); setSaving(false)
+    await load()
+  }
+  function startEdit(p: any) { setEditingId(p.id); setEditName(p.name); setEditDesc(p.description) }
+  async function saveEdit(id: string) {
+    setSaving(true)
+    await fetch(`${API}/api/outreach/personas/${id}`, {
+      method: "PATCH", headers: { ...authHeader(), "Content-Type": "application/json" },
+      body: JSON.stringify({ name: editName, description: editDesc }),
+    })
+    setEditingId(null); setSaving(false)
+    await load()
+  }
+  async function deletePersona(p: any) {
+    if (!window.confirm(`Delete persona "${p.name}"? It will be unlinked from all campaigns.`)) return
+    await fetch(`${API}/api/outreach/personas/${p.id}?force=true`, { method: "DELETE", headers: authHeader() })
+    await load()
+  }
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="lg:col-span-8 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-headline font-bold text-sm text-on-surface">Persona Library</h2>
+          <select value={ventureFilter} onChange={e => setVentureFilter(e.target.value)}
+            className="px-3 py-1.5 text-xs font-label bg-surface-container-lowest rounded-lg border border-outline-variant/20 text-on-surface">
+            <option value="">All products</option>
+            {PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+          </select>
+        </div>
+        <p className="text-xs text-on-surface-variant">
+          Personas are reusable across campaigns. Editing a persona updates every campaign linked to it.
+        </p>
+
+        {loading ? (
+          <p className="text-sm text-on-surface-variant">Loading…</p>
+        ) : !items.length ? (
+          <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-8 text-center">
+            <span className="material-symbols-outlined text-[40px] text-on-surface-variant/30 block mb-3">groups</span>
+            <p className="text-sm text-on-surface-variant">No personas yet — create one on the right.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {items.map(p => {
+              const product = PRODUCTS.find(x => x.id === p.venture)
+              const focused = p.id === focusPersonaId
+              return (
+                <div key={p.id} ref={el => { refs.current[p.id] = el }}
+                  className={`bg-surface-container-lowest rounded-xl border p-4 transition-colors ${focused ? "border-primary ring-2 ring-primary/30" : "border-outline-variant/20"}`}>
+                  {editingId === p.id ? (
+                    <div className="space-y-2">
+                      <input value={editName} onChange={e => setEditName(e.target.value)}
+                        className="w-full px-3 py-1.5 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface" />
+                      <textarea value={editDesc} onChange={e => setEditDesc(e.target.value)} rows={6}
+                        className="w-full px-3 py-1.5 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface resize-none leading-relaxed" />
+                      <div className="flex gap-2">
+                        <button onClick={() => saveEdit(p.id)} disabled={saving}
+                          className="px-3 py-1.5 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg disabled:opacity-50">Save</button>
+                        <button onClick={() => setEditingId(null)}
+                          className="px-3 py-1.5 bg-surface-container text-on-surface-variant text-xs font-label font-semibold rounded-lg">Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-start justify-between gap-3 mb-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-label font-semibold text-on-surface">{p.name}</p>
+                          {product && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant font-bold uppercase tracking-wider">{product.label}</span>
+                          )}
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          <button onClick={() => startEdit(p)} className="text-on-surface-variant hover:text-primary transition-colors">
+                            <span className="material-symbols-outlined text-[16px]">edit</span>
+                          </button>
+                          <button onClick={() => deletePersona(p)} className="text-on-surface-variant hover:text-error transition-colors">
+                            <span className="material-symbols-outlined text-[16px]">delete</span>
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-xs text-on-surface-variant leading-relaxed whitespace-pre-wrap">{p.description}</p>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="lg:col-span-4">
+        <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-4 space-y-3 sticky top-4">
+          <h3 className="font-headline font-bold text-sm text-on-surface">New Persona</h3>
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Product</label>
+            <select value={newVenture} onChange={e => setNewVenture(e.target.value)}
+              className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface">
+              {PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </select>
+          </div>
+          <input value={newName} onChange={e => setNewName(e.target.value)} placeholder='Name (e.g. "Amir — Small Business Owner")'
+            className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface" />
+          <textarea value={newDesc} onChange={e => setNewDesc(e.target.value)} rows={6}
+            placeholder="Describe the persona — profile, characteristics, pain points, triggers, audience attributes…"
+            className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface resize-none leading-relaxed" />
+          <button onClick={createPersona} disabled={saving || !newName.trim()}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-primary text-on-primary rounded-lg text-xs font-label font-semibold disabled:opacity-50 transition-colors">
+            <span className="material-symbols-outlined text-[14px]">add</span>Create Persona
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── New contact modal ───────────────────────────────────────────────────────────────────
+
+function NewContactModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [name, setName] = useState("")
+  const [email, setEmail] = useState("")
+  const [company, setCompany] = useState("")
+  const [website, setWebsite] = useState("")
+  const [phone, setPhone] = useState("")
+  const [statusVal, setStatusVal] = useState("approached")
+  const [venture, setVenture] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
+
+  async function save() {
+    if (!name.trim() && !email.trim()) { setError("Provide at least a name or an email."); return }
+    setError(""); setSaving(true)
+    const r = await fetch(`${API}/api/outreach/contacts`, {
+      method: "POST", headers: { ...authHeader(), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name.trim() || null, email: email.trim() || null,
+        company: company.trim() || null, website_url: website.trim() || null,
+        phone: phone.trim() || null, status: statusVal, venture: venture || null,
+      }),
+    })
+    setSaving(false)
+    if (r.ok) { onCreated(); onClose() }
+    else setError((await r.json().catch(() => ({}))).detail || "Failed to create contact.")
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-float w-full max-w-md">
+        <div className="px-6 py-4 border-b border-outline-variant/10 flex items-center justify-between">
+          <h3 className="font-headline font-bold text-base text-on-surface">Create Contact</h3>
+          <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface">
+            <span className="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <div className="p-6 space-y-3">
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Name"
+            className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface" />
+          <input value={email} onChange={e => setEmail(e.target.value)} placeholder="Email"
+            className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface" />
+          <div className="grid grid-cols-2 gap-3">
+            <input value={company} onChange={e => setCompany(e.target.value)} placeholder="Company"
+              className="px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface" />
+            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Phone"
+              className="px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface" />
+          </div>
+          <input value={website} onChange={e => setWebsite(e.target.value)} placeholder="Website URL"
+            className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface" />
+          <div className="grid grid-cols-2 gap-3">
+            <select value={statusVal} onChange={e => setStatusVal(e.target.value)}
+              className="px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface">
+              <option value="approached">Approached</option>
+              <option value="inquired">Inquired</option>
+              <option value="purchased">Purchased</option>
+              <option value="unsubscribed">Unsubscribed</option>
+            </select>
+            <select value={venture} onChange={e => setVenture(e.target.value)}
+              className="px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface">
+              <option value="">No product tag</option>
+              {PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </select>
+          </div>
+          {error && <p className="text-xs text-error">{error}</p>}
+          <div className="flex gap-2 pt-1">
+            <button onClick={save} disabled={saving}
+              className="px-4 py-1.5 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg disabled:opacity-50">
+              {saving ? "Saving…" : "Create Contact"}
+            </button>
+            <button onClick={onClose} className="px-4 py-1.5 bg-surface-container text-on-surface-variant text-xs font-label font-semibold rounded-lg">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Campaigns table ─────────────────────────────────────────────────────────────────────
+
+function scheduleLabel(c: any): string {
+  if (!c.auto_search_enabled || !c.search_interval_hours) return "Manual"
+  const m: Record<number, string> = { 6: "Every 6h", 24: "Daily", 168: "Weekly" }
+  return m[c.search_interval_hours] || `Every ${c.search_interval_hours}h`
+}
+
+function Truncated({ text, className = "" }: { text: string; className?: string }) {
+  return <span title={text} className={`block truncate ${className}`}>{text || "—"}</span>
+}
+
+function CampaignsTable({ campaigns, onRow, onEdit, onDelete, onOpenPersona }: {
+  campaigns: any[]
+  onRow: (id: string) => void
+  onEdit: (id: string) => void
+  onDelete: (id: string) => void
+  onOpenPersona: (id: string) => void
+}) {
+  const cols = ["Product", "Campaign", "Sources", "Goal", "Audience Context", "Personas", "Schedule", "Test Mode", ""]
+  return (
+    <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm table-fixed">
+          <thead>
+            <tr className="bg-surface-container-low border-b border-outline-variant/10">
+              {cols.map((h, i) => (
+                <th key={i} className="px-3 py-2.5 text-left text-[10px] font-label font-semibold uppercase tracking-wider text-on-surface-variant">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-outline-variant/10">
+            {campaigns.map((c: any) => {
+              const product = PRODUCTS.find(p => p.id === c.venture)
+              const sourceLabels = (c.sources || []).map((s: any) =>
+                SOURCE_PLATFORMS.find(p => p.id === s.platform)?.label || s.platform).join(", ")
+              const testOn = c.use_mock_leads || c.dry_run
+              return (
+                <tr key={c.id} onClick={() => onRow(c.id)}
+                  className="hover:bg-surface-container-low/50 cursor-pointer align-top">
+                  <td className="px-3 py-3 w-[8%]"><Truncated text={product?.label || c.venture} className="text-xs text-on-surface-variant" /></td>
+                  <td className="px-3 py-3 w-[12%] text-sm font-label font-semibold text-on-surface"><Truncated text={c.name} /></td>
+                  <td className="px-3 py-3 w-[12%]"><Truncated text={sourceLabels} className="text-xs text-on-surface-variant" /></td>
+                  <td className="px-3 py-3 w-[14%]"><Truncated text={c.goal || ""} className="text-xs text-on-surface-variant" /></td>
+                  <td className="px-3 py-3 w-[16%]"><Truncated text={c.target_prompt || ""} className="text-xs text-on-surface-variant" /></td>
+                  <td className="px-3 py-3 w-[12%]">
+                    <div className="flex flex-wrap gap-1">
+                      {(c.personas || []).slice(0, 3).map((p: any, i: number) => (
+                        p.id ? (
+                          <button key={p.id} onClick={e => { e.stopPropagation(); onOpenPersona(p.id) }}
+                            title={p.name}
+                            className="max-w-[90px] truncate text-[9px] px-1.5 py-0.5 rounded bg-tertiary/10 text-tertiary font-bold uppercase hover:bg-tertiary/20 transition-colors">{p.name}</button>
+                        ) : (
+                          <span key={i} title={p.name} className="max-w-[90px] truncate text-[9px] px-1.5 py-0.5 rounded bg-tertiary/10 text-tertiary font-bold uppercase">{p.name}</span>
+                        )
+                      ))}
+                      {(c.personas?.length || 0) > 3 && <span className="text-[9px] text-on-surface-variant">+{c.personas.length - 3}</span>}
+                      {!(c.personas?.length) && <span className="text-xs text-on-surface-variant">—</span>}
+                    </div>
+                  </td>
+                  <td className="px-3 py-3 w-[9%] text-xs text-on-surface-variant whitespace-nowrap">{scheduleLabel(c)}</td>
+                  <td className="px-3 py-3 w-[9%]">
+                    {testOn ? (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 font-bold uppercase whitespace-nowrap">
+                        {[c.use_mock_leads && "Mock", c.dry_run && "Dry-run"].filter(Boolean).join(" + ")}
+                      </span>
+                    ) : <span className="text-xs text-on-surface-variant">Off</span>}
+                  </td>
+                  <td className="px-3 py-3 w-[8%]">
+                    <div className="flex gap-1 justify-end" onClick={e => e.stopPropagation()}>
+                      <button onClick={() => onEdit(c.id)} title="Edit"
+                        className="text-on-surface-variant hover:text-primary transition-colors">
+                        <span className="material-symbols-outlined text-[17px]">edit</span>
+                      </button>
+                      <button onClick={() => onDelete(c.id)} title="Delete"
+                        className="text-on-surface-variant hover:text-error transition-colors">
+                        <span className="material-symbols-outlined text-[17px]">delete</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ── Campaign popup (view / edit) ─────────────────────────────────────────────────────────
+
+function CampaignModal({ campaignId, initialEdit, onClose, onChanged, onOpenPersona }: {
+  campaignId: string
+  initialEdit: boolean
+  onClose: () => void
+  onChanged: () => void
+  onOpenPersona: (id: string) => void
+}) {
+  const [mode, setMode] = useState<"view" | "edit">(initialEdit ? "edit" : "view")
+  const [editCampaign, setEditCampaign] = useState<any>(null)
+
+  useEffect(() => {
+    if (mode !== "edit") return
+    fetch(`${API}/api/outreach/campaigns/${campaignId}`, { headers: authHeader() })
+      .then(r => r.json()).then(setEditCampaign).catch(() => {})
+  }, [mode, campaignId])
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 overflow-y-auto">
+      <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-float w-full max-w-5xl my-6">
+        <div className="px-6 py-3 border-b border-outline-variant/10 flex items-center justify-between sticky top-0 bg-surface-container-lowest z-10 rounded-t-2xl">
+          <h3 className="font-headline font-bold text-base text-on-surface">
+            {mode === "edit" ? "Edit Campaign" : "Campaign"}
+          </h3>
+          <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface">
+            <span className="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <div className="p-5">
+          {mode === "view" ? (
+            <CampaignDetail campaignId={campaignId}
+              onDeleted={() => { onChanged(); onClose() }}
+              onCloned={() => { onChanged() }}
+              onEdit={() => setMode("edit")}
+              onOpenPersona={onOpenPersona} />
+          ) : editCampaign ? (
+            <CampaignForm campaign={editCampaign}
+              onSaved={() => { onChanged(); setMode("view") }}
+              onCancel={() => setMode("view")} />
+          ) : (
+            <p className="text-sm text-on-surface-variant p-4">Loading…</p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ────────────────────────────────────────────────────────────────────────────
 
-type MainTab = "outreach" | "contacts" | "paid_campaigns"
+type MainTab = "outreach" | "personas" | "contacts" | "paid_campaigns"
 
 export default function Marketing() {
   const [mainTab, setMainTab] = useState<MainTab>("outreach")
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null)
+  const [openCampaign, setOpenCampaign] = useState<{ id: string; edit: boolean } | null>(null)
   const [showNewCampaign, setShowNewCampaign] = useState(false)
+  const [focusPersonaId, setFocusPersonaId] = useState<string | null>(null)
   const qc = useQueryClient()
 
   const { data: campaignsData, isLoading: campaignsLoading } = useCampaigns()
+
+  function openPersona(id: string) {
+    setOpenCampaign(null)
+    setFocusPersonaId(id)
+    setMainTab("personas")
+  }
+
+  async function deleteCampaign(id: string) {
+    if (!window.confirm("Delete this campaign and all its leads, drafts, and sources?")) return
+    await fetch(`${API}/api/outreach/campaigns/${id}`, { method: "DELETE", headers: authHeader() })
+    qc.invalidateQueries({ queryKey: ["campaigns"] })
+  }
 
   return (
     <div className="space-y-6">
@@ -1651,10 +2062,11 @@ export default function Marketing() {
       <div className="flex gap-1 bg-surface-container-low p-1 rounded-xl w-fit">
         {([
           { id: "outreach",       label: "Outreach",        icon: "campaign" },
+          { id: "personas",       label: "Personas",        icon: "groups" },
           { id: "contacts",       label: "Contacts",        icon: "contacts" },
           { id: "paid_campaigns", label: "Paid Campaigns",  icon: "flag" },
         ] as { id: MainTab; label: string; icon: string }[]).map(t => (
-          <button key={t.id} onClick={() => setMainTab(t.id)}
+          <button key={t.id} onClick={() => { setMainTab(t.id); if (t.id !== "personas") setFocusPersonaId(null) }}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-label font-semibold transition-colors ${mainTab === t.id ? "bg-surface-container-lowest text-on-surface shadow-float" : "text-on-surface-variant hover:text-on-surface"}`}>
             <span className="material-symbols-outlined text-[14px]">{t.icon}</span>
             {t.label}
@@ -1662,63 +2074,68 @@ export default function Marketing() {
         ))}
       </div>
 
+      {mainTab === "personas" && <PersonasPage focusPersonaId={focusPersonaId} />}
       {mainTab === "contacts" && <ContactsSection />}
       {mainTab === "paid_campaigns" && <CampaignManager />}
 
       {mainTab === "outreach" && (
-        <>
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Sidebar */}
-            <div className="lg:col-span-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="font-headline font-bold text-sm text-on-surface">Campaigns</h2>
-                <button onClick={() => { setShowNewCampaign(true); setSelectedCampaignId(null) }}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg hover:opacity-90 transition-opacity">
-                  <span className="material-symbols-outlined text-[14px]">add</span>New
-                </button>
-              </div>
-
-              {showNewCampaign && (
-                <NewCampaignForm
-                  onCreated={id => {
-                    setShowNewCampaign(false)
-                    qc.invalidateQueries({ queryKey: ["campaigns"] })
-                    setSelectedCampaignId(id)
-                  }}
-                  onCancel={() => setShowNewCampaign(false)}
-                />
-              )}
-
-              {campaignsLoading
-                ? Array(3).fill(null).map((_, i) => <div key={i} className="h-20 bg-surface-container-lowest rounded-xl animate-pulse" />)
-                : campaignsData?.items?.length
-                ? campaignsData.items.map((c: any) => (
-                    <CampaignCard key={c.id} campaign={c}
-                      selected={selectedCampaignId === c.id}
-                      onClick={() => { setSelectedCampaignId(c.id); setShowNewCampaign(false) }} />
-                  ))
-                : (
-                  <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-6 text-center">
-                    <p className="text-sm text-on-surface-variant">No campaigns yet.</p>
-                    <p className="text-xs text-on-surface-variant mt-1">Create one to start reaching out.</p>
-                  </div>
-                )
-              }
-            </div>
-
-            {/* Detail */}
-            <div className="lg:col-span-8">
-              {selectedCampaignId ? (
-                <CampaignDetail campaignId={selectedCampaignId} onDeleted={() => setSelectedCampaignId(null)} onCloned={id => setSelectedCampaignId(id)} />
-              ) : (
-                <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-12 text-center">
-                  <span className="material-symbols-outlined text-[48px] text-on-surface-variant/20 block mb-4">campaign</span>
-                  <p className="text-sm text-on-surface-variant">Select a campaign to manage it</p>
-                </div>
-              )}
-            </div>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-headline font-bold text-sm text-on-surface">Campaigns</h2>
+            <button onClick={() => setShowNewCampaign(true)}
+              className="flex items-center gap-1 px-3 py-1.5 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg hover:opacity-90 transition-opacity">
+              <span className="material-symbols-outlined text-[14px]">add</span>New Campaign
+            </button>
           </div>
-        </>
+
+          {campaignsLoading ? (
+            <div className="h-40 bg-surface-container-lowest rounded-xl animate-pulse" />
+          ) : campaignsData?.items?.length ? (
+            <CampaignsTable
+              campaigns={campaignsData.items}
+              onRow={id => setOpenCampaign({ id, edit: false })}
+              onEdit={id => setOpenCampaign({ id, edit: true })}
+              onDelete={deleteCampaign}
+              onOpenPersona={openPersona} />
+          ) : (
+            <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 p-12 text-center">
+              <span className="material-symbols-outlined text-[48px] text-on-surface-variant/20 block mb-4">campaign</span>
+              <p className="text-sm text-on-surface-variant">No campaigns yet.</p>
+              <p className="text-xs text-on-surface-variant mt-1">Create one to start reaching out.</p>
+            </div>
+          )}
+
+          {showNewCampaign && (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 overflow-y-auto">
+              <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/20 shadow-float w-full max-w-2xl my-6">
+                <div className="px-6 py-3 border-b border-outline-variant/10 flex items-center justify-between">
+                  <h3 className="font-headline font-bold text-base text-on-surface">New Campaign</h3>
+                  <button onClick={() => setShowNewCampaign(false)} className="text-on-surface-variant hover:text-on-surface">
+                    <span className="material-symbols-outlined text-[20px]">close</span>
+                  </button>
+                </div>
+                <div className="p-5">
+                  <CampaignForm
+                    onSaved={id => {
+                      setShowNewCampaign(false)
+                      qc.invalidateQueries({ queryKey: ["campaigns"] })
+                      setOpenCampaign({ id, edit: false })
+                    }}
+                    onCancel={() => setShowNewCampaign(false)} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {openCampaign && (
+            <CampaignModal
+              campaignId={openCampaign.id}
+              initialEdit={openCampaign.edit}
+              onClose={() => setOpenCampaign(null)}
+              onChanged={() => qc.invalidateQueries({ queryKey: ["campaigns"] })}
+              onOpenPersona={openPersona} />
+          )}
+        </div>
       )}
     </div>
   )

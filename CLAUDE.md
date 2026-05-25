@@ -188,8 +188,16 @@ GET        /api/outreach/campaigns/{id}/drafts   ?status=pending_review|approved
 PATCH      /api/outreach/drafts/{id}
 GET        /api/outreach/campaigns/{id}/leads
 GET        /api/outreach/campaigns/{id}/stats
-GET        /api/outreach/contacts
+GET/POST   /api/outreach/contacts                (POST: manually add a contact)
+PATCH      /api/outreach/contacts/{id}
 ```
+
+planBadmin Marketing UI: campaigns render in a sortable table (Product, Name,
+Sources, Goal, Audience Context, Personas, Schedule, Test Mode, edit/delete) —
+rows open a campaign popup (view + edit modes); a dedicated **Personas** tab
+manages the reusable library and is the deep-link target when a campaign's
+persona chip is clicked. The seed script `scripts/seed_personas.py` loads the
+initial accessibility_audit personas.
 
 Legacy A/B endpoints (`/compose`, `/send`, `/templates`, `/sends`) are preserved for backwards compatibility.
 

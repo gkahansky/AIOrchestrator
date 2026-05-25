@@ -196,6 +196,17 @@ class ContactPatch(BaseModel):
     is_test_user: bool | None = None
     features_of_interest: dict | None = None
 
+class ContactCreate(BaseModel):
+    name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    company: str | None = None
+    website_url: str | None = None
+    usernames: dict | None = None         # {platform: handle}
+    status: str = "approached"
+    venture: str | None = None            # tags ventures_approached
+    is_test_user: bool = False
+
 
 # ── Serialisers ────────────────────────────────────────────────
 
@@ -333,9 +344,10 @@ def _persona_to_dict(p: Persona) -> dict:
 
 
 def _campaign_personas(c: OutreachCampaign, db: Any) -> list[dict]:
-    """Resolve a campaign's personas as [{name, description}] from the reusable
+    """Resolve a campaign's personas as [{id, name, description}] from the reusable
     persona library (campaign_personas links). Falls back to the legacy JSONB
     column when no links exist, so deploys are order-independent during cut-over.
+    The `id` key lets the UI deep-link to a persona; compose/qualify ignore it.
     """
     rows = (
         db.query(Persona)
@@ -344,7 +356,7 @@ def _campaign_personas(c: OutreachCampaign, db: Any) -> list[dict]:
         .all()
     )
     if rows:
-        return [{"name": p.name, "description": p.description} for p in rows]
+        return [{"id": str(p.id), "name": p.name, "description": p.description} for p in rows]
     return c.personas or []
 
 
@@ -504,7 +516,13 @@ def list_campaigns(
     if venture:
         q = q.filter(OutreachCampaign.venture == venture)
     items = q.order_by(OutreachCampaign.created_at.desc()).all()
-    return {"items": [_campaign_to_dict(c, db) for c in items], "total": len(items)}
+    return {
+        "items": [
+            {**_campaign_to_dict(c, db), "sources": [_source_to_dict(s) for s in c.sources]}
+            for c in items
+        ],
+        "total": len(items),
+    }
 
 
 @router.post("/campaigns", status_code=status.HTTP_201_CREATED)
@@ -1182,6 +1200,30 @@ def list_contacts(
     items = q.order_by(Contact.last_activity_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
     return {"items": [_contact_to_dict(c) for c in items], "total": total,
             "page": page, "page_size": page_size}
+
+
+@router.post("/contacts", status_code=status.HTTP_201_CREATED)
+def create_contact(
+    req: ContactCreate, _: str = Depends(require_auth), db=Depends(get_db),
+) -> dict:
+    """Manually add a contact (outside the lead → send flow)."""
+    if not (req.email or req.name or req.usernames):
+        raise HTTPException(status_code=400, detail="Provide at least an email, name, or username.")
+    if req.email:
+        existing = db.query(Contact).filter(Contact.email == req.email).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="A contact with this email already exists.")
+    c = Contact(
+        name=req.name, email=req.email, phone=req.phone, company=req.company,
+        website_url=req.website_url, usernames=req.usernames,
+        status=req.status, is_test_user=req.is_test_user,
+        ventures_approached=[req.venture] if req.venture else [],
+        last_activity_at=datetime.now(timezone.utc),
+    )
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    return _contact_to_dict(c)
 
 
 @router.patch("/contacts/{contact_id}")

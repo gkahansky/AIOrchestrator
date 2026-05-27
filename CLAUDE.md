@@ -165,7 +165,7 @@ The Cold Outreach system is a **platform-level feature** (not a venture). It is 
 
 **Search schedule:** the auto-search interval (manual / 6h / daily / weekly) is set at creation and can be changed afterwards from the campaign detail view, which calls `PATCH /api/outreach/campaigns/{id}/schedule`. Selecting "manual" disables auto-search and clears `next_search_at`.
 
-**Human review gate:** drafts start as `pending_review`. The operator approves (optionally editing subject/body), rejects, or bulk-approves from the Drafts tab, then sends per-lead ("Send now") or in bulk ("Send approved"). Only `approved` drafts are sent; no auto-send path exists. Assisted (social) sends add a second gate: the draft moves to `awaiting_send` with a deep link, and the operator confirms via `/drafts/{id}/confirm-sent` after sending in the native app — only then is the `outreach_sends` + `contact_messages` record written.
+**Human review gate:** drafts start as `pending_review`. The operator approves (optionally editing subject/body), rejects, requests an AI revision ("Revise response" — `POST /drafts/{id}/revise` passes operator feedback + the prior body to `compose_for_lead`, which rewrites it grounded in the lead's post and returns the draft to `pending_review`), or bulk-approves from the Drafts tab, then sends per-lead ("Send now") or in bulk ("Send approved"). Only `approved` drafts are sent; no auto-send path exists. Assisted (social) sends add a second gate: the draft moves to `awaiting_send` with a deep link, and the operator confirms via `/drafts/{id}/confirm-sent` after sending in the native app — only then is the `outreach_sends` + `contact_messages` record written.
 
 **API router** — `src/aiplatform/webapp/routers/outreach.py`:
 
@@ -186,6 +186,7 @@ GET/POST   /api/outreach/campaigns/{id}/sources
 PATCH/DEL  /api/outreach/sources/{id}
 GET        /api/outreach/campaigns/{id}/drafts   ?status=pending_review|approved|awaiting_send|rejected
 PATCH      /api/outreach/drafts/{id}
+POST       /api/outreach/drafts/{id}/revise                (regenerate body from operator feedback)
 GET        /api/outreach/campaigns/{id}/leads
 GET        /api/outreach/campaigns/{id}/stats
 GET/POST   /api/outreach/contacts                (POST: manually add a contact)

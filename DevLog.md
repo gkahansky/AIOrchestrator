@@ -239,3 +239,4 @@ Append a new row after every commit. Format: Date & Time (local, ISO 8601) | Jir
 | 2026-05-25 01:40 |  | (merge) | Merge campaign-publication-workflow to main — contact edit + URL column, persona library selector, wider campaign popup, collapsible persona descriptions |
 | 2026-05-25 02:00 |  | f9d48e9 | Marketing tweaks — clickable lead website URL in the Leads tab, leads-count column in the campaigns table (removed Audience Context), and an editable campaign status (draft/active/paused/completed) in the edit form |
 | 2026-05-27 10:00 |  | 52e10ed | Added avg intent score column to campaigns table — backend computes per-campaign average from leads, frontend renders as colour-coded badge (green ≥70, yellow ≥50, red <50) |
+| 2026-05-27 10:15 |  | f6e45bb | Merge campaign publication workflow to main — full feature set: persona library, auto-compose, send-handler registry, single/assisted send, marketing UI overhaul, avg intent score |

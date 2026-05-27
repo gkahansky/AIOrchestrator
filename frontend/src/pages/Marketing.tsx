@@ -1201,8 +1201,14 @@ function CampaignDetail({ campaignId, onDeleted, onCloned, onEdit, onOpenPersona
                             }`}>{l.intent_score}</span>
                           ) : <span className="text-xs text-on-surface-variant">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-xs text-on-surface-variant max-w-[140px] truncate">
-                          {l.company || l.website_url || "—"}
+                        <td className="px-4 py-3 text-xs max-w-[160px]">
+                          {l.company && <span className="text-on-surface-variant block truncate" title={l.company}>{l.company}</span>}
+                          {l.website_url ? (
+                            <a href={l.website_url} target="_blank" rel="noopener noreferrer" title={l.website_url}
+                              className="text-primary hover:underline block truncate">
+                              {l.website_url.replace(/^https?:\/\//, "")}
+                            </a>
+                          ) : (!l.company && <span className="text-on-surface-variant">—</span>)}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={l.status} /></td>
                       </tr>
@@ -1461,6 +1467,7 @@ function CampaignForm({ campaign, onSaved, onCancel }: {
   )
   const [useMockLeads, setUseMockLeads] = useState(!!campaign?.use_mock_leads)
   const [dryRun, setDryRun] = useState(!!campaign?.dry_run)
+  const [statusVal, setStatusVal] = useState(campaign?.status || "draft")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [templates, setTemplates] = useState<any[]>([])
@@ -1493,6 +1500,7 @@ function CampaignForm({ campaign, onSaved, onCancel }: {
     user_search_instructions: userInstructions.trim() || null,
     use_mock_leads: useMockLeads,
     dry_run: dryRun,
+    ...(isEdit ? { status: statusVal } : {}),
   })
 
   async function save() {
@@ -1569,13 +1577,26 @@ function CampaignForm({ campaign, onSaved, onCancel }: {
         </div>
       )}
 
-      {/* Product */}
-      <div>
-        <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Product</label>
-        <select value={product} onChange={e => { setProduct(e.target.value); setPersonaIds([]) }} disabled={isEdit}
-          className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface disabled:opacity-60">
-          {PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-        </select>
+      {/* Product + status */}
+      <div className={isEdit ? "grid grid-cols-2 gap-3" : ""}>
+        <div>
+          <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Product</label>
+          <select value={product} onChange={e => { setProduct(e.target.value); setPersonaIds([]) }} disabled={isEdit}
+            className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface disabled:opacity-60">
+            {PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+          </select>
+        </div>
+        {isEdit && (
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Status</label>
+            <select value={statusVal} onChange={e => setStatusVal(e.target.value)}
+              className="w-full px-3 py-2 text-sm font-label bg-surface-container-low rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface">
+              {["draft", "active", "paused", "completed"].map(s => (
+                <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Name */}
@@ -1989,7 +2010,7 @@ function CampaignsTable({ campaigns, onRow, onEdit, onDelete, onOpenPersona }: {
   onDelete: (id: string) => void
   onOpenPersona: (id: string) => void
 }) {
-  const cols = ["Product", "Campaign", "Sources", "Goal", "Audience Context", "Personas", "Schedule", "Test Mode", ""]
+  const cols = ["Product", "Campaign", "Sources", "Goal", "Personas", "Leads", "Schedule", "Test Mode", ""]
   return (
     <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 overflow-hidden">
       <div className="overflow-x-auto">
@@ -2010,12 +2031,11 @@ function CampaignsTable({ campaigns, onRow, onEdit, onDelete, onOpenPersona }: {
               return (
                 <tr key={c.id} onClick={() => onRow(c.id)}
                   className="hover:bg-surface-container-low/50 cursor-pointer align-top">
-                  <td className="px-3 py-3 w-[8%]"><Truncated text={product?.label || c.venture} className="text-xs text-on-surface-variant" /></td>
-                  <td className="px-3 py-3 w-[12%] text-sm font-label font-semibold text-on-surface"><Truncated text={c.name} /></td>
-                  <td className="px-3 py-3 w-[12%]"><Truncated text={sourceLabels} className="text-xs text-on-surface-variant" /></td>
-                  <td className="px-3 py-3 w-[14%]"><Truncated text={c.goal || ""} className="text-xs text-on-surface-variant" /></td>
-                  <td className="px-3 py-3 w-[16%]"><Truncated text={c.target_prompt || ""} className="text-xs text-on-surface-variant" /></td>
-                  <td className="px-3 py-3 w-[12%]">
+                  <td className="px-3 py-3 w-[10%]"><Truncated text={product?.label || c.venture} className="text-xs text-on-surface-variant" /></td>
+                  <td className="px-3 py-3 w-[17%] text-sm font-label font-semibold text-on-surface"><Truncated text={c.name} /></td>
+                  <td className="px-3 py-3 w-[16%]"><Truncated text={sourceLabels} className="text-xs text-on-surface-variant" /></td>
+                  <td className="px-3 py-3 w-[18%]"><Truncated text={c.goal || ""} className="text-xs text-on-surface-variant" /></td>
+                  <td className="px-3 py-3 w-[16%]">
                     <div className="flex flex-wrap gap-1">
                       {(c.personas || []).slice(0, 3).map((p: any, i: number) => (
                         p.id ? (
@@ -2030,8 +2050,9 @@ function CampaignsTable({ campaigns, onRow, onEdit, onDelete, onOpenPersona }: {
                       {!(c.personas?.length) && <span className="text-xs text-on-surface-variant">—</span>}
                     </div>
                   </td>
+                  <td className="px-3 py-3 w-[6%] text-xs text-on-surface whitespace-nowrap">{c.leads_count ?? 0}</td>
                   <td className="px-3 py-3 w-[9%] text-xs text-on-surface-variant whitespace-nowrap">{scheduleLabel(c)}</td>
-                  <td className="px-3 py-3 w-[9%]">
+                  <td className="px-3 py-3 w-[8%]">
                     {testOn ? (
                       <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 font-bold uppercase whitespace-nowrap">
                         {[c.use_mock_leads && "Mock", c.dry_run && "Dry-run"].filter(Boolean).join(" + ")}

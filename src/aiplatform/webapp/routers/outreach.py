@@ -307,6 +307,10 @@ def _campaign_to_dict(c: OutreachCampaign, db: Any) -> dict:
     from sqlalchemy import func
     templates = db.query(OutreachTemplate).filter(OutreachTemplate.campaign_id == c.id).all()
     leads_count = db.query(Lead).filter(Lead.campaign_id == c.id).count()
+    _avg = db.query(func.avg(Lead.intent_score)).filter(
+        Lead.campaign_id == c.id, Lead.intent_score.isnot(None)
+    ).scalar()
+    avg_intent_score = int(round(_avg)) if _avg is not None else None
     drafts_pending = db.query(LeadDraft).filter(
         LeadDraft.campaign_id == c.id, LeadDraft.status == "pending_review"
     ).count()
@@ -326,6 +330,7 @@ def _campaign_to_dict(c: OutreachCampaign, db: Any) -> dict:
         "use_mock_leads": bool(c.use_mock_leads),
         "dry_run": bool(c.dry_run),
         "leads_count": leads_count,
+        "avg_intent_score": avg_intent_score,
         "drafts_pending": drafts_pending,
         "templates_count": len(templates),
         "total_sends": total_sends,

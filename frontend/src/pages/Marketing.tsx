@@ -2010,7 +2010,7 @@ function CampaignsTable({ campaigns, onRow, onEdit, onDelete, onOpenPersona }: {
   onDelete: (id: string) => void
   onOpenPersona: (id: string) => void
 }) {
-  const cols = ["Product", "Campaign", "Sources", "Goal", "Personas", "Leads", "Schedule", "Test Mode", ""]
+  const cols = ["Product", "Campaign", "Sources", "Goal", "Personas", "Leads", "Intent", "Schedule", "Test Mode", ""]
   return (
     <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/20 overflow-hidden">
       <div className="overflow-x-auto">
@@ -2051,6 +2051,15 @@ function CampaignsTable({ campaigns, onRow, onEdit, onDelete, onOpenPersona }: {
                     </div>
                   </td>
                   <td className="px-3 py-3 w-[6%] text-xs text-on-surface whitespace-nowrap">{c.leads_count ?? 0}</td>
+                  <td className="px-3 py-3 w-[6%] whitespace-nowrap">
+                    {c.avg_intent_score != null ? (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                        c.avg_intent_score >= 70 ? "bg-green-500/15 text-green-700 dark:text-green-400"
+                        : c.avg_intent_score >= 50 ? "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400"
+                        : "bg-red-500/15 text-red-700 dark:text-red-400"
+                      }`}>{c.avg_intent_score}</span>
+                    ) : <span className="text-xs text-on-surface-variant">—</span>}
+                  </td>
                   <td className="px-3 py-3 w-[9%] text-xs text-on-surface-variant whitespace-nowrap">{scheduleLabel(c)}</td>
                   <td className="px-3 py-3 w-[8%]">
                     {testOn ? (

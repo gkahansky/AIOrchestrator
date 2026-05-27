@@ -18,6 +18,8 @@ import os
 import requests
 
 from aiplatform.skills.research.sources.base import RawPost
+from aiplatform.skills.research.sources._filters import apply_filters
+from aiplatform.skills.research.sources.query_builder import filters_from_config
 
 log = logging.getLogger(__name__)
 
@@ -91,6 +93,8 @@ def _fetch_comments(video: dict, api_key: str, max_comments: int) -> list[RawPos
             text = top.get("textDisplay") or top.get("textOriginal", "")
             author = top.get("authorDisplayName", "")
             author_url = top.get("authorChannelUrl", "")
+            channel_id = top.get("authorChannelId", {}).get("value", "")
+            like_count = top.get("likeCount", 0)
             if len(text) < 30:
                 continue
             posts.append(RawPost(
@@ -99,6 +103,10 @@ def _fetch_comments(video: dict, api_key: str, max_comments: int) -> list[RawPos
                 author=author,
                 url=vid_url,
                 website_url=author_url or None,
+                author_url=author_url or "",
+                author_handle=channel_id or "",
+                posted_at=top.get("publishedAt", ""),
+                engagement=int(like_count) if isinstance(like_count, (int, float)) else 0,
                 source_channel="youtube",
             ))
     except Exception as e:
@@ -138,5 +146,6 @@ def search(keywords: list[str], config: dict) -> list[RawPost]:
                 seen_authors.add(key)
                 results.append(post)
 
+    results = apply_filters(results, filters_from_config(config))
     log.info("youtube: %d comment posts from %d videos", len(results), len(videos))
     return results

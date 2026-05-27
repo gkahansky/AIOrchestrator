@@ -339,6 +339,7 @@ class Lead(Base):
     name              = Column(String(255), nullable=True)
     email             = Column(String(255), nullable=True, index=True)
     platform_username = Column(String(255), nullable=True)    # e.g. "u/johndoe", "fiverr:john_doe"
+    author_url        = Column(String(2048), nullable=True)   # reachable profile/channel URL (social DM target)
     website_url       = Column(String(2048), nullable=True)   # their website (audit leads)
     company           = Column(String(255), nullable=True)
     notes             = Column(Text, nullable=True)           # AI-extracted context about them

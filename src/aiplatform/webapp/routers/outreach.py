@@ -20,6 +20,7 @@ Endpoints:
   PATCH/DELETE    /api/outreach/sources/{id}
   GET             /api/outreach/campaigns/{id}/drafts
   PATCH           /api/outreach/drafts/{id}
+  POST            /api/outreach/drafts/{id}/revise               (regenerate from feedback)
   GET/POST        /api/outreach/leads
   GET/PATCH       /api/outreach/leads/{id}
   GET/PATCH       /api/outreach/contacts
@@ -147,6 +148,9 @@ class DraftPatch(BaseModel):
     subject: str | None = None
     message_body: str | None = None
     status: str | None = None   # pending_review | approved | rejected
+
+class DraftReviseRequest(BaseModel):
+    feedback: str
 
 class TemplatePatch(BaseModel):
     subject: str | None = None
@@ -279,6 +283,7 @@ def _lead_to_dict(l: Lead) -> dict:
         "source_channel": l.source_channel, "source_url": l.source_url,
         "name": l.name, "email": l.email,
         "platform_username": l.platform_username,
+        "author_url": l.author_url,
         "website_url": l.website_url, "company": l.company,
         "notes": l.notes,
         "context": l.context,
@@ -970,6 +975,43 @@ def compose_for_lead(
     db.commit()
     db.refresh(draft)
     return _draft_to_dict(draft, lead)
+
+
+@router.post("/drafts/{draft_id}/revise")
+def revise_draft(
+    draft_id: str, req: DraftReviseRequest,
+    _: str = Depends(require_auth), db=Depends(get_db),
+) -> dict:
+    """Regenerate a draft's message from operator feedback. Rewrites the existing
+    draft in place and returns it to pending_review."""
+    feedback = (req.feedback or "").strip()
+    if not feedback:
+        raise HTTPException(status_code=400, detail="feedback is required")
+    d = db.get(LeadDraft, _uuid.UUID(draft_id))
+    if not d:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    c = db.get(OutreachCampaign, d.campaign_id)
+    lead = db.get(Lead, d.lead_id)
+    if not c or not lead:
+        raise HTTPException(status_code=404, detail="Campaign or lead not found")
+
+    from aiplatform.skills.comms.compose_personalized import (
+        compose_for_lead as _compose, resolve_effective_platform,
+    )
+    campaign_dict = _campaign_to_dict(c, db)
+    effective_platform = resolve_effective_platform(lead.source_channel, c.platform)
+    composed = _compose(
+        _lead_to_dict(lead), campaign_dict, platform=effective_platform,
+        revision_feedback=feedback, previous_message=d.message_body,
+    )
+
+    d.subject = composed.get("subject")
+    d.message_body = composed["message_body"]
+    d.context_used = composed.get("context_used")
+    d.status = "pending_review"
+    db.commit()
+    db.refresh(d)
+    return _draft_to_dict(d, lead)
 
 
 @router.post("/campaigns/{campaign_id}/send-approved", status_code=status.HTTP_202_ACCEPTED)

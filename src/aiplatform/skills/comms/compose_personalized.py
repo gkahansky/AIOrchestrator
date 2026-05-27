@@ -100,7 +100,9 @@ def resolve_effective_platform(
     return desired if desired in DELIVERABLE_PLATFORMS else "email"
 
 
-def compose_for_lead(lead: dict, campaign: dict, platform: str | None = None) -> dict:
+def compose_for_lead(lead: dict, campaign: dict, platform: str | None = None,
+                     revision_feedback: str | None = None,
+                     previous_message: str | None = None) -> dict:
     """
     Write a personalized outreach message for a single lead.
 
@@ -109,6 +111,9 @@ def compose_for_lead(lead: dict, campaign: dict, platform: str | None = None) ->
                   website_url, company, matched_persona, platform_username
         campaign: Campaign dict with fields: target_prompt, personas, platform,
                   venture, goal, name
+        revision_feedback: When set, rewrite a prior draft to address operator
+                  feedback instead of composing from scratch.
+        previous_message: The prior draft body the feedback refers to.
 
     Returns:
         {subject, message_body, context_used}
@@ -175,6 +180,21 @@ INSTRUCTIONS:
 {"6. Output format: JSON with keys 'subject' (string, email only — write null for other platforms) and 'message_body' (string)." if platform == "email" else "6. Output format: JSON with keys 'subject' (null) and 'message_body' (string)."}
 
 Output JSON only, no explanation outside the JSON."""
+
+    if revision_feedback:
+        user_prompt += f"""
+
+REVISION REQUEST — this overrides a fresh compose:
+The operator reviewed the draft below and asked for changes. Rewrite the message
+to address their feedback while keeping it grounded in the lead's post above.
+
+PREVIOUS DRAFT:
+\"\"\"
+{(previous_message or '')[:1500]}
+\"\"\"
+
+OPERATOR FEEDBACK (apply this):
+{revision_feedback[:1000]}"""
 
     try:
         msg = client.messages.create(

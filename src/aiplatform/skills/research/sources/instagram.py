@@ -5,10 +5,13 @@ Primary:  Apify instagram-hashtag-scraper — searches hashtags for posts whose
           captions signal content-creation pain points.
 Fallback: Google site:instagram.com search via SerpAPI.
 
+A native provider can be wired via sources.providers.resolve_provider without
+touching this handler.
+
 config keys:
     hashtags:  list[str] — Instagram hashtags to scrape (without #)
-               e.g. ["fitnesscontent", "contentcreator", "videoediting"]
     max_posts: int       — posts per hashtag (default: 15, Apify)
+    recency_days, geo, language, min_engagement, max_results — relevance filters
 """
 import logging
 import os
@@ -16,10 +19,23 @@ import os
 from aiplatform.skills.research.sources.base import RawPost
 from aiplatform.skills.research.sources.google import serpapi_search
 from aiplatform.skills.research.sources import apify as apify_runner
+from aiplatform.skills.research.sources import _provider
+from aiplatform.skills.research.sources._filters import apply_filters
+from aiplatform.skills.research.sources.query_builder import filters_from_config
 
 log = logging.getLogger(__name__)
 
 _APIFY_ACTOR = "apify/instagram-hashtag-scraper"
+
+
+def _engagement(item: dict) -> int:
+    def _n(*keys):
+        for k in keys:
+            v = item.get(k)
+            if isinstance(v, (int, float)):
+                return int(v)
+        return 0
+    return _n("likesCount", "likes") + _n("commentsCount", "comments")
 
 
 def _search_via_apify(hashtags: list[str], keywords: list[str], max_posts: int) -> list[RawPost]:
@@ -55,6 +71,10 @@ def _search_via_apify(hashtags: list[str], keywords: list[str], max_posts: int) 
                 author=owner,
                 url=url,
                 website_url=profile_url or None,
+                author_url=profile_url,
+                author_handle=owner or "",
+                posted_at=(item.get("timestamp") or item.get("taken_at") or ""),
+                engagement=_engagement(item),
                 source_channel="instagram",
             ))
 
@@ -65,7 +85,6 @@ def _search_via_google(keywords: list[str], hashtags: list[str], num: int = 5) -
     results: list[RawPost] = []
     seen: set[str] = set()
 
-    # Build search terms from hashtags + keywords
     terms = [f"#{h}" for h in hashtags[:3]] + keywords[:3]
 
     for term in terms[:4]:
@@ -79,15 +98,18 @@ def _search_via_google(keywords: list[str], hashtags: list[str], num: int = 5) -
     return results
 
 
-def search(keywords: list[str], config: dict) -> list[RawPost]:
+def _default_search(keywords: list[str], config: dict) -> list[RawPost]:
     hashtags: list[str] = config.get("hashtags") or []
     max_posts = int(config.get("max_posts", 15))
     has_apify = bool(os.environ.get("APIFY_API_TOKEN", ""))
 
+    results: list[RawPost] = []
     if has_apify and hashtags:
         results = _search_via_apify(hashtags, keywords, max_posts)
-        if results:
-            return results
+    if not results:
+        results = _search_via_google(keywords, hashtags)
+    return apply_filters(results, filters_from_config(config))
 
-    # Fallback — Google signal search
-    return _search_via_google(keywords, hashtags)
+
+def search(keywords: list[str], config: dict) -> list[RawPost]:
+    return _provider.run(keywords, config, "instagram", _default_search)

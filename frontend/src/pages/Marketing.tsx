@@ -649,6 +649,8 @@ function DraftCard({ draft, onUpdate }: { draft: any; onUpdate: () => void }) {
   const [body, setBody] = useState(draft.message_body || "")
   const [subject, setSubject] = useState(draft.subject || "")
   const [saving, setSaving] = useState(false)
+  const [revising, setRevising] = useState(false)
+  const [feedback, setFeedback] = useState("")
 
   const lead = draft.lead || {}
   const isEmail = draft.subject !== null && draft.subject !== undefined
@@ -684,6 +686,20 @@ function DraftCard({ draft, onUpdate }: { draft: any; onUpdate: () => void }) {
       method: "POST", headers: authHeader(),
     })
     setSaving(false)
+    onUpdate()
+  }
+
+  async function submitRevision() {
+    if (!feedback.trim()) return
+    setSaving(true)
+    await fetch(`${API}/api/outreach/drafts/${draft.id}/revise`, {
+      method: "POST",
+      headers: { ...authHeader(), "Content-Type": "application/json" },
+      body: JSON.stringify({ feedback }),
+    })
+    setSaving(false)
+    setRevising(false)
+    setFeedback("")
     onUpdate()
   }
 
@@ -773,11 +789,36 @@ function DraftCard({ draft, onUpdate }: { draft: any; onUpdate: () => void }) {
               <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Message</p>
               <pre className="text-sm font-label text-on-surface whitespace-pre-wrap leading-relaxed">{draft.message_body}</pre>
             </div>
-            {draft.status === "pending_review" && (
+            {revising && (
+              <div className="space-y-2 p-3 bg-surface-container-low rounded-lg border border-outline-variant/30">
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                  What should change?
+                </label>
+                <textarea value={feedback} onChange={e => setFeedback(e.target.value)} rows={3}
+                  autoFocus placeholder="e.g. make it shorter, lead with the lawsuit angle, warmer tone…"
+                  className="w-full px-3 py-2 text-sm font-label bg-surface-container-lowest rounded-lg border border-outline-variant/30 focus:border-primary/40 focus:outline-none text-on-surface resize-none leading-relaxed" />
+                <div className="flex gap-2">
+                  <button onClick={submitRevision} disabled={saving || !feedback.trim()}
+                    className="flex items-center gap-1 px-4 py-1.5 bg-primary text-on-primary text-xs font-label font-semibold rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50">
+                    <span className="material-symbols-outlined text-[13px]">auto_awesome</span>
+                    {saving ? "Revising…" : "Generate revision"}
+                  </button>
+                  <button onClick={() => { setRevising(false); setFeedback("") }} disabled={saving}
+                    className="px-4 py-1.5 bg-surface-container text-on-surface-variant text-xs font-label font-semibold rounded-lg disabled:opacity-50">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            {draft.status === "pending_review" && !revising && (
               <div className="flex flex-wrap gap-2 pt-1">
                 <button onClick={() => setEditing(true)}
                   className="flex items-center gap-1 px-3 py-1.5 bg-surface-container text-on-surface-variant text-xs font-label font-semibold rounded-lg hover:bg-surface-dim transition-colors">
                   <span className="material-symbols-outlined text-[13px]">edit</span>Edit
+                </button>
+                <button onClick={() => setRevising(true)}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-surface-container text-on-surface-variant text-xs font-label font-semibold rounded-lg hover:bg-surface-dim transition-colors">
+                  <span className="material-symbols-outlined text-[13px]">auto_awesome</span>Revise response
                 </button>
                 <button onClick={() => patch({ status: "approved" })} disabled={saving}
                   className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white text-xs font-label font-semibold rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50">
@@ -786,6 +827,14 @@ function DraftCard({ draft, onUpdate }: { draft: any; onUpdate: () => void }) {
                 <button onClick={() => patch({ status: "rejected" })} disabled={saving}
                   className="flex items-center gap-1 px-3 py-1.5 border border-error/30 text-error text-xs font-label font-semibold rounded-lg hover:bg-error-container transition-colors disabled:opacity-50">
                   <span className="material-symbols-outlined text-[13px]">cancel</span>Reject
+                </button>
+              </div>
+            )}
+            {draft.status === "rejected" && !revising && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button onClick={() => setRevising(true)}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-surface-container text-on-surface-variant text-xs font-label font-semibold rounded-lg hover:bg-surface-dim transition-colors">
+                  <span className="material-symbols-outlined text-[13px]">auto_awesome</span>Revise response
                 </button>
               </div>
             )}

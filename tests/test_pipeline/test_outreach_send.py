@@ -47,7 +47,8 @@ def _draft():
 
 def _lead(source_channel, **kw):
     base = dict(id="l1", source_channel=source_channel, email=None,
-                platform_username=None, source_url=None, name="Bob", status="new")
+                platform_username=None, author_url=None, source_url=None,
+                name="Bob", status="new")
     base.update(kw)
     return types.SimpleNamespace(**base)
 
@@ -80,6 +81,17 @@ def test_linkedin_lead_is_staged_for_assisted_send():
     assert draft.send_deep_link == "https://www.linkedin.com/posts/xyz"
     # No send record / contact written while awaiting manual confirmation.
     assert db.added == []
+
+
+def test_linkedin_deep_link_prefers_profile_url():
+    db = _FakeDB()
+    draft = _draft()
+    lead = _lead("linkedin", source_url="https://www.linkedin.com/posts/xyz",
+                 author_url="https://www.linkedin.com/in/jane-123/")
+    now = datetime.now(timezone.utc)
+    r = _send_one_draft(db, draft, lead, _campaign(), "https://api", 30, now, dry_run=False)
+    assert r["deep_link"] == "https://www.linkedin.com/in/jane-123/"
+    assert draft.send_deep_link == "https://www.linkedin.com/in/jane-123/"
 
 
 def test_email_lead_without_address_is_skipped():

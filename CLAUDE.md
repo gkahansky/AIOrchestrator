@@ -111,7 +111,7 @@ The Cold Outreach system is a **platform-level feature** (not a venture). It is 
 | `personas` | Reusable per-venture persona library (`name`, `description`, `venture`). Edited in place — a live reference shared across every linked campaign |
 | `campaign_personas` | Many-to-many join between `outreach_campaigns` and `personas` |
 | `campaign_sources` | One-to-many per campaign — each row is a search source with its own platform, keywords (JSONB), and config (JSONB) |
-| `leads` | Raw qualified leads; `context` (Text) stores the original post/query for message grounding; `matched_persona` links to the campaign persona |
+| `leads` | Raw qualified leads; `context` (Text) stores the original post/query for message grounding; `matched_persona` links to the campaign persona; `author_url` holds the reachable social profile/channel (assisted-send DM target) |
 | `lead_drafts` | AI-written drafts per lead; status flow: `pending_review → approved / rejected → (awaiting_send) → sent`. `send_deep_link`/`send_platform` hold the assisted-send target |
 | `outreach_sends` | Send records (`template_id` nullable for draft-based sends); linked from `lead_drafts.send_record_id` |
 | `contacts` | CRM — upserted on send (by email, or `usernames[platform]` for social); tracks all contacts across ventures |
@@ -123,8 +123,8 @@ The Cold Outreach system is a **platform-level feature** (not a venture). It is 
 |---|---|---|
 | `reddit.py` | Reddit | Public JSON API — no key; configurable `subreddits`, `sort`, `time_filter` |
 | `google.py` | Google | SerpAPI — `SERPAPI_KEY`; shared `serpapi_search()` utility |
-| `linkedin.py` | LinkedIn | Apify `linkedin-post-search-scraper` primary; Google `site:linkedin.com` fallback |
-| `facebook.py` | Facebook Groups | Apify `facebook-groups-scraper` primary; Google `site:facebook.com/groups` fallback; `group_urls` config |
+| `linkedin.py` | LinkedIn | Apify `linkedin-post-search-scraper` primary (boolean query); Google `site:linkedin.com` fallback; captures author profile URL/handle |
+| `facebook.py` | Facebook Groups | Apify `facebook-groups-scraper` primary; Google `site:facebook.com/groups` fallback. `group_urls` config (auto-**discovered** via Google when omitted); `include_comments` mines post comments |
 | `hackernews.py` | Hacker News | Algolia HN API — no key; `post_type: ask/show/story` config |
 | `indiehackers.py` | IndieHackers | Google `site:indiehackers.com` via SerpAPI |
 | `fiverr.py` | Fiverr | Session cookie scrape; Google fallback |
@@ -133,6 +133,28 @@ The Cold Outreach system is a **platform-level feature** (not a venture). It is 
 | `instagram.py` | Instagram | Apify `instagram-hashtag-scraper` primary; Google `site:instagram.com` fallback; `hashtags` config |
 
 `HANDLERS` dict in `sources/__init__.py` is the extension point — adding a new platform means adding one handler file and one entry in the dict. No changes to core logic.
+
+**Author identity + relevance signals.** `RawPost` (`sources/base.py`) carries
+`author_url`/`author_handle` (the reachable profile, captured by the linkedin/
+facebook/youtube/instagram handlers) plus `posted_at`, `engagement`, and
+`author_headline`. `find_leads._qualify_post` feeds recency/engagement/role into
+the Haiku `intent_score`, and `_filters.apply_filters` drops stale/low-engagement
+posts **before** the paid Claude step (fails open when a signal is absent). Per-source
+relevance knobs in `CampaignSource.config`: `recency_days`, `geo`, `language`,
+`min_engagement`, `max_results` (parsed by `query_builder.filters_from_config`).
+
+**Search-side provider slot** — `sources/providers/resolve_provider(platform, config)`
+mirrors the send-side slot: it returns `None` today, so social handlers fall back to
+their Apify/Google default search. Drop an adapter exposing `search(keywords, config)
+-> list[RawPost]` (e.g. Unipile people search, a Sales-Navigator/Apify people-search
+actor, Proxycurl) and that platform switches to API-backed search with no change to the
+registry, handlers, worker, or router. `sources/_provider.run()` is the dispatch seam.
+
+**Apify robustness** — `sources/apify.py` uses Apify's `run-sync-get-dataset-items`
+endpoint (no client poll loop), with shared result caching and a daily cost cap via
+`sources/_cache.py` (Redis `REDIS_URL`, in-process fallback): `APIFY_CACHE_TTL`
+(default 6 h) dedupes identical runs; `APIFY_MAX_RUNS_PER_DAY` (default 200) caps spend
+and fails open (returns `[]`, never raises).
 
 **VENTURE_DEFAULT_SOURCES** in `find_leads.py` seeds source rows when a new campaign is created (via the API) and acts as fallback when no `CampaignSource` rows exist. Currently defined for `marketing_audit`, `content_studio`, `accessibility_audit`, and `content_repurposing`.
 
@@ -207,7 +229,10 @@ Legacy A/B endpoints (`/compose`, `/send`, `/templates`, `/sends`) are preserved
 ```
 ANTHROPIC_API_KEY     — Haiku (qualification) + Sonnet (composition)
 SERPAPI_KEY           — Google / LinkedIn / IndieHackers / Fiverr signal searches
-APIFY_API_TOKEN       — LinkedIn Posts Scraper + Facebook Groups Scraper + Instagram Hashtag Scraper (optional; graceful fallback)
+APIFY_API_TOKEN       — LinkedIn Posts Scraper + Facebook Groups/Comments Scraper + Instagram Hashtag Scraper (optional; graceful fallback)
+APIFY_CACHE_TTL       — seconds to cache identical Apify runs (optional; default 21600 = 6h)
+APIFY_MAX_RUNS_PER_DAY— daily Apify run cost cap; beyond it the runner returns [] (optional; default 200)
+REDIS_URL             — shared cache/cost-counter backend for Apify runs (optional; in-process fallback)
 YOUTUBE_API_KEY       — YouTube video search + comment discovery (optional; handler skipped if absent)
 LISTENNOTES_API_KEY   — Listen Notes podcast discovery (optional)
 FIVERR_SESSION_COOKIE — Fiverr buyer requests scrape (optional; Google fallback)

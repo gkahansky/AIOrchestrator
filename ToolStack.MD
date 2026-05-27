@@ -110,7 +110,7 @@ Complete inventory of every third-party tool, service, API, and library used acr
 
 | Tool | Purpose | Use Cases |
 |---|---|---|
-| **Apify** (REST API via `requests`) | Web scraping platform | LinkedIn post search (`linkedin-post-search-scraper`), Facebook Groups (`facebook-groups-scraper`), Instagram hashtag discovery (`instagram-hashtag-scraper`) — all with graceful Google fallback. `APIFY_API_TOKEN` required. |
+| **Apify** (REST API via `requests`) | Web scraping platform | LinkedIn post search (`linkedin-post-search-scraper`), Facebook Groups (`facebook-groups-scraper`) + comments (`facebook-comments-scraper`), Instagram hashtag discovery (`instagram-hashtag-scraper`) — all with graceful Google fallback. Uses the synchronous `run-sync-get-dataset-items` endpoint with Redis-backed result caching + a daily run cost cap. `APIFY_API_TOKEN` required; `APIFY_CACHE_TTL` / `APIFY_MAX_RUNS_PER_DAY` optional. |
 | **Reddit Public JSON API** | Forum post search | Subreddit keyword search — no API key; configurable `subreddits`, `sort`, `time_filter` per campaign source |
 | **Algolia HN Search API** | Hacker News post search | Ask HN / Show HN / story search by keyword; no key required |
 | **Listen Notes API** | Podcast directory | Discover podcasters as leads; bypasses Claude qualification (already structured data). `LISTENNOTES_API_KEY` required. |
@@ -211,7 +211,7 @@ No code changes required to swap — set `active: true` in `skills.json`.
 | Gemini | `GOOGLE_AI_API_KEY` |
 | SerpAPI | `SERPAPI_KEY` |
 | YouTube Data API | `YOUTUBE_API_KEY` |
-| Apify | `APIFY_API_TOKEN` |
+| Apify | `APIFY_API_TOKEN`, `APIFY_CACHE_TTL`, `APIFY_MAX_RUNS_PER_DAY` |
 | Listen Notes | `LISTENNOTES_API_KEY` |
 | Fiverr scraping | `FIVERR_SESSION_COOKIE` |
 | Etsy | `ETSY_API_KEY`, `ETSY_API_SECRET`, `ETSY_SHOP_ID`, `ETSY_ACCESS_TOKEN`, `ETSY_REFRESH_TOKEN` |

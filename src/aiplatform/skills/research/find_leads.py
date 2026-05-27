@@ -296,6 +296,18 @@ def _load_mock_leads(venture: str) -> list[dict]:
 
 # ── Claude qualification ───────────────────────────────────────────────────────
 
+def _signal_block(post_dict: dict) -> str:
+    """Append recency/engagement/role lines to the prompt only when present."""
+    lines = []
+    if post_dict.get("author_headline"):
+        lines.append(f"Author role/headline: {post_dict['author_headline']}")
+    if post_dict.get("posted_at"):
+        lines.append(f"Posted at: {post_dict['posted_at']}")
+    if post_dict.get("engagement"):
+        lines.append(f"Engagement (reactions+comments): {post_dict['engagement']}")
+    return ("\n" + "\n".join(lines)) if lines else ""
+
+
 def _qualify_post(
     post_dict: dict,
     venture: str,
@@ -326,10 +338,13 @@ def _qualify_post(
 Source: {post_dict.get('source_channel', 'web')}
 Title: {post_dict.get('title', '')}
 Text: {post_dict.get('text', '')}
-Author: {post_dict.get('author', '')}
+Author: {post_dict.get('author', '')}{_signal_block(post_dict)}
 URL: {post_dict.get('url', '')}
 
 Is this person a potential customer who would benefit from this service?
+Weigh recency and engagement: a recent post with engagement is a stronger,
+more reachable signal than a stale or ignored one. A relevant role/headline
+raises confidence.
 Reply with JSON only:
 {{
   "is_lead": true or false,
@@ -434,6 +449,11 @@ def find_leads(
                     "email":          p.email,
                     "website_url":    p.website_url,
                     "source_channel": p.source_channel or platform,
+                    "author_url":     p.author_url,
+                    "author_handle":  p.author_handle,
+                    "posted_at":      p.posted_at,
+                    "engagement":     p.engagement,
+                    "author_headline": p.author_headline,
                 })
         except Exception as e:
             log.warning("find_leads: handler '%s' error: %s", platform, e)
@@ -482,9 +502,11 @@ def find_leads(
             "name":            extracted.get("name") or None,
             "email":           post.get("email") or None,
             "platform_username": (
-                post.get("author") if post.get("source_channel") in
+                (post.get("author_handle") or post.get("author"))
+                if post.get("source_channel") in
                 ("reddit", "fiverr", "linkedin", "facebook", "instagram", "youtube") else None
             ),
+            "author_url":      post.get("author_url") or None,
             "website_url":     extracted.get("website_url"),
             "company":         extracted.get("company"),
             "notes":           extracted.get("notes", ""),

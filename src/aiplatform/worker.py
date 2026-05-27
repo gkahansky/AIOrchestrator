@@ -1358,13 +1358,18 @@ def _send_one_draft(db, draft, lead, campaign, base_url, cooldown_days, now, dry
             "unsub_url": f"{base_url}/api/outreach/unsubscribe/{send_id}",
         }
 
+    # Social DMs are best opened on the person's profile; fall back to the post URL.
+    deep_link_hint = lead.source_url
+    if effective_platform in ("linkedin", "instagram", "facebook"):
+        deep_link_hint = lead.author_url or lead.source_url
+
     req = SendRequest(
         message_body=draft.message_body,
         venture=campaign.venture,
         to_email=lead.email,
         platform_username=lead.platform_username,
         subject=draft.subject,
-        deep_link_hint=lead.source_url,
+        deep_link_hint=deep_link_hint,
         lead_name=lead.name,
         meta=meta,
     )
@@ -1447,6 +1452,7 @@ def run_find_leads(
                 name=lead_data.get("name"),
                 email=lead_data.get("email"),
                 platform_username=lead_data.get("platform_username"),
+                author_url=lead_data.get("author_url"),
                 website_url=lead_data.get("website_url"),
                 company=lead_data.get("company"),
                 notes=lead_data.get("notes"),

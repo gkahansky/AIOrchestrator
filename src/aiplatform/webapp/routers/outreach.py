@@ -283,6 +283,7 @@ def _lead_to_dict(l: Lead) -> dict:
         "source_channel": l.source_channel, "source_url": l.source_url,
         "name": l.name, "email": l.email,
         "platform_username": l.platform_username,
+        "author_url": l.author_url,
         "website_url": l.website_url, "company": l.company,
         "notes": l.notes,
         "context": l.context,

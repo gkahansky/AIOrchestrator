@@ -162,5 +162,106 @@
         "note": "Sprint 3"
       }
     ]
+  },
+  "social-publishing": {
+    "capability": "social-publishing",
+    "tools": [
+      {
+        "id": "linkedin_page",
+        "tier": "standard",
+        "cost_per_call": 0.00,
+        "module": "aiplatform.skills.comms.publishers.linkedin_page",
+        "function": "publish",
+        "active": true,
+        "note": "LinkedIn Company Page via Marketing API (ugcPosts). Requires Page admin OAuth token in social_accounts.access_token. Falls back to assisted-send when token absent."
+      },
+      {
+        "id": "facebook_page",
+        "tier": "standard",
+        "cost_per_call": 0.00,
+        "module": "aiplatform.skills.comms.publishers.facebook_page",
+        "function": "publish",
+        "active": true,
+        "note": "Facebook Page via Meta Graph API. Requires Page access token. Falls back to assisted-send."
+      },
+      {
+        "id": "instagram_business",
+        "tier": "standard",
+        "cost_per_call": 0.00,
+        "module": "aiplatform.skills.comms.publishers.instagram_business",
+        "function": "publish",
+        "active": true,
+        "note": "Instagram Business via Meta Graph API two-step container flow. Requires linked FB Page + IG user id. Falls back to assisted-send."
+      },
+      {
+        "id": "youtube_channel",
+        "tier": "standard",
+        "cost_per_call": 0.00,
+        "module": "aiplatform.skills.comms.publishers.youtube_channel",
+        "function": "publish",
+        "active": true,
+        "note": "YouTube Data API v3 video upload (Shorts + long-form). Requires OAuth youtube.upload scope. Falls back to assisted-send."
+      }
+    ]
+  },
+  "text-to-speech": {
+    "capability": "text-to-speech",
+    "tools": [
+      {
+        "id": "elevenlabs",
+        "tier": "standard",
+        "cost_per_call": 0.30,
+        "module": "aiplatform.skills.media.tts",
+        "function": "tts_elevenlabs",
+        "active": false,
+        "note": "M3 — wire when ELEVENLABS_API_KEY is set. Premium voice for explainer narration. ~$0.30 / 1000 chars."
+      },
+      {
+        "id": "openai-tts",
+        "tier": "fallback",
+        "cost_per_call": 0.015,
+        "module": "aiplatform.skills.media.tts",
+        "function": "tts_openai",
+        "active": false,
+        "note": "M3 fallback — tts-1-hd. ~$0.015 / 1000 chars."
+      }
+    ]
+  },
+  "video-synthesis": {
+    "capability": "video-synthesis",
+    "tools": [
+      {
+        "id": "scripted_assembly",
+        "tier": "standard",
+        "cost_per_call": 0.30,
+        "module": "aiplatform.skills.media.generate_video_explainer",
+        "function": "generate_video_explainer",
+        "active": false,
+        "note": "M3 — TTS narration + Imagen slides + FFmpeg slideshow + word-pop captions. ~$0.30 per 30s reel."
+      },
+      {
+        "id": "runway",
+        "tier": "premium",
+        "cost_per_call": 0.50,
+        "module": "aiplatform.skills.media.generate_video_explainer",
+        "function": "generate_via_runway",
+        "active": false,
+        "note": "Reserved tier slot. Activate after approval/budget review."
+      }
+    ]
+  },
+  "stock-media": {
+    "capability": "stock-media",
+    "tools": [
+      {
+        "id": "pexels",
+        "tier": "standard",
+        "cost_per_call": 0.00,
+        "module": "aiplatform.skills.research.stock_media",
+        "function": "search_pexels",
+        "active": false,
+        "note": "M3 — wire when PEXELS_API_KEY is set. Free tier OK for our cadence."
+      }
+    ]
   }
 }

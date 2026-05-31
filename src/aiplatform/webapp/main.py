@@ -57,6 +57,7 @@ from aiplatform.webapp.routers.ventures import content_studio as ventures_podcas
 from aiplatform.webapp.routers.ventures import security_audit as ventures_security
 from aiplatform.webapp.routers.ventures import market_research as ventures_market_research
 from aiplatform.webapp.routers.ventures import content_repurposing as ventures_cr
+from aiplatform.webapp.routers.ventures import content_engine as ventures_content_engine
 from aiplatform.webapp.routers import accessibility as audit_accessibility
 from aiplatform.webapp.routers.public import sample as public_sample
 from aiplatform.webapp.routers import outreach as platform_outreach
@@ -140,6 +141,7 @@ def create_app() -> FastAPI:
     app.include_router(ventures_security.router,          prefix="/api/ventures/security-audit",    tags=["security-audit"])
     app.include_router(ventures_market_research.router,   prefix="/api/ventures/market-research",   tags=["market-research"])
     app.include_router(ventures_cr.router,                prefix="/api/ventures/content-repurposing", tags=["content-repurposing"])
+    app.include_router(ventures_content_engine.router,    prefix="/api/ventures/content-engine",      tags=["content-engine"])
     app.include_router(audit_accessibility.router, prefix="/api/audit/accessibility",     tags=["accessibility"])
     # Outreach — lead discovery, campaign management, A/B email testing
     app.include_router(platform_outreach.router, prefix="/api/outreach",                  tags=["outreach"])

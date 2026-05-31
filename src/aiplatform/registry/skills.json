@@ -213,8 +213,8 @@
         "cost_per_call": 0.30,
         "module": "aiplatform.skills.media.tts",
         "function": "tts_elevenlabs",
-        "active": false,
-        "note": "M3 — wire when ELEVENLABS_API_KEY is set. Premium voice for explainer narration. ~$0.30 / 1000 chars."
+        "active": true,
+        "note": "Premium voice for explainer narration (eleven_turbo_v2_5). ~$0.30 / 1000 chars. Requires ELEVENLABS_API_KEY; falls back to OpenAI TTS when absent."
       },
       {
         "id": "openai-tts",
@@ -222,8 +222,8 @@
         "cost_per_call": 0.015,
         "module": "aiplatform.skills.media.tts",
         "function": "tts_openai",
-        "active": false,
-        "note": "M3 fallback — tts-1-hd. ~$0.015 / 1000 chars."
+        "active": true,
+        "note": "tts-1-hd fallback. ~$0.015 / 1000 chars. Requires OPENAI_API_KEY."
       }
     ]
   },
@@ -236,8 +236,8 @@
         "cost_per_call": 0.30,
         "module": "aiplatform.skills.media.generate_video_explainer",
         "function": "generate_video_explainer",
-        "active": false,
-        "note": "M3 — TTS narration + Imagen slides + FFmpeg slideshow + word-pop captions. ~$0.30 per 30s reel."
+        "active": true,
+        "note": "TTS narration + Imagen/Pexels visuals + FFmpeg slideshow (Ken Burns motion) + word-pop captions. ~$0.30 per 30s reel. Requires ffmpeg + ElevenLabs or OpenAI key."
       },
       {
         "id": "runway",
@@ -259,8 +259,8 @@
         "cost_per_call": 0.00,
         "module": "aiplatform.skills.research.stock_media",
         "function": "search_pexels",
-        "active": false,
-        "note": "M3 — wire when PEXELS_API_KEY is set. Free tier OK for our cadence."
+        "active": true,
+        "note": "Pexels photo + video search. Free tier OK for our cadence. Requires PEXELS_API_KEY and photographer credit in published copy."
       }
     ]
   }

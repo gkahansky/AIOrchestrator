@@ -137,6 +137,8 @@ Complete inventory of every third-party tool, service, API, and library used acr
 | **LinkedIn Marketing API** *(live)* | Company Page publishing + OAuth | Content Engine venture — `ugcPosts` for text/article, `assets` registerUpload + PUT for images (single + carousel). OAuth 2.0 with `w_organization_social` scope. Auto-discovers Page URN via `/v2/organizationAcls` at callback. Falls back to assisted-send. |
 | **Meta Graph API v19.0** *(live)* | Facebook Page + Instagram Business publishing | Content Engine venture — FB Page via `/{page_id}/feed` + `/photos` multipart (carousel via `attached_media`); IG Business via 2-step container + `media_publish` (single image), 3-step `is_carousel_item=true` → `CAROUSEL` → publish (carousel), `REELS` media_type with status polling (reels). Single Meta OAuth covers both. Long-lived 60-day Page tokens. |
 | **YouTube Data API v3** *(live)* | YouTube channel video upload | Content Engine venture — `videos.insert` multipart upload (Shorts inferred from 9:16 aspect + `#shorts` in title). OAuth 2.0 with `youtube.upload` + `youtube` scopes; hourly access tokens with offline refresh-token flow. |
+| **ElevenLabs API** *(live)* | Premium TTS narration | Content Engine venture — scripted explainer narration via `eleven_turbo_v2_5`. Default voice "Rachel" (neutral US English). ~$0.30 / 1000 chars. Falls back to OpenAI TTS-1-HD when `ELEVENLABS_API_KEY` absent. Skill: `media/tts.py`. |
+| **Pexels API** *(live)* | Stock photo + video search | Content Engine venture — sources b-roll for scripted explainers. Free with API key + photographer attribution. Skill: `research/stock_media.py`. |
 
 ---
 

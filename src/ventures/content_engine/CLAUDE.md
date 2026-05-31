@@ -137,10 +137,10 @@ Mounted at `/api/ventures/content-engine`.
 | CE-08 | Native image upload (LI assets, FB multipart, IG container 2/3-step, REELS) | ✅ done | Carousel supported on LI / FB / IG | 2026-05-31 |
 | CE-09 | Public asset endpoint for IG Graph fetch | ✅ done | Bigserial IDs, no listing endpoint | 2026-05-31 |
 | CE-10 | EchoForge Accessibility brand seed | ✅ done | Voice profile, 13 banned phrases, 3 personas, 70/30 theme | 2026-05-31 |
-| CE-11 | ElevenLabs TTS skill + tool-router slot | 🚧 in-progress | M3 |  |
-| CE-12 | Pexels stock-media skill | 🚧 in-progress | M3 |  |
-| CE-13 | Scripted explainer video assembly (`generate_video_explainer`) | 🚧 in-progress | M3 — FFmpeg slideshow + Ken Burns + word-pop captions |  |
-| CE-14 | Carousel-aware image-gen prompt builder per slide | 📋 planned | M3 |  |
+| CE-11 | ElevenLabs TTS skill + tool-router slot | ✅ done | `media/tts.py` — ElevenLabs primary + OpenAI TTS fallback; degrades silently without keys | 2026-05-31 |
+| CE-12 | Pexels stock-media skill | ✅ done | `research/stock_media.py` — photo + video search, attribution surfaced; ffprobe duration probe | 2026-05-31 |
+| CE-13 | Scripted explainer video assembly (`generate_video_explainer`) | ✅ done | TTS narration + Imagen / Pexels visuals + FFmpeg slideshow (Ken Burns motion on stills, loop-trim on video) + word-pop captions. Wired in pipeline for reel / short / long_video formats. | 2026-05-31 |
+| CE-14 | Carousel-aware image-gen prompt builder per slide | 📋 planned | M4 |  |
 | CE-15 | Brand-voice regeneration from echoforge.biz copy | 📋 planned | M4 |  |
 | CE-16 | Auto-approve thresholds per channel (AI-tell ≥ 90) | 📋 planned | M4 |  |
 | CE-17 | Cost-per-published-post weekly digest email | 📋 planned | M4 |  |

@@ -77,13 +77,19 @@ def run_item_generation(item_id: str, db) -> dict[str, Any]:
         item.status        = "review_pending"  # will be re-set by quality_check
         db.commit()
 
-        # Cheap static image for post / carousel formats — skipped cleanly
-        # if no image-gen credentials are available.
+        # Per-format media generation. Skipped cleanly when credentials are
+        # absent — the human reviewer sees the gap in the review UI.
         if item.format in {"post", "carousel"}:
             try:
                 _generate_static_visuals(item, brand, db)
             except Exception as exc:
                 item.error_message = f"image generation skipped: {exc}"
+                db.commit()
+        elif item.format in {"reel", "short", "long_video"}:
+            try:
+                _generate_video_asset(item, brand, db)
+            except Exception as exc:
+                item.error_message = f"video generation skipped: {exc}"
                 db.commit()
 
         return {"ok": True, "item_id": item_id, "variants_count": len(variants)}
@@ -400,3 +406,174 @@ def _public_urls_for(item, db) -> list[str]:
         elif asset.local_path:
             out.append(f"{base}/api/ventures/content-engine/assets/{asset.id}/file")
     return out
+
+
+# ── Video asset generation ───────────────────────────────────────────────────
+
+# Approx character counts per format — drives narration length.
+_VIDEO_SCRIPT_BUDGET = {
+    "reel":       (350,  700),   # 25–45 s narration
+    "short":      (350,  700),
+    "long_video": (2000, 4500),  # 3–7 min narration
+}
+
+# Aspect ratio per format.
+_VIDEO_ASPECT = {
+    "reel":       "9:16",
+    "short":      "9:16",
+    "long_video": "16:9",
+}
+
+
+def _generate_video_asset(item, brand, db) -> None:
+    """Generate a scripted explainer video for reel / short / long_video items.
+
+    Uses Claude to write a narration script grounded in the item's brief,
+    pre-selects 4-6 visual cues (mix of generated Imagen stills + Pexels
+    stock for variety), then calls `generate_video_explainer` to assemble.
+
+    Best-effort: any failure falls through to the human reviewer with a
+    flagged error rather than crashing the whole generation pass.
+    """
+    from aiplatform.database.models import ContentAsset
+
+    try:
+        from aiplatform.skills.media.generate_video_explainer import generate_video_explainer
+    except ImportError:
+        return
+
+    aspect = _VIDEO_ASPECT.get(item.format, "9:16")
+    brief = item.brief_json or {}
+    pillar = brief.get("pillar") or item.pillar or ""
+    topic  = brief.get("topic")  or item.topic  or brand.name
+
+    script, visuals = _draft_video_script_and_visuals(
+        brand=brand,
+        brief=brief,
+        char_budget=_VIDEO_SCRIPT_BUDGET.get(item.format, (350, 700)),
+    )
+    if not script:
+        return
+
+    result = generate_video_explainer(
+        script=script,
+        visuals=visuals,
+        aspect_ratio=aspect,
+        caption_style="word_pop",
+    )
+    if not result.get("video_path"):
+        item.error_message = f"video assembly failed: {result.get('error', 'unknown')}"
+        db.commit()
+        return
+
+    asset = ContentAsset(
+        item_id=item.id,
+        kind="video",
+        role="primary",
+        channel=None,
+        local_path=result["video_path"],
+        meta_json={
+            "aspect_ratio": result.get("aspect_ratio"),
+            "duration_s":   result.get("duration_s"),
+            "components":   result.get("components"),
+            "topic":        topic,
+            "pillar":       pillar,
+        },
+        cost_usd=result.get("cost_usd"),
+    )
+    db.add(asset)
+    db.commit()
+
+
+def _draft_video_script_and_visuals(
+    *, brand, brief: dict, char_budget: tuple[int, int],
+) -> tuple[str, list[dict]]:
+    """Ask Claude to draft a script + visual cues. Degrades cleanly when no key.
+
+    Returns (script, [visuals]) where each visual is a dict the
+    generate_video_explainer skill accepts.
+    """
+    import os
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    topic = brief.get("topic") or brief.get("pillar") or brand.name
+
+    # Deterministic fallback — used when no LLM key is available so the human
+    # reviewer can still see a draft to edit.
+    if not api_key:
+        script = (
+            f"{topic}. {brief.get('angle') or ''}. "
+            "Here's the single thing to remember. "
+            "Open with the example, then the rule. "
+            "Action you can take today: audit one component, one criterion."
+        )
+        return script, _default_visuals(brand, brief)
+
+    try:
+        from anthropic import Anthropic
+    except ImportError:
+        return "", _default_visuals(brand, brief)
+
+    from ventures.content_engine.prompts import render_voice_block
+    voice_block = render_voice_block(brand.voice_profile_json or {})
+
+    user_prompt = (
+        f"{voice_block}\n\n"
+        f"Draft a short scripted explainer video for {brand.name}.\n"
+        f"Topic: {topic}\n"
+        f"Pillar: {brief.get('pillar', '')}\n"
+        f"Angle: {brief.get('angle', '')}\n"
+        f"Audience: {(brief.get('audience') or {}).get('description', '')}\n"
+        f"Channel CTA: {brief.get('cta', '')}\n"
+        f"Sources to ground specifics:\n"
+        + "\n".join(f"  - {s.get('url', '')}: {s.get('relevance', '')}"
+                    for s in (brief.get('sources') or [])[:3])
+        + "\n\nReturn JSON with this exact shape (no prose, no code fences):\n"
+        + '{\n'
+        + '  "script": "...full narration text, '
+        + f'{char_budget[0]}-{char_budget[1]} chars...",\n'
+        + '  "visuals": [\n'
+        + '    {"kind": "stock_query"|"generated", "value": "search query or image prompt", "caption": "this scene\'s captioned phrase"},\n'
+        + '    ... 4-6 entries total ...\n'
+        + '  ]\n'
+        + '}\n'
+        "Use kind=stock_query for relatable b-roll (people, scenes); "
+        "kind=generated for concept diagrams or specific UI examples; "
+        "value for stock_query is a 2-4 word Pexels query."
+    )
+
+    try:
+        client = Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model=os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6"),
+            max_tokens=2048,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        import json, re
+        raw = "".join(b.text for b in resp.content if hasattr(b, "text")).strip()
+        if raw.startswith("```"):
+            raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.DOTALL)
+        data = json.loads(raw)
+        script = (data.get("script") or "").strip()
+        visuals = [v for v in (data.get("visuals") or []) if v.get("value")]
+        if script and visuals:
+            return script, visuals
+    except Exception:
+        pass
+
+    return "", _default_visuals(brand, brief)
+
+
+def _default_visuals(brand, brief: dict) -> list[dict]:
+    topic = brief.get("topic") or brand.name
+    return [
+        {"kind": "stock_query", "value": "accessibility laptop",
+         "caption": f"{topic} — here's the issue."},
+        {"kind": "stock_query", "value": "person screen reader",
+         "caption": "Real users feel this every day."},
+        {"kind": "generated", "value":
+            f"Editorial diagram illustrating {topic}, clean modern style, "
+            "no text overlay, accessible colour palette.",
+         "caption": "The pattern that fixes it."},
+        {"kind": "stock_query", "value": "designer office",
+         "caption": "Audit one component this week."},
+    ]

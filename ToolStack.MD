@@ -134,6 +134,9 @@ Complete inventory of every third-party tool, service, API, and library used acr
 | **Pinterest API v5** *(stub — not yet implemented)* | Pin creation | Publish product images to Pinterest boards for Etsy traffic |
 | **Buffer API** *(stub — not yet implemented)* | Social scheduling | Schedule posts to Instagram, Facebook, LinkedIn across ventures — Pro + Studio plan gate on Content Repurposing |
 | **Creatomate API** | Branded video template rendering | Content Repurposing Studio plan — branded clip templates via `POST /v1/renders`; Pillow fallback when key absent |
+| **LinkedIn Marketing API** *(live)* | Company Page publishing + OAuth | Content Engine venture — `ugcPosts` for text/article, `assets` registerUpload + PUT for images (single + carousel). OAuth 2.0 with `w_organization_social` scope. Auto-discovers Page URN via `/v2/organizationAcls` at callback. Falls back to assisted-send. |
+| **Meta Graph API v19.0** *(live)* | Facebook Page + Instagram Business publishing | Content Engine venture — FB Page via `/{page_id}/feed` + `/photos` multipart (carousel via `attached_media`); IG Business via 2-step container + `media_publish` (single image), 3-step `is_carousel_item=true` → `CAROUSEL` → publish (carousel), `REELS` media_type with status polling (reels). Single Meta OAuth covers both. Long-lived 60-day Page tokens. |
+| **YouTube Data API v3** *(live)* | YouTube channel video upload | Content Engine venture — `videos.insert` multipart upload (Shorts inferred from 9:16 aspect + `#shorts` in title). OAuth 2.0 with `youtube.upload` + `youtube` scopes; hourly access tokens with offline refresh-token flow. |
 
 ---
 
@@ -233,4 +236,9 @@ No code changes required to swap — set `active: true` in `skills.json`.
 | Content Studio — Service B | `REPURPOSING_PACK_HUMAN_REVIEW_ALWAYS` (default true), `REPURPOSING_PACK_VIDEO_MAX_MB` (default 500), `FFMPEG_BINARY` (default ffmpeg), `FFPROBE_BINARY` (default ffprobe) |
 | Content Repurposing (Venture F) | `DRIVE_CR_ROOT_ID`, `CR_TEMP_DIR` (default /tmp), `CR_MAX_UPLOAD_MB` (default 2000), `CR_VIRALITY_THRESHOLD` (default 0.55), `CR_CAPTION_FONT_SIZE` (default 64), `CR_CAPTION_FONT_COLOR` (default white), `CR_CAPTION_BORDER_COLOR` (default black), `CR_CAPTION_BORDER_WIDTH` (default 3), `CR_CAPTION_STYLE` (default word_pop), `GOOGLE_AI_API_KEY` (Gemini Imagen thumbnail backgrounds — falls back to Pillow), `FFPROBE_BINARY` (default ffprobe — for caption sync via actual_start_s) |
 | Creatomate | `CREATOMATE_API_KEY`, `CREATOMATE_TEMPLATE_REEL` |
+| Content Engine (Venture G) — LinkedIn | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` (OAuth app — Marketing Developer Platform); optional `LINKEDIN_ACCESS_TOKEN` (env fallback when no SocialAccount row) |
+| Content Engine (Venture G) — Meta | `META_APP_ID`, `META_APP_SECRET` (FB + IG one app); optional `META_PAGE_ACCESS_TOKEN` / `META_IG_ACCESS_TOKEN` (env fallback) |
+| Content Engine (Venture G) — YouTube | `YOUTUBE_OAUTH_CLIENT_ID`, `YOUTUBE_OAUTH_CLIENT_SECRET` (Google Cloud OAuth Web client); optional `YOUTUBE_ACCESS_TOKEN` (env fallback) |
+| Content Engine (Venture G) — OAuth glue | `OAUTH_REDIRECT_BASE_URL` (default `https://api.planbadmin.com`), `FRONTEND_BASE_URL` (default `https://planbadmin.com`) |
+| Content Engine (Venture G) — Future (M3) | `ELEVENLABS_API_KEY` (TTS narration), `PEXELS_API_KEY` (stock b-roll) |
 | LangSmith *(planned)* | `LANGCHAIN_API_KEY`, `LANGCHAIN_PROJECT`, `LANGCHAIN_TRACING_V2` |

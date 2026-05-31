@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -838,3 +840,237 @@ def delete_social_account(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="account not found")
     db.delete(acct)
     db.commit()
+
+
+# ── OAuth ──────────────────────────────────────────────────────────────────────
+#
+# Flow per platform:
+#   1. UI calls POST /oauth/{platform}/start?brand_id=... → returns auth_url.
+#   2. UI redirects the operator to auth_url. The IdP redirects back to
+#      /oauth/{platform}/callback?code=...&state=...
+#   3. Callback exchanges the code, persists tokens into social_accounts,
+#      then redirects back to planBadmin with a success flag.
+
+_FRONTEND_BASE_DEFAULT = "https://planbadmin.com"
+
+
+def _frontend_redirect(path: str = "/ventures/content-engine") -> str:
+    import os
+    base = os.environ.get("FRONTEND_BASE_URL", _FRONTEND_BASE_DEFAULT).rstrip("/")
+    return f"{base}{path}"
+
+
+class OAuthStartOut(BaseModel):
+    auth_url: str
+    platform: str
+    brand_id: str
+
+
+@router.post("/oauth/{platform}/start", response_model=OAuthStartOut)
+def oauth_start(
+    platform: str,
+    brand_id: str,
+    _: str = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> OAuthStartOut:
+    """Issue a signed state token and the per-platform consent URL."""
+    from aiplatform.skills.comms.publishers import oauth as oa
+
+    brand = db.get(ContentBrand, uuid.UUID(brand_id))
+    if not brand:
+        raise HTTPException(status_code=404, detail="brand not found")
+
+    if platform == "linkedin":
+        url = oa.linkedin_auth_url(brand_id)
+    elif platform == "meta":
+        url = oa.meta_auth_url(brand_id)
+    elif platform == "youtube":
+        url = oa.youtube_auth_url(brand_id)
+    else:
+        raise HTTPException(status_code=400, detail=f"unknown platform '{platform}'")
+
+    return OAuthStartOut(auth_url=url, platform=platform, brand_id=brand_id)
+
+
+@router.get("/oauth/{platform}/callback")
+def oauth_callback(
+    platform: str,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    """OAuth callback. Public (no auth) — the state token IS the auth proof.
+
+    Exchanges the code for tokens, upserts SocialAccount row(s), then redirects
+    the operator back to planBadmin's Content Engine → Accounts tab.
+    """
+    from aiplatform.skills.comms.publishers import oauth as oa
+
+    code  = request.query_params.get("code", "")
+    state = request.query_params.get("state", "")
+    error = request.query_params.get("error", "")
+
+    if error:
+        return RedirectResponse(url=_frontend_redirect()
+                                + f"?oauth=error&detail={error}", status_code=302)
+    if not (code and state):
+        return RedirectResponse(url=_frontend_redirect()
+                                + "?oauth=error&detail=missing_code_or_state", status_code=302)
+
+    try:
+        state_payload = oa.verify_state(state, expected_platform=platform)
+    except ValueError as exc:
+        return RedirectResponse(url=_frontend_redirect()
+                                + f"?oauth=error&detail={exc}", status_code=302)
+
+    brand_uuid = uuid.UUID(state_payload["brand_id"])
+    brand = db.get(ContentBrand, brand_uuid)
+    if not brand:
+        return RedirectResponse(url=_frontend_redirect()
+                                + "?oauth=error&detail=brand_not_found", status_code=302)
+
+    try:
+        if platform == "linkedin":
+            tok = oa.linkedin_exchange_code(code)
+            _upsert_social_account(
+                db, brand_uuid, "linkedin_page",
+                access_token=tok.access_token,
+                refresh_token=tok.refresh_token,
+                expires_at=tok.expires_at,
+                account_id=tok.account_id,
+                account_name=tok.account_name,
+                scopes=tok.scopes or [],
+            )
+        elif platform == "youtube":
+            tok = oa.youtube_exchange_code(code)
+            _upsert_social_account(
+                db, brand_uuid, "youtube_channel",
+                access_token=tok.access_token,
+                refresh_token=tok.refresh_token,
+                expires_at=tok.expires_at,
+                account_id=tok.account_id,
+                account_name=tok.account_name,
+                scopes=tok.scopes or [],
+            )
+        elif platform == "meta":
+            meta = oa.meta_exchange_code(code)
+            connected = 0
+            for page in meta["pages"]:
+                page_token = page.get("access_token")
+                # FB Page row
+                _upsert_social_account(
+                    db, brand_uuid, "facebook_page",
+                    access_token=page_token,
+                    refresh_token="",
+                    expires_at=meta["expires_at"],
+                    account_id=page.get("id", ""),
+                    account_name=page.get("name", ""),
+                    scopes=["pages_manage_posts", "pages_read_engagement"],
+                )
+                connected += 1
+                # If this Page has a linked IG Business account, store it too.
+                ig = page.get("instagram_business_account") or {}
+                if ig.get("id"):
+                    _upsert_social_account(
+                        db, brand_uuid, "instagram_business",
+                        access_token=page_token,  # same Page token covers IG publish
+                        refresh_token="",
+                        expires_at=meta["expires_at"],
+                        account_id=ig.get("id", ""),
+                        account_name=ig.get("username", "") or page.get("name", ""),
+                        scopes=["instagram_basic", "instagram_content_publish"],
+                    )
+                    connected += 1
+            if connected == 0:
+                return RedirectResponse(
+                    url=_frontend_redirect() + "?oauth=error&detail=no_pages_or_ig_found",
+                    status_code=302,
+                )
+        else:
+            return RedirectResponse(url=_frontend_redirect()
+                                    + "?oauth=error&detail=unknown_platform", status_code=302)
+    except Exception as exc:
+        return RedirectResponse(url=_frontend_redirect()
+                                + f"?oauth=error&detail={str(exc)[:200]}", status_code=302)
+
+    return RedirectResponse(url=_frontend_redirect() + "?oauth=success", status_code=302)
+
+
+def _upsert_social_account(
+    db: Session,
+    brand_id: uuid.UUID,
+    platform: str,
+    *,
+    access_token: str,
+    refresh_token: str,
+    expires_at: datetime | None,
+    account_id: str,
+    account_name: str,
+    scopes: list[str],
+) -> None:
+    """Upsert SocialAccount on (brand_id, platform, account_id)."""
+    q = db.query(SocialAccount).filter(
+        SocialAccount.brand_id == brand_id,
+        SocialAccount.platform == platform,
+    )
+    if account_id:
+        q = q.filter(SocialAccount.account_id == account_id)
+    existing = q.first()
+
+    if existing:
+        existing.access_token  = access_token or existing.access_token
+        existing.refresh_token = refresh_token or existing.refresh_token
+        existing.expires_at    = expires_at or existing.expires_at
+        existing.account_name  = account_name or existing.account_name
+        existing.scopes        = scopes or existing.scopes
+        existing.enabled       = True
+    else:
+        db.add(SocialAccount(
+            brand_id=brand_id,
+            platform=platform,
+            account_id=account_id,
+            account_name=account_name,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_at=expires_at,
+            scopes=scopes,
+            enabled=True,
+        ))
+    db.commit()
+
+
+# ── Public asset endpoint ──────────────────────────────────────────────────────
+#
+# Instagram strictly requires public image_url / video_url for media containers.
+# We serve generated assets back over HTTPS without auth so the Meta Graph API
+# can fetch them. The asset id is a random UUID so it's effectively unguessable;
+# we don't expose a listing endpoint on this path.
+
+@router.get("/assets/{asset_id}/file")
+def serve_asset_file(asset_id: int, db: Session = Depends(get_db)):
+    asset = db.get(ContentAsset, asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="asset not found")
+    if asset.url:
+        return RedirectResponse(url=asset.url, status_code=302)
+    if asset.local_path and Path(asset.local_path).exists():
+        return FileResponse(asset.local_path)
+    raise HTTPException(status_code=404, detail="asset file not available")
+
+
+@router.get("/assets/{asset_id}/public-url")
+def asset_public_url(
+    asset_id: int,
+    request: Request,
+    _: str = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Return the public URL the IG/FB publishers can hand to the Meta API."""
+    asset = db.get(ContentAsset, asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="asset not found")
+    if asset.url:
+        return {"url": asset.url}
+    # Build https://api.planbadmin.com/api/ventures/content-engine/assets/{id}/file
+    import os
+    base = os.environ.get("OAUTH_REDIRECT_BASE_URL", "https://api.planbadmin.com").rstrip("/")
+    return {"url": f"{base}/api/ventures/content-engine/assets/{asset_id}/file"}

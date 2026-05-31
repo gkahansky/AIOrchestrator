@@ -1073,3 +1073,22 @@ export async function fetchPublishJobs(itemId?: string): Promise<PublishJob[]> {
   const res = await fetch(url.toString(), { headers: getHeaders() })
   return handleResponse<PublishJob[]>(res)
 }
+
+export interface OAuthStartResponse {
+  auth_url: string
+  platform: string
+  brand_id: string
+}
+
+export async function startOAuth(
+  platform: "linkedin" | "meta" | "youtube",
+  brandId: string,
+): Promise<OAuthStartResponse> {
+  const url = new URL(`${CE_BASE}/oauth/${platform}/start`)
+  url.searchParams.set("brand_id", brandId)
+  const res = await fetch(url.toString(), {
+    method: "POST",
+    headers: getHeaders(),
+  })
+  return handleResponse<OAuthStartResponse>(res)
+}

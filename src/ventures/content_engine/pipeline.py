@@ -282,6 +282,7 @@ def run_publish_item(item_id: str, db) -> dict[str, Any]:
     try:
         from aiplatform.skills.comms.publishers import HANDLERS as PUBLISHERS
         from aiplatform.skills.comms.publishers.base import PublishRequest
+        from aiplatform.skills.comms.publishers.oauth import ensure_fresh_token
     except ImportError as exc:
         item.status = "failed"
         item.error_message = f"publishers registry not importable: {exc}"
@@ -289,6 +290,7 @@ def run_publish_item(item_id: str, db) -> dict[str, Any]:
         return {"ok": False, "error": str(exc)}
 
     results: list[dict] = []
+    media_paths, media_urls = _asset_paths_for(item, db)
 
     for channel in (item.channels or []):
         variant = (item.variants_json or {}).get(channel, {})
@@ -308,15 +310,26 @@ def run_publish_item(item_id: str, db) -> dict[str, Any]:
             results.append({"channel": channel, "status": "failed"})
             continue
 
+        # Refresh near-expiry tokens (currently only YouTube has refresh wired).
+        access_token = ensure_fresh_token(account, db=db) if account else None
+
+        # IG needs public URLs; for local-only assets, expose them via the
+        # content-engine public asset endpoint.
+        per_channel_urls = list(media_urls)
+        if channel == "instagram_business" and not per_channel_urls:
+            per_channel_urls = _public_urls_for(item, db)
+
         req = PublishRequest(
             body=variant.get("body") or "",
             title=variant.get("subject") or item.title or "",
             hashtags=variant.get("hashtags") or [],
-            media_paths=_asset_paths_for(item, channel),
+            media_paths=media_paths,
+            media_urls=per_channel_urls,
             channel=channel,
+            scheduled_for_iso=(item.scheduled_for.isoformat() if item.scheduled_for else ""),
         )
         config = {
-            "access_token":   getattr(account, "access_token", None),
+            "access_token":   access_token,
             "account_id":     getattr(account, "account_id", None),
             "account_name":   getattr(account, "account_name", None),
             "meta":           getattr(account, "meta_json", None) or {},
@@ -355,14 +368,35 @@ def run_publish_item(item_id: str, db) -> dict[str, Any]:
     return {"ok": any_ok, "item_id": item_id, "results": results}
 
 
-def _asset_paths_for(item, channel: str) -> list[str]:
-    """Pick the media file paths to attach for a given channel.
+def _asset_paths_for(item, db) -> tuple[list[str], list[str]]:
+    """Split this item's assets into (local file paths, public URLs).
 
-    For now: primary image first, then carousel slides in order, ignoring
-    channel-specific overrides (which can come in a later phase).
+    Carousel slides are ordered by asset id, so the primary image is first.
+    Publishers receive both lists and pick whichever each platform supports.
     """
     paths: list[str] = []
+    urls:  list[str] = []
     for asset in sorted((item.assets or []), key=lambda a: a.id):
-        if asset.local_path or asset.url:
-            paths.append(asset.local_path or asset.url)
-    return paths
+        if asset.url:
+            urls.append(asset.url)
+        elif asset.local_path:
+            paths.append(asset.local_path)
+    return paths, urls
+
+
+def _public_urls_for(item, db) -> list[str]:
+    """Build public content-engine URLs for any local-only assets.
+
+    IG and (sometimes) FB need a URL the Graph API can fetch from. The
+    `/api/ventures/content-engine/assets/{id}/file` endpoint is public
+    (asset id is a non-listed integer) and serves local files directly.
+    """
+    import os
+    base = os.environ.get("OAUTH_REDIRECT_BASE_URL", "https://api.planbadmin.com").rstrip("/")
+    out: list[str] = []
+    for asset in sorted((item.assets or []), key=lambda a: a.id):
+        if asset.url:
+            out.append(asset.url)
+        elif asset.local_path:
+            out.append(f"{base}/api/ventures/content-engine/assets/{asset.id}/file")
+    return out

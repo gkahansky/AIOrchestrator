@@ -1,17 +1,21 @@
 """YouTube channel publisher.
 
-Native path: YouTube Data API v3 — `videos.insert` with resumable upload.
-For text-only "Community" posts the API support is limited; this handler
-focuses on video upload (Shorts and long-form). A 9:16 portrait aspect
-ratio + `#shorts` in the title triggers Shorts treatment automatically.
+Native path: YouTube Data API v3 — `videos.insert` (multipart upload). For
+files > 100 MB the resumable protocol is preferred but multipart works up
+to ~256 MB and avoids the resumable session bookkeeping for our cadence.
 
-Requires an OAuth token with the `youtube.upload` scope in
-`social_accounts.access_token`; the channel ID lives in `account_id`.
+A 9:16 portrait video + `#shorts` in the title triggers Shorts treatment;
+the caller controls title/description, so this handler stays format-neutral.
 
-Assisted fallback: deep link to YouTube Studio.
+Requires an OAuth token with `youtube.upload` scope in `config.access_token`.
+The channel ID lives in `account_id` (informational; the API uploads to
+whichever channel the token belongs to).
+
+Falls back to assisted-send (deep link to YouTube Studio).
 """
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -32,16 +36,14 @@ def _build_deep_link(req: PublishRequest) -> str:
 def publish(req: PublishRequest, config: dict | None = None) -> PublishResult:
     config = config or {}
     token  = config.get("access_token") or os.environ.get("YOUTUBE_ACCESS_TOKEN")
-
     if not token:
         return _assisted.run(req, "youtube_channel", _build_deep_link)
 
-    # Need a local video file to upload.
     video_path = _first_video_path(req.media_paths)
     if not video_path:
         return _assisted.run(req, "youtube_channel", _build_deep_link)
 
-    title = (req.title or req.body[:80] or "EchoForge accessibility tip").strip()
+    title       = (req.title or req.body[:80] or "EchoForge accessibility tip").strip()
     description = _compose_description(req)
 
     metadata: dict[str, Any] = {
@@ -52,16 +54,14 @@ def publish(req: PublishRequest, config: dict | None = None) -> PublishResult:
             "categoryId":  "27",  # Education
         },
         "status": {
-            "privacyStatus":      "public",
+            "privacyStatus":           "public",
             "selfDeclaredMadeForKids": False,
         },
     }
     if req.scheduled_for_iso:
-        metadata["status"]["privacyStatus"]  = "private"
-        metadata["status"]["publishAt"]      = req.scheduled_for_iso
+        metadata["status"]["privacyStatus"] = "private"
+        metadata["status"]["publishAt"]     = req.scheduled_for_iso
 
-    # Multipart simple upload. For files >100 MB the resumable protocol
-    # is preferred — wire that up once we have a real upload token.
     try:
         with open(video_path, "rb") as fh:
             video_bytes = fh.read()
@@ -74,11 +74,11 @@ def publish(req: PublishRequest, config: dict | None = None) -> PublishResult:
             f"{_UPLOAD_BASE}?uploadType=multipart&part=snippet,status",
             headers={"Authorization": f"Bearer {token}"},
             files=[
-                ("metadata", (None, str(metadata).replace("'", '"'),
+                ("metadata", (None, json.dumps(metadata),
                               "application/json; charset=UTF-8")),
                 ("video",    (Path(video_path).name, video_bytes, "video/*")),
             ],
-            timeout=300,
+            timeout=600,
         )
     except requests.RequestException as exc:
         return PublishResult(status="failed", provider="youtube_data",
@@ -88,6 +88,7 @@ def publish(req: PublishRequest, config: dict | None = None) -> PublishResult:
         return PublishResult(
             status="failed", provider="youtube_data",
             error=f"youtube {resp.status_code}: {resp.text[:500]}",
+            response={"http_status": resp.status_code},
         )
 
     data = resp.json() if resp.content else {}
@@ -107,7 +108,8 @@ def _first_video_path(media_paths: list[str]) -> str | None:
             continue
         lower = p.lower()
         if any(lower.endswith(ext) for ext in (".mp4", ".mov", ".webm", ".mkv")):
-            return p
+            if not lower.startswith(("http://", "https://")):
+                return p
     return None
 
 

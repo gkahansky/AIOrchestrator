@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   ContentBrand,
@@ -17,6 +17,7 @@ import {
   reviewContentItem,
   scheduleContentItem,
   seedEchoforgeBrand,
+  startOAuth,
 } from "../../api"
 
 type Tab = "items" | "strategies" | "brands" | "accounts" | "publishes"
@@ -41,6 +42,27 @@ const STATUS_COLOR: Record<string, string> = {
 export default function ContentEngine() {
   const [tab, setTab] = useState<Tab>("items")
   const [brandFilter, setBrandFilter] = useState<string | undefined>(undefined)
+  const [oauthBanner, setOauthBanner] = useState<{ kind: "success" | "error"; detail: string } | null>(null)
+
+  // Surface ?oauth=success|error redirects from the callback.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const oauth = params.get("oauth")
+    if (oauth === "success") {
+      setOauthBanner({ kind: "success", detail: "Account connected." })
+      setTab("accounts")
+    } else if (oauth === "error") {
+      setOauthBanner({ kind: "error", detail: params.get("detail") || "Connection failed." })
+      setTab("accounts")
+    }
+    if (oauth) {
+      // Clean the URL so the toast doesn't reappear on refresh.
+      const url = new URL(window.location.href)
+      url.searchParams.delete("oauth")
+      url.searchParams.delete("detail")
+      window.history.replaceState({}, "", url.toString())
+    }
+  }, [])
 
   const { data: brands = [] } = useQuery({
     queryKey: ["ce", "brands"],
@@ -76,6 +98,18 @@ export default function ContentEngine() {
           </button>
         ))}
       </nav>
+
+      {oauthBanner && (
+        <div className={[
+          "rounded-lg px-3 py-2 text-sm font-label flex items-center justify-between",
+          oauthBanner.kind === "success"
+            ? "bg-green-100 text-green-800"
+            : "bg-error-container text-error",
+        ].join(" ")}>
+          <span>{oauthBanner.detail}</span>
+          <button onClick={() => setOauthBanner(null)} className="text-xs font-bold">×</button>
+        </div>
+      )}
 
       {tab === "items"      && <ItemsTab brands={brands} brandFilter={brandFilter} />}
       {tab === "strategies" && <StrategiesTab brands={brands} brandFilter={brandFilter} />}
@@ -524,49 +558,117 @@ function ItemRow({ item }: { item: ContentItem }) {
 
 // ── Accounts tab ───────────────────────────────────────────────────────────────
 
+const OAUTH_PROVIDERS: { id: "linkedin" | "meta" | "youtube"; label: string; covers: string[] }[] = [
+  { id: "linkedin", label: "Connect LinkedIn Page",                covers: ["linkedin_page"] },
+  { id: "meta",     label: "Connect Facebook + Instagram",         covers: ["facebook_page", "instagram_business"] },
+  { id: "youtube",  label: "Connect YouTube Channel",              covers: ["youtube_channel"] },
+]
+
 function AccountsTab({ brands, brandFilter }: { brands: ContentBrand[]; brandFilter: string | undefined }) {
   const { data: accounts = [], isLoading } = useQuery({
     queryKey: ["ce", "accounts", brandFilter ?? "all"],
     queryFn: () => fetchSocialAccounts(brandFilter),
+    refetchInterval: 15_000,
   })
 
+  const [connecting, setConnecting] = useState<string | null>(null)
+
+  async function handleConnect(provider: "linkedin" | "meta" | "youtube", brandId: string) {
+    setConnecting(`${brandId}:${provider}`)
+    try {
+      const { auth_url } = await startOAuth(provider, brandId)
+      window.location.href = auth_url
+    } catch (err) {
+      setConnecting(null)
+      alert(`Connect failed: ${(err as Error).message}`)
+    }
+  }
+
+  const visibleBrands = brandFilter ? brands.filter((b) => b.id === brandFilter) : brands
+
   return (
-    <section className="space-y-4">
-      <h2 className="font-headline font-semibold text-base text-on-surface">Social Accounts</h2>
-      <p className="text-xs font-body text-on-surface-variant">
-        Each (brand × channel) pair needs an OAuth token before native publishing works. Without one,
-        items fall back to assisted-send (deep link + manual confirm).
-      </p>
-      {isLoading ? (
-        <p className="text-sm text-on-surface-variant">Loading…</p>
-      ) : accounts.length === 0 ? (
-        <p className="text-sm text-on-surface-variant">
-          No accounts connected yet. Connect one per channel from each brand's settings (OAuth flow lands in M2).
+    <section className="space-y-5">
+      <div>
+        <h2 className="font-headline font-semibold text-base text-on-surface">Social Accounts</h2>
+        <p className="text-xs font-body text-on-surface-variant mt-0.5">
+          Each (brand × channel) pair needs an OAuth token before native publishing works. Without one,
+          items fall back to assisted-send (deep link + manual confirm).
         </p>
+      </div>
+
+      {visibleBrands.length === 0 ? (
+        <p className="text-sm text-on-surface-variant">Seed a brand first.</p>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {accounts.map((a) => {
-            const brand = brands.find((b) => b.id === a.brand_id)
-            return (
-              <div key={a.id} className="bg-surface-container-lowest rounded-xl p-4 shadow-float">
-                <div className="flex items-center justify-between mb-1">
-                  <div className="font-headline font-semibold text-sm text-on-surface">
-                    {a.platform.replace("_", " ")}
+        visibleBrands.map((b) => {
+          const brandAccounts = accounts.filter((a) => a.brand_id === b.id)
+          const connectedPlatforms = new Set(brandAccounts.filter((a) => a.has_token).map((a) => a.platform))
+
+          return (
+            <div key={b.id} className="bg-surface-container-lowest rounded-xl p-4 shadow-float space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-headline font-bold text-base text-on-surface">{b.name}</div>
+                  <div className="text-xs font-label text-on-surface-variant">
+                    {brandAccounts.filter((a) => a.has_token).length} connected ·{" "}
+                    {brandAccounts.length - brandAccounts.filter((a) => a.has_token).length} assisted-only
                   </div>
-                  <span className={`text-[10px] font-label font-bold uppercase px-1.5 py-0.5 rounded ${
-                    a.has_token ? "bg-green-100 text-green-800" : "bg-secondary-fixed text-secondary"
-                  }`}>
-                    {a.has_token ? "Connected" : "Assisted only"}
-                  </span>
                 </div>
-                <div className="text-xs font-label text-on-surface-variant">
-                  {brand?.name ?? a.brand_id} · {a.account_name || a.account_id || "no account id"}
+                <div className="flex flex-wrap gap-2">
+                  {OAUTH_PROVIDERS.map((p) => {
+                    const allConnected = p.covers.every((c) => connectedPlatforms.has(c))
+                    const key = `${b.id}:${p.id}`
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => handleConnect(p.id, b.id)}
+                        disabled={connecting === key}
+                        className={[
+                          "px-3 py-1.5 rounded-lg text-xs font-label font-medium",
+                          allConnected
+                            ? "bg-surface-container-high text-on-surface-variant"
+                            : "bg-primary text-on-primary",
+                          connecting === key ? "opacity-50" : "",
+                        ].join(" ")}
+                      >
+                        {connecting === key ? "Redirecting…" : allConnected ? `Re-connect ${p.id}` : p.label}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
-            )
-          })}
-        </div>
+
+              {brandAccounts.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2 border-t border-outline-variant/15">
+                  {brandAccounts.map((a) => (
+                    <div key={a.id} className="bg-surface-container-low/40 rounded-lg p-2.5">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="font-headline font-semibold text-xs text-on-surface">
+                          {a.platform.replace(/_/g, " ")}
+                        </span>
+                        <span className={`text-[9px] font-label font-bold uppercase px-1.5 py-0.5 rounded ${
+                          a.has_token
+                            ? "bg-green-100 text-green-800"
+                            : "bg-secondary-fixed text-secondary"
+                        }`}>
+                          {a.has_token ? "Connected" : "Assisted"}
+                        </span>
+                      </div>
+                      <div className="text-[11px] font-label text-on-surface-variant">
+                        {a.account_name || a.account_id || "—"}
+                        {a.expires_at && (
+                          <span className="ml-2">expires {new Date(a.expires_at).toLocaleDateString()}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })
       )}
+
+      {isLoading && <p className="text-xs text-on-surface-variant">Refreshing…</p>}
     </section>
   )
 }

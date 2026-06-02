@@ -47,6 +47,15 @@ const ventures: VentureCard[] = [
     bgColor: "bg-error-container",
     status: "active",
   },
+  {
+    name: "Content Engine",
+    description: "EchoForge — multi-channel social content creation & scheduled publishing",
+    to: "/ventures/content-engine",
+    icon: "edit_note",
+    color: "text-primary",
+    bgColor: "bg-primary-fixed",
+    status: "active",
+  },
 ]
 
 export default function Ventures() {

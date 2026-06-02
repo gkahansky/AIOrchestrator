@@ -9,6 +9,7 @@ import CRJobDetail from "./pages/CRJobDetail"
 import Ventures from "./pages/Ventures"
 import MarketingAudit from "./pages/ventures/MarketingAudit"
 import ContentStudio from "./pages/ventures/ContentStudio"
+import ContentEngine from "./pages/ventures/ContentEngine"
 import EtsyVenture from "./pages/ventures/EtsyVenture"
 import AccessibilityAudit from "./pages/ventures/AccessibilityAudit"
 import SecurityAudit from "./pages/ventures/SecurityAudit"
@@ -57,6 +58,7 @@ export default function App() {
             <Route path="ventures/accessibility-audit" element={<AccessibilityAudit />} />
             <Route path="ventures/security-audit" element={<SecurityAudit />} />
             <Route path="ventures/content-studio" element={<ContentStudio />} />
+            <Route path="ventures/content-engine" element={<ContentEngine />} />
             <Route path="ventures/etsy" element={<EtsyVenture />} />
             <Route path="finance" element={<Finance />} />
             <Route path="strategy-room" element={<StrategyRoom />} />

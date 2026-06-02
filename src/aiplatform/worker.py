@@ -133,6 +133,12 @@ celery_app.conf.update(
             "schedule": 1800,            # 30 minutes
             "options": {"expires": 600},
         },
+        # Every 5 min — publish content items whose scheduled_for has passed
+        "content-scheduled-publishes": {
+            "task": "content.run_scheduled_publishes",
+            "schedule": 300,             # 5 minutes
+            "options": {"expires": 240},
+        },
         # Hourly — fetch spend from vendor APIs; auto-pause campaigns that hit 100% budget
         "campaign-budget-monitor": {
             "task": "platform.monitor_campaign_budgets",
@@ -2185,3 +2191,73 @@ def run_cr_job_resume(self, job_id: str, order: dict, selected_chapter_ids: list
             raise self.retry(exc=exc, countdown=120)
         _slack_alert_failure("content_repurposing", job_id, exc)
         raise
+
+
+# ── Content Engine ─────────────────────────────────────────────────────────────
+
+@celery_app.task(name="content.run_item_gen", bind=True, max_retries=2)
+def run_content_item_gen(self, item_id: str) -> dict:
+    """Generate per-channel variants for a ContentItem + run the quality gate."""
+    from aiplatform.database.session import SessionLocal
+    from ventures.content_engine.pipeline import run_item_generation, run_quality_check
+
+    db = SessionLocal()
+    try:
+        gen = run_item_generation(item_id, db)
+        if not gen.get("ok"):
+            return gen
+        return run_quality_check(item_id, db)
+    except Exception as exc:
+        _slack_alert_failure("content_engine", item_id, exc)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=60)
+        raise
+    finally:
+        db.close()
+
+
+@celery_app.task(name="content.run_publish_item", bind=True, max_retries=2)
+def run_content_publish_item(self, item_id: str) -> dict:
+    """Dispatch an approved content item to its channel publishers."""
+    from aiplatform.database.session import SessionLocal
+    from ventures.content_engine.pipeline import run_publish_item
+
+    db = SessionLocal()
+    try:
+        return run_publish_item(item_id, db)
+    except Exception as exc:
+        _slack_alert_failure("content_engine", item_id, exc)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=120)
+        raise
+    finally:
+        db.close()
+
+
+@celery_app.task(name="content.run_scheduled_publishes")
+def run_scheduled_content_publishes() -> dict:
+    """Beat task — every 5 min.
+
+    Finds ContentItems with status='scheduled' AND scheduled_for <= now and
+    fires `content.run_publish_item` for each.
+    """
+    from datetime import datetime, timezone
+    from aiplatform.database.models import ContentItem
+    from aiplatform.database.session import SessionLocal
+
+    db = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+        due = db.query(ContentItem).filter(
+            ContentItem.status == "scheduled",
+            ContentItem.scheduled_for <= now,
+        ).limit(50).all()
+
+        triggered: list[str] = []
+        for item in due:
+            run_content_publish_item.delay(str(item.id))
+            triggered.append(str(item.id))
+
+        return {"triggered": triggered, "count": len(triggered)}
+    finally:
+        db.close()

@@ -836,3 +836,259 @@ export async function abortResearchSession(sessionId: string): Promise<MarketRes
   })
   return handleResponse<MarketResearchSession>(res)
 }
+
+
+// ── Content Engine ─────────────────────────────────────────────────────────────
+
+export interface ContentBrand {
+  id: string
+  slug: string
+  name: string
+  venture_tag: string | null
+  description: string | null
+  voice_profile_json: Record<string, unknown>
+  theme_weights: Record<string, number>
+  banned_phrases: string[]
+  channel_cadence: Record<string, number>
+  target_personas: { name?: string; description?: string }[]
+  auto_strategy_enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ContentStrategy {
+  id: string
+  brand_id: string
+  title: string
+  period_days: number
+  status: string
+  pillars: string[]
+  channel_cadence: Record<string, number>
+  calendar: Array<{
+    index?: number
+    date?: string
+    channel: string
+    format: string
+    pillar?: string
+    topic?: string | null
+    angle?: string | null
+    hook?: string | null
+  }>
+  notes: string | null
+  created_at: string
+  updated_at: string
+  approved_at: string | null
+}
+
+export interface ContentItem {
+  id: string
+  brand_id: string
+  strategy_id: string | null
+  title: string | null
+  format: string
+  channels: string[]
+  pillar: string | null
+  topic: string | null
+  status: string
+  scheduled_for: string | null
+  brief_json: Record<string, unknown>
+  variants_json: Record<string, { body: string; hashtags?: string[]; subject?: string | null }>
+  quality_report_json: Record<string, unknown>
+  review_notes: string | null
+  error_message: string | null
+  created_at: string
+  updated_at: string
+  approved_at: string | null
+  published_at: string | null
+  asset_count: number
+  publish_job_count: number
+}
+
+export interface SocialAccount {
+  id: string
+  brand_id: string
+  platform: string
+  account_id: string | null
+  account_name: string | null
+  has_token: boolean
+  expires_at: string | null
+  scopes: string[]
+  enabled: boolean
+  created_at: string
+}
+
+export interface PublishJob {
+  id: string
+  item_id: string
+  channel: string
+  status: string
+  external_post_id: string | null
+  external_url: string | null
+  deep_link: string | null
+  error_message: string | null
+  created_at: string
+  published_at: string | null
+}
+
+const CE_BASE = `${BASE}/api/ventures/content-engine`
+
+export async function fetchContentBrands(): Promise<ContentBrand[]> {
+  const res = await fetch(`${CE_BASE}/brands`, { headers: getHeaders() })
+  return handleResponse<ContentBrand[]>(res)
+}
+
+export async function seedEchoforgeBrand(): Promise<ContentBrand> {
+  const res = await fetch(`${CE_BASE}/brands/seed-echoforge`, {
+    method: "POST",
+    headers: getHeaders(),
+  })
+  return handleResponse<ContentBrand>(res)
+}
+
+export async function fetchContentStrategies(brandId?: string): Promise<ContentStrategy[]> {
+  const url = new URL(`${CE_BASE}/strategies`)
+  if (brandId) url.searchParams.set("brand_id", brandId)
+  const res = await fetch(url.toString(), { headers: getHeaders() })
+  return handleResponse<ContentStrategy[]>(res)
+}
+
+export async function createContentStrategy(body: {
+  brand_id: string
+  period_days?: number
+  title?: string
+  channel_cadence?: Record<string, number>
+}): Promise<ContentStrategy> {
+  const res = await fetch(`${CE_BASE}/strategies`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(body),
+  })
+  return handleResponse<ContentStrategy>(res)
+}
+
+export async function approveContentStrategy(strategyId: string): Promise<ContentStrategy> {
+  const res = await fetch(`${CE_BASE}/strategies/${strategyId}/approve`, {
+    method: "POST",
+    headers: getHeaders(),
+  })
+  return handleResponse<ContentStrategy>(res)
+}
+
+export async function fetchContentItems(params?: {
+  brand_id?: string
+  status?: string
+}): Promise<ContentItem[]> {
+  const url = new URL(`${CE_BASE}/items`)
+  if (params?.brand_id) url.searchParams.set("brand_id", params.brand_id)
+  if (params?.status) url.searchParams.set("status_filter", params.status)
+  const res = await fetch(url.toString(), { headers: getHeaders() })
+  return handleResponse<ContentItem[]>(res)
+}
+
+export async function createContentItem(body: {
+  brand_id: string
+  strategy_id?: string
+  title?: string
+  format?: string
+  channels?: string[]
+  pillar?: string
+  topic?: string
+  scheduled_for?: string
+}): Promise<ContentItem> {
+  const res = await fetch(`${CE_BASE}/items`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(body),
+  })
+  return handleResponse<ContentItem>(res)
+}
+
+export async function generateContentItem(itemId: string): Promise<ContentItem> {
+  const res = await fetch(`${CE_BASE}/items/${itemId}/generate`, {
+    method: "POST",
+    headers: getHeaders(),
+  })
+  return handleResponse<ContentItem>(res)
+}
+
+export async function reviewContentItem(
+  itemId: string,
+  action: "approve" | "revise" | "reject",
+  notes?: string,
+): Promise<ContentItem> {
+  const res = await fetch(`${CE_BASE}/items/${itemId}/review`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ action, notes }),
+  })
+  return handleResponse<ContentItem>(res)
+}
+
+export async function scheduleContentItem(
+  itemId: string,
+  scheduledFor: string,
+  channels?: string[],
+): Promise<ContentItem> {
+  const res = await fetch(`${CE_BASE}/items/${itemId}/schedule`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ scheduled_for: scheduledFor, channels }),
+  })
+  return handleResponse<ContentItem>(res)
+}
+
+export async function publishContentItemNow(itemId: string): Promise<ContentItem> {
+  const res = await fetch(`${CE_BASE}/items/${itemId}/publish-now`, {
+    method: "POST",
+    headers: getHeaders(),
+  })
+  return handleResponse<ContentItem>(res)
+}
+
+export async function fetchSocialAccounts(brandId?: string): Promise<SocialAccount[]> {
+  const url = new URL(`${CE_BASE}/social-accounts`)
+  if (brandId) url.searchParams.set("brand_id", brandId)
+  const res = await fetch(url.toString(), { headers: getHeaders() })
+  return handleResponse<SocialAccount[]>(res)
+}
+
+export async function createSocialAccount(body: {
+  brand_id: string
+  platform: string
+  account_id?: string
+  account_name?: string
+  access_token?: string
+}): Promise<SocialAccount> {
+  const res = await fetch(`${CE_BASE}/social-accounts`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(body),
+  })
+  return handleResponse<SocialAccount>(res)
+}
+
+export async function fetchPublishJobs(itemId?: string): Promise<PublishJob[]> {
+  const url = new URL(`${CE_BASE}/publish-jobs`)
+  if (itemId) url.searchParams.set("item_id", itemId)
+  const res = await fetch(url.toString(), { headers: getHeaders() })
+  return handleResponse<PublishJob[]>(res)
+}
+
+export interface OAuthStartResponse {
+  auth_url: string
+  platform: string
+  brand_id: string
+}
+
+export async function startOAuth(
+  platform: "linkedin" | "meta" | "youtube",
+  brandId: string,
+): Promise<OAuthStartResponse> {
+  const url = new URL(`${CE_BASE}/oauth/${platform}/start`)
+  url.searchParams.set("brand_id", brandId)
+  const res = await fetch(url.toString(), {
+    method: "POST",
+    headers: getHeaders(),
+  })
+  return handleResponse<OAuthStartResponse>(res)
+}

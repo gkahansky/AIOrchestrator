@@ -14,7 +14,7 @@
 A reusable, multi-agent AI platform powering independent business ventures under two brands:
 
 - **MiroPrintStudio** — Etsy digital image shop (AI-generated wall art)
-- **EchoForge** (echoforge.biz) — Marketing & SEO services (Marketing Audit + Podcast Notes + Security Audit + Market Research)
+- **EchoForge** (echoforge.biz) — Marketing & SEO services (Marketing Audit + Podcast Notes + Security Audit + Market Research + Content Repurposing + Content Engine)
 
 The core principle is that agents, skills, memory, and integrations live in a shared infrastructure layer. Each venture is a lightweight configuration and pipeline on top of that shared layer.
 
@@ -24,7 +24,8 @@ The core principle is that agents, skills, memory, and integrations live in a sh
 - **Venture D:** EchoForge — Web application security audit — see `/ventures/security_audit/CLAUDE.md`
 - **Venture E:** Plan B AI — Market Research (multi-LLM research committee) — see `/ventures/market_research/CLAUDE.md`
 - **Venture F:** EchoForge — Content Repurposing (unified clips + thumbnails + text — merged Service B+C) — see `/ventures/content_repurposing/CLAUDE.md`
-- **Venture G+:** Future ventures — each gets its own directory and CLAUDE.md
+- **Venture G:** EchoForge — Content Engine (multi-channel social content creation + scheduled publishing — LinkedIn / Facebook / Instagram / YouTube) — see `/ventures/content_engine/CLAUDE.md`
+- **Venture H+:** Future ventures — each gets its own directory and CLAUDE.md
 
 ### Venture B — Content Studio: Architecture Notes
 
@@ -98,6 +99,31 @@ The Market Research venture shares all platform components with existing venture
 **V1 (backwards compat — rerun mode):** Pre-set per-LLM prompts → parallel research → single merge → critic. Used for Adjust & Rerun on legacy sessions.
 
 Gig Generator also supports all four EchoForge services. All gig configs live in `scripts/run_gig_generator.py`. Voice is always "We/Our" (team/agency) — "I" only in the Fiverr title (platform requirement).
+
+### Venture G — Content Engine: Architecture Notes
+
+The Content Engine venture drafts an editorial calendar per brand, generates per-channel content (post / carousel / reel / short / long video / blog / newsletter), runs an AI-tell critic, gates on human review, schedules approved items, and dispatches them through channel publishers. EchoForge Accessibility is brand #1; the venture is brand-agnostic.
+
+It shares the standard platform stack (Celery + Redis, FastAPI, PostgreSQL, planBadmin React UI, Drive upload, brand-voice caching from Content Studio, `generate_caption_pack` / `generate_image` / `burn_captions` / `generate_thumbnail` media skills) and adds:
+- `aiplatform/skills/comms/publishers/` — venture-agnostic publisher registry. `linkedin_page.py` (Marketing API + assets registerUpload flow), `facebook_page.py` (Graph API photo multipart + carousel via `attached_media`), `instagram_business.py` (2-step single, 3-step carousel, REELS with status polling), `youtube_channel.py` (Data API v3 video upload). Every handler falls back to assisted-send (deep link + manual confirm) when no OAuth token exists for the (brand × channel) pair. Mirrors the `senders/` pattern exactly.
+- `aiplatform/skills/comms/publishers/oauth.py` — auth URL builders + code exchange for LinkedIn, Meta (FB+IG one app), and YouTube (Google offline access + refresh). Signed-state CSRF protection (HS256 over `JWT_SECRET`, 10-min TTL) binds the callback to the brand that initiated the flow. `ensure_fresh_token(account, db)` is called before every publish dispatch.
+- `ventures/content_engine/config.py` — `ECHOFORGE_ACCESSIBILITY_SEED` (voice profile, 70/30 accessibility theme weights, 13 banned phrases, 3 personas, per-channel cadence). `VALID_CHANNELS`, `VALID_FORMATS`, `CHANNEL_FORMATS`, `CHANNEL_LENGTH_BUDGETS`, `AI_TELL_MIN_SCORE`.
+- `ventures/content_engine/strategy.py` — `generate_calendar()` builds a deterministic skeleton + Claude enrichment for per-slot topic/angle/hook. Degrades to skeleton-only without `ANTHROPIC_API_KEY`.
+- `ventures/content_engine/briefs.py` — `build_brief()` composes per-slot briefs with live SerpAPI source pulls (past-12-months filter).
+- `ventures/content_engine/quality_gate.py` — AI-tell critic (Claude Sonnet) + length checks per channel + banned-phrase substring filter + em-dash density. Produces `quality_report_json` for the review UI.
+- `ventures/content_engine/pipeline.py` — thin orchestration. `run_item_generation` reuses `generate_caption_pack` + `generate_image`; `run_publish_item` dispatches per channel through the publishers registry. Splits assets into local paths + public URLs and auto-builds public URLs for IG (which requires them) via the `/assets/{id}/file` public endpoint.
+- `aiplatform/database/models.py` — `ContentBrand`, `ContentStrategy`, `ContentItem`, `ContentAsset`, `SocialAccount`, `PublishJob`. Migration `m8n9o0p1q2r3`. `venture_enum` extended with `content_engine`.
+- `aiplatform/webapp/routers/ventures/content_engine.py` — full CRUD + `/items/{id}/{generate,review,schedule,publish-now,unschedule}`, `/publish-jobs/{id}/confirm-sent` (assisted-send confirm), `/oauth/{platform}/{start,callback}`, `/assets/{id}/file` (public, unauthenticated) + `/assets/{id}/public-url`, `/brands/seed-echoforge` one-shot seed helper.
+- `aiplatform/worker.py` — `content.run_item_gen`, `content.run_publish_item`, `content.run_scheduled_publishes` (beat every 5 min: finds `status=scheduled AND scheduled_for<=now`, fires publish).
+- `frontend/src/pages/ventures/ContentEngine.tsx` — 5 tabs (Items / Strategies / Brands / Accounts / Publishes). Item review with inline AI-tell score, approve/revise/reject buttons, schedule + publish-now actions. Accounts tab has Connect buttons (LinkedIn / Meta / YouTube) per brand; post-callback `?oauth=success|error` banner.
+
+**Three human review gates:** strategy approval (`content_strategies.status: draft → approved`), per-item content review (`content_items.status: review_pending → approved | revising | cancelled`), and pre-publish unschedule (allowed while `status=scheduled`).
+
+**Quality controls — the "not AI-looking" stack:** (1) brand voice profile injected into every generation call; (2) AI-tell critic with cliché / generic-verb / em-dash-density / parallelism checklist; (3) per-brand banned-phrase substring filter; (4) brief-level specificity grounding — every brief includes ≥2 cited sources from `topic_trends` and generators must reference them; (5) mandatory human approval before any publish, no auto-publish path on day 1.
+
+**Theme rule (EchoForge Accessibility):** 70%+ accessibility-centric content. Enforced at calendar generation via `theme_weights` (`{accessibility: 0.7, adjacent: 0.3}`); accessibility pillars fill the first 70% of each 10-slot bucket.
+
+**Public asset endpoint:** Instagram strictly requires public `image_url` / `video_url` on the Graph API. `/api/ventures/content-engine/assets/{id}/file` serves generated assets unauthenticated so the Meta Graph API can fetch them. Asset IDs are bigserial integers and there is no listing endpoint on this path, so knowing one doesn't leak the rest.
 
 ### Cold Outreach Platform — Architecture Notes
 

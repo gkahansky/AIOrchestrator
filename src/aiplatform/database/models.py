@@ -39,6 +39,7 @@ class Base(DeclarativeBase):
 
 VENTURE_ENUM = Enum(
     "etsy", "marketing_audit", "content_studio", "accessibility_audit", "security_audit",
+    "content_engine",
     name="venture_enum",
 )
 
@@ -926,3 +927,210 @@ class CRClipAsset(Base):
     def __repr__(self):
         return (f"<CRClipAsset job={self.cr_job_id} idx={self.clip_index} "
                 f"score={self.virality_score}>")
+
+
+# ── Content Engine ─────────────────────────────────────────────────────
+#
+# Multi-channel social content creation + publishing. One brand = one
+# editorial identity (EchoForge Accessibility first). A brand has versioned
+# strategies (calendars). A strategy expands into content_items; each item
+# generates per-channel variants + assets, passes a human review gate, then
+# schedules + publishes via the publishers/ skill registry. Assisted-send is
+# the universal fallback when a channel has no native API token connected.
+
+class ContentBrand(Base):
+    """One brand the engine publishes for (e.g. EchoForge Accessibility)."""
+    __tablename__ = "content_brands"
+
+    id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    slug         = Column(String(64),  nullable=False, unique=True, index=True)
+    name         = Column(String(255), nullable=False)
+    venture_tag  = Column(String(64),  nullable=True)   # "echoforge_accessibility", "miroprintstudio", ...
+    description  = Column(Text, nullable=True)
+
+    # Cached brand voice guide (reuses generate_brand_voice.py output shape).
+    voice_profile_json = Column(JSONB, nullable=False, default=dict)
+
+    # {"accessibility": 0.7, "adjacent": 0.3} — primary theme weight.
+    theme_weights      = Column(JSONB, nullable=False, default=dict)
+
+    # Phrases the AI-tell critic must reject (cliché openers, brand-banned).
+    banned_phrases     = Column(JSONB, nullable=False, default=list)
+
+    # Default per-channel cadence (posts/week) for new strategies.
+    channel_cadence    = Column(JSONB, nullable=False, default=dict)
+
+    target_personas    = Column(JSONB, nullable=False, default=list)
+    auto_strategy_enabled = Column(Boolean, nullable=False, default=False)
+
+    created_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
+
+    strategies = relationship("ContentStrategy", back_populates="brand",
+                              cascade="all, delete-orphan")
+    items      = relationship("ContentItem", back_populates="brand",
+                              cascade="all, delete-orphan")
+    accounts   = relationship("SocialAccount", back_populates="brand",
+                              cascade="all, delete-orphan")
+
+
+class ContentStrategy(Base):
+    """Versioned editorial calendar per brand (30/60/90 days)."""
+    __tablename__ = "content_strategies"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    brand_id    = Column(UUID(as_uuid=True), ForeignKey("content_brands.id", ondelete="CASCADE"),
+                         nullable=False, index=True)
+    title       = Column(String(255), nullable=False)
+    period_days = Column(Integer, nullable=False, default=30)
+    status      = Column(String(32), nullable=False, default="draft", index=True)
+    # draft | approved | archived
+
+    pillars_json         = Column(JSONB, nullable=False, default=list)
+    channel_cadence_json = Column(JSONB, nullable=False, default=dict)
+    calendar_json        = Column(JSONB, nullable=False, default=list)  # [{date, channel, format, topic, pillar, ...}]
+    notes                = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
+    approved_at = Column(DateTime(timezone=True), nullable=True)
+
+    brand = relationship("ContentBrand", back_populates="strategies")
+    items = relationship("ContentItem", back_populates="strategy")
+
+
+class ContentItem(Base):
+    """One piece of content. Generated, reviewed, scheduled, published."""
+    __tablename__ = "content_items"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    brand_id    = Column(UUID(as_uuid=True), ForeignKey("content_brands.id", ondelete="CASCADE"),
+                         nullable=False, index=True)
+    strategy_id = Column(UUID(as_uuid=True), ForeignKey("content_strategies.id", ondelete="SET NULL"),
+                         nullable=True, index=True)
+    job_id      = Column(UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="SET NULL"),
+                         nullable=True, index=True)
+
+    title        = Column(String(500), nullable=True)
+    format       = Column(String(32),  nullable=False, default="post")
+    # post | carousel | reel | short | long_video | blog | newsletter
+
+    channels     = Column(JSONB, nullable=False, default=list)
+    # ["linkedin_page", "facebook_page", "instagram_business", "youtube_channel"]
+
+    pillar       = Column(String(128), nullable=True)
+    topic        = Column(Text, nullable=True)
+
+    status       = Column(String(32),  nullable=False, default="brief", index=True)
+    # brief | generating | review_pending | revising | approved |
+    # scheduled | publishing | published | failed | cancelled
+
+    scheduled_for = Column(DateTime(timezone=True), nullable=True, index=True)
+
+    brief_json          = Column(JSONB, nullable=False, default=dict)
+    # {topic, format, channels, length, cta, source_quotes[], source_urls[]}
+
+    variants_json       = Column(JSONB, nullable=False, default=dict)
+    # {linkedin_page: {body, hashtags, ...}, facebook_page: {...}, ...}
+
+    quality_report_json = Column(JSONB, nullable=False, default=dict)
+    # {ai_tell_score, length_checks{}, banned_phrases_found[], brand_voice_score, flagged_spans[]}
+
+    review_notes  = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
+    approved_at  = Column(DateTime(timezone=True), nullable=True)
+    published_at = Column(DateTime(timezone=True), nullable=True)
+
+    brand    = relationship("ContentBrand", back_populates="items")
+    strategy = relationship("ContentStrategy", back_populates="items")
+    assets       = relationship("ContentAsset", back_populates="item",
+                                cascade="all, delete-orphan")
+    publish_jobs = relationship("PublishJob", back_populates="item",
+                                cascade="all, delete-orphan")
+
+
+class ContentAsset(Base):
+    """One generated media file attached to an item (image/video/audio/doc)."""
+    __tablename__ = "content_assets"
+
+    id        = Column(BigInteger, primary_key=True, autoincrement=True)
+    item_id   = Column(UUID(as_uuid=True), ForeignKey("content_items.id", ondelete="CASCADE"),
+                       nullable=False, index=True)
+    kind      = Column(String(32), nullable=False)   # image | video | audio | doc | thumbnail
+    role      = Column(String(64), nullable=True)    # "primary" | "thumbnail" | "carousel_slide_3" | ...
+    channel   = Column(String(64), nullable=True)    # null = shared across channels
+    drive_id  = Column(String(255), nullable=True)
+    url       = Column(String(2048), nullable=True)
+    local_path = Column(String(1024), nullable=True)
+    meta_json = Column(JSONB, nullable=False, default=dict)  # {width, height, duration_s, mime, ...}
+    cost_usd  = Column(Numeric(10, 6), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc))
+
+    item = relationship("ContentItem", back_populates="assets")
+
+
+class SocialAccount(Base):
+    """OAuth token + identity for one (brand × channel) pair."""
+    __tablename__ = "social_accounts"
+
+    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    brand_id   = Column(UUID(as_uuid=True), ForeignKey("content_brands.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    platform   = Column(String(48), nullable=False, index=True)
+    # linkedin_page | facebook_page | instagram_business | youtube_channel | ...
+
+    account_id   = Column(String(255), nullable=True)   # external page/channel ID
+    account_name = Column(String(255), nullable=True)
+    access_token  = Column(Text, nullable=True)
+    refresh_token = Column(Text, nullable=True)
+    expires_at    = Column(DateTime(timezone=True), nullable=True)
+    scopes        = Column(JSONB, nullable=False, default=list)
+    meta_json     = Column(JSONB, nullable=False, default=dict)
+    enabled       = Column(Boolean, nullable=False, default=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=False,
+                        default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
+
+    brand = relationship("ContentBrand", back_populates="accounts")
+
+
+class PublishJob(Base):
+    """One publish attempt for (item × channel). Logs success/failure + external ref."""
+    __tablename__ = "publish_jobs"
+
+    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    item_id    = Column(UUID(as_uuid=True), ForeignKey("content_items.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    channel    = Column(String(48), nullable=False)
+    status     = Column(String(32), nullable=False, default="pending", index=True)
+    # pending | awaiting_manual | success | failed
+
+    external_post_id = Column(String(255), nullable=True)
+    external_url     = Column(String(2048), nullable=True)
+    deep_link        = Column(String(2048), nullable=True)  # assisted-send fallback
+    error_message    = Column(Text, nullable=True)
+    payload_json     = Column(JSONB, nullable=False, default=dict)
+    response_json    = Column(JSONB, nullable=False, default=dict)
+
+    created_at   = Column(DateTime(timezone=True), nullable=False,
+                          default=lambda: datetime.now(timezone.utc))
+    published_at = Column(DateTime(timezone=True), nullable=True)
+
+    item = relationship("ContentItem", back_populates="publish_jobs")

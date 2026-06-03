@@ -49,6 +49,22 @@ class BrandIn(BaseModel):
     channel_cadence: dict[str, int] | None = None
     target_personas: list[dict[str, Any]] | None = None
     auto_strategy_enabled: bool = False
+    auto_approve_min_score: int | None = None
+    voice_source_urls: list[str] | None = None
+
+
+class BrandPatch(BaseModel):
+    name: str | None = None
+    venture_tag: str | None = None
+    description: str | None = None
+    voice_profile_json: dict[str, Any] | None = None
+    theme_weights: dict[str, float] | None = None
+    banned_phrases: list[str] | None = None
+    channel_cadence: dict[str, int] | None = None
+    target_personas: list[dict[str, Any]] | None = None
+    auto_strategy_enabled: bool | None = None
+    auto_approve_min_score: int | None = None
+    voice_source_urls: list[str] | None = None
 
 
 class BrandOut(BaseModel):
@@ -63,6 +79,8 @@ class BrandOut(BaseModel):
     channel_cadence: dict[str, Any]
     target_personas: list[dict[str, Any]]
     auto_strategy_enabled: bool
+    auto_approve_min_score: int
+    voice_source_urls: list[str]
     created_at: str
     updated_at: str
 
@@ -194,6 +212,8 @@ def _brand_to_out(b: ContentBrand) -> BrandOut:
         channel_cadence=b.channel_cadence or {},
         target_personas=b.target_personas or [],
         auto_strategy_enabled=b.auto_strategy_enabled,
+        auto_approve_min_score=getattr(b, "auto_approve_min_score", 0) or 0,
+        voice_source_urls=getattr(b, "voice_source_urls", []) or [],
         created_at=_iso(b.created_at) or "",
         updated_at=_iso(b.updated_at) or "",
     )
@@ -284,6 +304,8 @@ def create_brand(
         channel_cadence=req.channel_cadence or {},
         target_personas=req.target_personas or [],
         auto_strategy_enabled=req.auto_strategy_enabled,
+        auto_approve_min_score=req.auto_approve_min_score or 0,
+        voice_source_urls=req.voice_source_urls or [],
     )
     db.add(brand)
     db.commit()
@@ -294,7 +316,7 @@ def create_brand(
 @router.patch("/brands/{brand_id}", response_model=BrandOut)
 def update_brand(
     brand_id: str,
-    req: BrandIn,
+    req: BrandPatch,
     _: str = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> BrandOut:
@@ -305,6 +327,7 @@ def update_brand(
     for field_name in (
         "name", "venture_tag", "description", "voice_profile_json", "theme_weights",
         "banned_phrases", "channel_cadence", "target_personas", "auto_strategy_enabled",
+        "auto_approve_min_score", "voice_source_urls",
     ):
         value = getattr(req, field_name, None)
         if value is not None:
@@ -351,8 +374,94 @@ def seed_echoforge_brand(
         channel_cadence=seed.get("channel_cadence") or {},
         target_personas=seed.get("target_personas") or [],
         auto_strategy_enabled=seed.get("auto_strategy_enabled", False),
+        auto_approve_min_score=seed.get("auto_approve_min_score", 0),
+        voice_source_urls=seed.get("voice_source_urls") or [],
     )
     db.add(brand)
+    db.commit()
+    db.refresh(brand)
+    return _brand_to_out(brand)
+
+
+class RegenerateVoiceRequest(BaseModel):
+    source_urls: list[str] | None = None   # optional override; defaults to brand.voice_source_urls
+    niche: str | None = None
+    audience: str | None = None
+
+
+@router.post("/brands/{brand_id}/regenerate-voice", response_model=BrandOut)
+def regenerate_brand_voice(
+    brand_id: str,
+    req: RegenerateVoiceRequest,
+    _: str = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> BrandOut:
+    """Re-scrape the brand's source URLs and regenerate `voice_profile_json`.
+
+    For EchoForge Accessibility the canonical sources are pages on
+    echoforge.biz. Each URL is fetched + stripped of HTML, then fed (alongside
+    every other source) to `generate_brand_voice` as a list of "transcripts".
+    The new profile replaces the existing one on the brand row.
+
+    Cheap to re-run — caller should still wait a few seconds because the
+    Claude analysis takes ~10s. Synchronous for now (move to Celery once
+    multi-brand calls coincide).
+    """
+    brand = db.get(ContentBrand, uuid.UUID(brand_id))
+    if not brand:
+        raise HTTPException(status_code=404, detail="brand not found")
+
+    urls = req.source_urls or brand.voice_source_urls or []
+    if not urls:
+        raise HTTPException(
+            status_code=400,
+            detail="no source URLs supplied and brand.voice_source_urls is empty",
+        )
+
+    # Reuse the marketing-audit fetch/strip path so we don't re-implement.
+    from aiplatform.skills.research.audit_landing_page import _fetch_page, _strip_html
+    transcripts: list[str] = []
+    fetch_errors: list[dict] = []
+    for url in urls:
+        try:
+            text = _fetch_page(url)
+            if text:
+                transcripts.append(text)
+        except Exception as exc:
+            fetch_errors.append({"url": url, "error": str(exc)[:300]})
+
+    if not transcripts:
+        raise HTTPException(
+            status_code=502,
+            detail={"message": "could not fetch any source URL", "errors": fetch_errors},
+        )
+
+    try:
+        from aiplatform.skills.media.generate_brand_voice import generate_brand_voice
+        result = generate_brand_voice(
+            transcripts=transcripts,
+            show_name=brand.name,
+            niche=req.niche or "accessibility",
+            audience=req.audience or "SMB owners + engineering leads",
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"voice generation failed: {exc}") from exc
+
+    # `generate_brand_voice` returns a guide string + structured summary; the
+    # content_engine voice profile keeps the structured shape (tone /
+    # vocabulary / sentence_style / rhetorical_moves / content_principles /
+    # topics_to_avoid). Use the structured summary when present; otherwise
+    # preserve the raw guide alongside the prior profile.
+    summary = result.get("summary") or {}
+    new_profile = dict(brand.voice_profile_json or {})
+    new_profile.update({k: v for k, v in summary.items() if v})
+    new_profile["raw_guide"] = result.get("guide", "")
+    new_profile["last_regenerated_sources"] = urls
+    new_profile["fetch_errors"] = fetch_errors
+
+    brand.voice_profile_json = new_profile
+    if req.source_urls:
+        brand.voice_source_urls = req.source_urls
     db.commit()
     db.refresh(brand)
     return _brand_to_out(brand)

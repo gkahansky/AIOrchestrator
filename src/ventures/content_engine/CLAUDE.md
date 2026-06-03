@@ -120,8 +120,9 @@ Mounted at `/api/ventures/content-engine`.
 | `ANTHROPIC_API_KEY` | Strategy enrichment, AI-tell critic, caption generation | Required for non-degraded operation |
 | `SERPAPI_KEY` | Live source pulls in `briefs.py` | Optional — degrades to empty sources |
 | `GOOGLE_AI_API_KEY` | Gemini Imagen for static images | Falls back to DALL-E 3 |
-| `ELEVENLABS_API_KEY` | M3 scripted explainer (TTS narration) | Not yet wired |
-| `PEXELS_API_KEY` | M3 scripted explainer (stock b-roll) | Not yet wired |
+| `ELEVENLABS_API_KEY` | M3 scripted explainer (TTS narration) | Live (since M3) |
+| `PEXELS_API_KEY` | M3 scripted explainer (stock b-roll) | Live (since M3) |
+| `CONTENT_ENGINE_DIGEST_TO` | Weekly cost digest recipient | Falls back to `ALLOWED_EMAIL` |
 
 ## Pipeline Status
 
@@ -140,7 +141,7 @@ Mounted at `/api/ventures/content-engine`.
 | CE-11 | ElevenLabs TTS skill + tool-router slot | ✅ done | `media/tts.py` — ElevenLabs primary + OpenAI TTS fallback; degrades silently without keys | 2026-05-31 |
 | CE-12 | Pexels stock-media skill | ✅ done | `research/stock_media.py` — photo + video search, attribution surfaced; ffprobe duration probe | 2026-05-31 |
 | CE-13 | Scripted explainer video assembly (`generate_video_explainer`) | ✅ done | TTS narration + Imagen / Pexels visuals + FFmpeg slideshow (Ken Burns motion on stills, loop-trim on video) + word-pop captions. Wired in pipeline for reel / short / long_video formats. | 2026-05-31 |
-| CE-14 | Carousel-aware image-gen prompt builder per slide | 📋 planned | M4 |  |
-| CE-15 | Brand-voice regeneration from echoforge.biz copy | 📋 planned | M4 |  |
-| CE-16 | Auto-approve thresholds per channel (AI-tell ≥ 90) | 📋 planned | M4 |  |
-| CE-17 | Cost-per-published-post weekly digest email | 📋 planned | M4 |  |
+| CE-14 | Carousel-aware image-gen prompt builder per slide | ✅ done | `media/carousel_brief.py` — Claude plans N slides up-front with shared style anchor; pipeline calls it for `format=carousel` | 2026-06-02 |
+| CE-15 | Brand-voice regeneration from echoforge.biz copy | ✅ done | `POST /brands/{id}/regenerate-voice` — re-scrapes `voice_source_urls`, calls `generate_brand_voice`, replaces `voice_profile_json` | 2026-06-02 |
+| CE-16 | Auto-approve thresholds per channel (AI-tell ≥ score) | ✅ done | Brand-level `auto_approve_min_score`; `run_quality_check` lands item at `approved` (skipping review) when score ≥ threshold AND no banned phrases AND length OK. Frontend slider in Brands tab. | 2026-06-02 |
+| CE-17 | Cost-per-published-post weekly digest email | ✅ done | `content.run_weekly_cost_digest` beat (7d). Tallies published items + asset cost per brand, emails via Resend to `CONTENT_ENGINE_DIGEST_TO` (or `ALLOWED_EMAIL`). | 2026-06-02 |

@@ -852,6 +852,8 @@ export interface ContentBrand {
   channel_cadence: Record<string, number>
   target_personas: { name?: string; description?: string }[]
   auto_strategy_enabled: boolean
+  auto_approve_min_score: number
+  voice_source_urls: string[]
   created_at: string
   updated_at: string
 }
@@ -941,6 +943,41 @@ export async function seedEchoforgeBrand(): Promise<ContentBrand> {
   const res = await fetch(`${CE_BASE}/brands/seed-echoforge`, {
     method: "POST",
     headers: getHeaders(),
+  })
+  return handleResponse<ContentBrand>(res)
+}
+
+export async function patchContentBrand(
+  brandId: string,
+  patch: Partial<{
+    name: string
+    description: string | null
+    auto_approve_min_score: number
+    voice_source_urls: string[]
+    banned_phrases: string[]
+    auto_strategy_enabled: boolean
+    target_personas: { name?: string; description?: string }[]
+  }>,
+): Promise<ContentBrand> {
+  // PATCH /brands/{id} expects the full BrandIn shape minus slug; the router
+  // only writes keys whose values aren't None. We pad slug+name from the
+  // existing brand on the call site so the schema validation passes.
+  const res = await fetch(`${CE_BASE}/brands/${brandId}`, {
+    method: "PATCH",
+    headers: getHeaders(),
+    body: JSON.stringify(patch),
+  })
+  return handleResponse<ContentBrand>(res)
+}
+
+export async function regenerateBrandVoice(
+  brandId: string,
+  body?: { source_urls?: string[]; niche?: string; audience?: string },
+): Promise<ContentBrand> {
+  const res = await fetch(`${CE_BASE}/brands/${brandId}/regenerate-voice`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(body ?? {}),
   })
   return handleResponse<ContentBrand>(res)
 }

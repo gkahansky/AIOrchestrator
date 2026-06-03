@@ -195,7 +195,13 @@ def _fallback_body(brief: dict, voice_profile: dict) -> str:
 
 
 def _generate_static_visuals(item, brand, db) -> None:
-    """Generate a primary image (and slide images for carousel). Best-effort."""
+    """Generate a primary image (and slide images for carousel).
+
+    For carousels we plan all slides up-front via `carousel_brief.plan_carousel_slides`
+    so the set carries a single style anchor across every slide. For single-image
+    posts we run a one-shot prompt. Best-effort throughout — per-image failure
+    won't abort the rest.
+    """
     try:
         from aiplatform.skills.media.generate_image import generate_image
     except ImportError:
@@ -203,44 +209,79 @@ def _generate_static_visuals(item, brand, db) -> None:
 
     from aiplatform.database.models import ContentAsset
 
-    n_images = 5 if item.format == "carousel" else 1
     topic = item.topic or (item.brief_json or {}).get("topic") or brand.name
+    brief = item.brief_json or {}
 
-    for i in range(n_images):
-        try:
-            prompt = (
-                f"Editorial illustration for an accessibility article. Topic: {topic}. "
-                "Realistic, modern, no text overlays, neutral background. "
-                f"Slide {i + 1} of {n_images}." if n_images > 1 else
-                f"Editorial illustration for an accessibility article. Topic: {topic}. "
-                "Realistic, modern, no text overlays, neutral background."
-            )
-            result = generate_image(prompt=prompt, aspect_ratio="1:1", quality_tier="standard")
-            asset = ContentAsset(
-                item_id=item.id,
-                kind="image",
-                role="primary" if i == 0 else f"carousel_slide_{i + 1}",
-                channel=None,
-                local_path=result.get("image_path"),
-                meta_json={
-                    "width":     result.get("width"),
-                    "height":    result.get("height"),
-                    "tool_used": result.get("tool_used"),
-                },
-                cost_usd=result.get("cost"),
-            )
-            db.add(asset)
-        except Exception:
-            # Per-image failure shouldn't abort the rest.
-            continue
+    if item.format == "carousel":
+        from aiplatform.skills.media.carousel_brief import plan_carousel_slides
+        slides = plan_carousel_slides(
+            topic=topic,
+            pillar=brief.get("pillar") or item.pillar,
+            angle=brief.get("angle"),
+            audience=(brief.get("audience") or {}).get("description"),
+            voice_profile=brand.voice_profile_json or {},
+            slide_count=5,
+            aspect_ratio="1:1",
+        )
+        for slide in slides:
+            try:
+                result = generate_image(prompt=slide["prompt"],
+                                         aspect_ratio="1:1",
+                                         quality_tier="standard")
+                role = "primary" if slide["slide_index"] == 1 \
+                        else f"carousel_slide_{slide['slide_index']}"
+                asset = ContentAsset(
+                    item_id=item.id, kind="image", role=role, channel=None,
+                    local_path=result.get("image_path"),
+                    meta_json={
+                        "width":         result.get("width"),
+                        "height":        result.get("height"),
+                        "tool_used":     result.get("tool_used"),
+                        "slide_index":   slide["slide_index"],
+                        "slide_role":    slide["role"],
+                        "slide_caption": slide["caption"],
+                    },
+                    cost_usd=result.get("cost"),
+                )
+                db.add(asset)
+            except Exception:
+                continue
+        db.commit()
+        return
 
-    db.commit()
+    # Single-image post.
+    prompt = (
+        f"Editorial illustration for an accessibility article. Topic: {topic}. "
+        "Realistic, modern, no text overlays, neutral background."
+    )
+    try:
+        result = generate_image(prompt=prompt, aspect_ratio="1:1", quality_tier="standard")
+        db.add(ContentAsset(
+            item_id=item.id, kind="image", role="primary", channel=None,
+            local_path=result.get("image_path"),
+            meta_json={
+                "width":     result.get("width"),
+                "height":    result.get("height"),
+                "tool_used": result.get("tool_used"),
+            },
+            cost_usd=result.get("cost"),
+        ))
+        db.commit()
+    except Exception:
+        return
 
 
 # ── Quality check ────────────────────────────────────────────────────────────
 
 def run_quality_check(item_id: str, db) -> dict[str, Any]:
-    """Run the AI-tell critic + length/banned checks. Sets status to review_pending."""
+    """Run the AI-tell critic + length/banned checks. Sets the item's next status.
+
+    If the brand's `auto_approve_min_score` is set, the AI-tell score meets it,
+    and no banned phrases / oversize variants triggered, the item moves
+    straight to `approved` — skipping the human review gate. Otherwise it
+    lands at `review_pending`.
+    """
+    from datetime import datetime, timezone
     from aiplatform.database.models import ContentItem, ContentBrand
     from ventures.content_engine.quality_gate import build_quality_report
 
@@ -250,13 +291,32 @@ def run_quality_check(item_id: str, db) -> dict[str, Any]:
 
     brand = db.get(ContentBrand, item.brand_id)
     banned = (brand.banned_phrases if brand else None) or []
+    threshold = int(getattr(brand, "auto_approve_min_score", 0) or 0)
 
     report = build_quality_report(item.variants_json or {}, banned)
     item.quality_report_json = report
-    item.status = "review_pending"
-    db.commit()
 
-    return {"ok": True, "item_id": item_id, "ai_tell_score": report.get("ai_tell_score")}
+    ai_score = report.get("ai_tell_score")
+    can_auto_approve = (
+        threshold > 0
+        and ai_score is not None
+        and ai_score >= threshold
+        and not report.get("any_banned")
+        and not report.get("any_oversize")
+    )
+    if can_auto_approve:
+        item.status = "approved"
+        item.approved_at = datetime.now(timezone.utc)
+        item.review_notes = (
+            f"Auto-approved: AI-tell {ai_score} ≥ threshold {threshold}, "
+            "no banned phrases, all variants within length budget."
+        )
+    else:
+        item.status = "review_pending"
+
+    db.commit()
+    return {"ok": True, "item_id": item_id, "ai_tell_score": ai_score,
+            "auto_approved": can_auto_approve}
 
 
 # ── Publish dispatch ─────────────────────────────────────────────────────────

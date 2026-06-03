@@ -139,6 +139,14 @@ ECHOFORGE_ACCESSIBILITY_SEED = {
         ],
     },
     "auto_strategy_enabled": False,
+    # 0 = always require human review. Operator can bump to 90 in the UI once
+    # the AI-tell critic has proven itself for the brand.
+    "auto_approve_min_score": 0,
+    # Source pages the voice-regeneration endpoint should re-scrape when called.
+    "voice_source_urls": [
+        "https://echoforge.biz/",
+        "https://echoforge.biz/services/accessibility-audit/",
+    ],
 }
 
 

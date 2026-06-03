@@ -963,6 +963,16 @@ class ContentBrand(Base):
     target_personas    = Column(JSONB, nullable=False, default=list)
     auto_strategy_enabled = Column(Boolean, nullable=False, default=False)
 
+    # Quality-gate auto-approve threshold (0 = always require human review).
+    # When `quality_report.ai_tell_score >= auto_approve_min_score` AND there
+    # are no banned phrases AND length checks pass, the item skips the
+    # `review_pending` gate and lands on `approved` directly.
+    auto_approve_min_score = Column(Integer, nullable=False, default=0)
+
+    # Source URLs the voice-regeneration endpoint scrapes (e.g. echoforge.biz
+    # marketing pages). Stored on the brand so a re-regen run is reproducible.
+    voice_source_urls = Column(JSONB, nullable=False, default=list)
+
     created_at = Column(DateTime(timezone=True), nullable=False,
                         default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), nullable=False,

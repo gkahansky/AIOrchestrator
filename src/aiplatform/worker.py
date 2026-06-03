@@ -139,6 +139,12 @@ celery_app.conf.update(
             "schedule": 300,             # 5 minutes
             "options": {"expires": 240},
         },
+        # Weekly — cost-per-published-post digest email per brand
+        "content-weekly-cost-digest": {
+            "task": "content.run_weekly_cost_digest",
+            "schedule": 604800,          # 7 days (Monday morning UTC if started Monday)
+            "options": {"expires": 3600},
+        },
         # Hourly — fetch spend from vendor APIs; auto-pause campaigns that hit 100% budget
         "campaign-budget-monitor": {
             "task": "platform.monitor_campaign_budgets",
@@ -2261,3 +2267,115 @@ def run_scheduled_content_publishes() -> dict:
         return {"triggered": triggered, "count": len(triggered)}
     finally:
         db.close()
+
+
+@celery_app.task(name="content.run_weekly_cost_digest")
+def run_content_weekly_cost_digest(brand_id: str | None = None) -> dict:
+    """Beat task — weekly Monday-ish.
+
+    For each brand (or the one supplied), tally:
+      - posts published this week (publish_jobs with status=success and
+        published_at within the last 7 days)
+      - total cost incurred this week (cost_events.cost_usd via item.job_id,
+        plus content_assets.cost_usd on items completed in window)
+      - cost_per_post
+
+    Emails the digest via Resend. If `RESEND_API_KEY` is absent or no brand
+    has a recipient configured, returns the payload without sending so the
+    operator can inspect via Celery flower.
+    """
+    from datetime import datetime, timedelta, timezone
+    from decimal import Decimal
+    from sqlalchemy import func
+    from aiplatform.database.models import (
+        ContentBrand, ContentItem, ContentAsset, PublishJob,
+    )
+    from aiplatform.database.session import SessionLocal
+
+    db = SessionLocal()
+    digests: list[dict] = []
+    try:
+        now = datetime.now(timezone.utc)
+        since = now - timedelta(days=7)
+
+        q = db.query(ContentBrand)
+        if brand_id:
+            import uuid as _uuid
+            q = q.filter(ContentBrand.id == _uuid.UUID(brand_id))
+        brands = q.all()
+
+        for brand in brands:
+            # Items belonging to this brand whose `published_at` is in the window.
+            published_items = db.query(ContentItem).filter(
+                ContentItem.brand_id == brand.id,
+                ContentItem.published_at != None,            # noqa: E711
+                ContentItem.published_at >= since,
+            ).all()
+
+            published_post_count = db.query(PublishJob).join(
+                ContentItem, PublishJob.item_id == ContentItem.id,
+            ).filter(
+                ContentItem.brand_id == brand.id,
+                PublishJob.status == "success",
+                PublishJob.published_at >= since,
+            ).count()
+
+            cost_total = Decimal("0")
+            for item in published_items:
+                asset_cost = db.query(
+                    func.coalesce(func.sum(ContentAsset.cost_usd), 0)
+                ).filter(ContentAsset.item_id == item.id).scalar() or 0
+                cost_total += Decimal(str(asset_cost))
+
+            cost_per_post = (
+                round(float(cost_total) / published_post_count, 4)
+                if published_post_count else 0.0
+            )
+
+            digest = {
+                "brand_id":             str(brand.id),
+                "brand_name":           brand.name,
+                "window_start":         since.isoformat(),
+                "window_end":           now.isoformat(),
+                "items_published":      len(published_items),
+                "publish_events":       published_post_count,
+                "total_cost_usd":       float(cost_total),
+                "cost_per_post_usd":    cost_per_post,
+            }
+            digests.append(digest)
+
+            _maybe_email_digest(brand, digest)
+
+        return {"digests": digests, "count": len(digests)}
+    finally:
+        db.close()
+
+
+def _maybe_email_digest(brand, digest: dict) -> None:
+    """Best-effort send. Never raises — digest is informational, not critical."""
+    import os
+    recipient = os.environ.get("CONTENT_ENGINE_DIGEST_TO") \
+                or os.environ.get("ALLOWED_EMAIL") \
+                or ""
+    if not recipient or not os.environ.get("RESEND_API_KEY"):
+        return
+    try:
+        from aiplatform.skills.comms.send_email import send_email
+        body_text = (
+            f"Brand:               {digest['brand_name']}\n"
+            f"Window:              {digest['window_start']} -> {digest['window_end']}\n"
+            f"Items published:     {digest['items_published']}\n"
+            f"Publish events:      {digest['publish_events']}\n"
+            f"Total cost (USD):    ${digest['total_cost_usd']:.4f}\n"
+            f"Cost per post (USD): ${digest['cost_per_post_usd']:.4f}\n"
+        )
+        body_html = "<pre>" + body_text.replace("<", "&lt;") + "</pre>"
+        send_email(
+            to=recipient,
+            subject=f"[Content Engine] Weekly cost digest — {digest['brand_name']}",
+            body_html=body_html,
+            body_text=body_text,
+        )
+    except Exception:
+        pass
+

@@ -13,7 +13,9 @@ import {
   fetchPublishJobs,
   fetchSocialAccounts,
   generateContentItem,
+  patchContentBrand,
   publishContentItemNow,
+  regenerateBrandVoice,
   reviewContentItem,
   scheduleContentItem,
   seedEchoforgeBrand,
@@ -165,32 +167,109 @@ function BrandsTab({ brands }: { brands: ContentBrand[] }) {
         <p className="text-sm text-on-surface-variant">No brands yet. Seed EchoForge Accessibility to begin.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {brands.map((b) => (
-            <div key={b.id} className="bg-surface-container-lowest rounded-xl p-4 shadow-float">
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <div className="font-headline font-bold text-base text-on-surface">{b.name}</div>
-                  <div className="text-xs font-label text-on-surface-variant">{b.slug}</div>
-                </div>
-                {b.auto_strategy_enabled && (
-                  <span className="text-[10px] font-label font-bold uppercase tracking-wider bg-primary-fixed text-primary px-1.5 py-0.5 rounded">
-                    Auto
-                  </span>
-                )}
-              </div>
-              {b.description && (
-                <p className="text-xs font-body text-on-surface-variant line-clamp-3 mb-2">{b.description}</p>
-              )}
-              <div className="text-xs font-label text-on-surface-variant space-y-0.5">
-                <div>Themes: {Object.entries(b.theme_weights).map(([k, v]) => `${k} ${Math.round(v * 100)}%`).join(" · ")}</div>
-                <div>Personas: {b.target_personas.length} · Banned phrases: {b.banned_phrases.length}</div>
-                <div>Cadence: {Object.entries(b.channel_cadence).map(([c, n]) => `${c.split("_")[0]} ${n}/wk`).join(" · ")}</div>
-              </div>
-            </div>
-          ))}
+          {brands.map((b) => <BrandCard key={b.id} brand={b} />)}
         </div>
       )}
     </section>
+  )
+}
+
+
+function BrandCard({ brand }: { brand: ContentBrand }) {
+  const queryClient = useQueryClient()
+  const [threshold, setThreshold] = useState<number>(brand.auto_approve_min_score)
+  const [thresholdDirty, setThresholdDirty] = useState(false)
+  const [regenError, setRegenError] = useState<string | null>(null)
+
+  const save = useMutation({
+    mutationFn: (score: number) =>
+      patchContentBrand(brand.id, { auto_approve_min_score: score }),
+    onSuccess: () => {
+      setThresholdDirty(false)
+      queryClient.invalidateQueries({ queryKey: ["ce", "brands"] })
+    },
+  })
+
+  const regen = useMutation({
+    mutationFn: () => regenerateBrandVoice(brand.id),
+    onSuccess: () => {
+      setRegenError(null)
+      queryClient.invalidateQueries({ queryKey: ["ce", "brands"] })
+    },
+    onError: (err: Error) => setRegenError(err.message),
+  })
+
+  return (
+    <div className="bg-surface-container-lowest rounded-xl p-4 shadow-float">
+      <div className="flex items-start justify-between mb-2">
+        <div>
+          <div className="font-headline font-bold text-base text-on-surface">{brand.name}</div>
+          <div className="text-xs font-label text-on-surface-variant">{brand.slug}</div>
+        </div>
+        <div className="flex gap-1">
+          {brand.auto_strategy_enabled && (
+            <span className="text-[10px] font-label font-bold uppercase tracking-wider bg-primary-fixed text-primary px-1.5 py-0.5 rounded">
+              Auto-strategy
+            </span>
+          )}
+          {brand.auto_approve_min_score > 0 && (
+            <span className="text-[10px] font-label font-bold uppercase tracking-wider bg-green-100 text-green-800 px-1.5 py-0.5 rounded">
+              Auto-approve ≥ {brand.auto_approve_min_score}
+            </span>
+          )}
+        </div>
+      </div>
+      {brand.description && (
+        <p className="text-xs font-body text-on-surface-variant line-clamp-3 mb-2">{brand.description}</p>
+      )}
+      <div className="text-xs font-label text-on-surface-variant space-y-0.5">
+        <div>Themes: {Object.entries(brand.theme_weights).map(([k, v]) => `${k} ${Math.round((v as number) * 100)}%`).join(" · ")}</div>
+        <div>Personas: {brand.target_personas.length} · Banned phrases: {brand.banned_phrases.length}</div>
+        <div>Cadence: {Object.entries(brand.channel_cadence).map(([c, n]) => `${c.split("_")[0]} ${n}/wk`).join(" · ")}</div>
+      </div>
+
+      <div className="mt-3 pt-3 border-t border-outline-variant/15 space-y-2">
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-label text-on-surface-variant flex-1">
+            Auto-approve threshold (0 = always review)
+          </label>
+          <input
+            type="number" min={0} max={100} step={5}
+            value={threshold}
+            onChange={(e) => { setThreshold(parseInt(e.target.value) || 0); setThresholdDirty(true) }}
+            className="w-16 px-2 py-1 rounded-md bg-surface-container-low text-on-surface text-xs text-right"
+          />
+          <button
+            onClick={() => save.mutate(threshold)}
+            disabled={!thresholdDirty || save.isPending}
+            className="px-2.5 py-1 rounded-md bg-primary text-on-primary text-xs font-label font-medium disabled:opacity-40"
+          >
+            {save.isPending ? "Saving…" : "Save"}
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-xs font-label text-on-surface-variant truncate">
+            Voice sources: {brand.voice_source_urls.length
+              ? brand.voice_source_urls.join(", ")
+              : "(none configured)"}
+          </div>
+          <button
+            onClick={() => regen.mutate()}
+            disabled={brand.voice_source_urls.length === 0 || regen.isPending}
+            className="px-2.5 py-1 rounded-md bg-surface-container-high text-on-surface text-xs font-label font-medium disabled:opacity-40"
+            title={brand.voice_source_urls.length === 0
+              ? "Set voice_source_urls first (e.g. echoforge.biz pages)"
+              : "Re-scrape sources and rebuild voice profile"}
+          >
+            {regen.isPending ? "Regenerating…" : "Regenerate voice"}
+          </button>
+        </div>
+        {regenError && (
+          <div className="text-[11px] font-label text-error">{regenError}</div>
+        )}
+      </div>
+    </div>
   )
 }
 

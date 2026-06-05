@@ -74,8 +74,12 @@ def _default_calendar(
     return slots
 
 
-def _enrich_with_llm(slots: list[dict], brand_seed: dict) -> list[dict]:
-    """Ask Claude to fill in topic/angle/hook per slot. Falls back to skeleton."""
+def _enrich_with_llm(slots: list[dict], brand_seed: dict, user_brief: str = "") -> list[dict]:
+    """Ask Claude to fill in topic/angle/hook per slot. Falls back to skeleton.
+
+    `user_brief` is free-form operator guidance (must-cover topics, upcoming
+    events, content vibe). Passed through verbatim to anchor the planner.
+    """
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key or not slots:
         return slots
@@ -90,11 +94,18 @@ def _enrich_with_llm(slots: list[dict], brand_seed: dict) -> list[dict]:
         {"index": s["index"], "channel": s["channel"], "format": s["format"], "pillar": s["pillar"]}
         for s in slots
     ]
+    brief_block = (
+        f"\nOPERATOR BRIEF (treat as binding guidance — must-cover topics, "
+        f"upcoming events, tone notes):\n{user_brief}\n"
+        if user_brief.strip() else ""
+    )
     user_msg = (
-        f"BRAND:\n{json.dumps({k: brand_seed.get(k) for k in ('name', 'description', 'target_personas', 'theme_weights')}, ensure_ascii=False)}\n\n"
+        f"BRAND:\n{json.dumps({k: brand_seed.get(k) for k in ('name', 'description', 'target_personas', 'theme_weights')}, ensure_ascii=False)}\n"
+        f"{brief_block}\n"
         f"SLOTS TO FILL ({len(skeleton)}):\n{json.dumps(skeleton, ensure_ascii=False)}\n\n"
         "For each slot, return: index, topic (specific — e.g. 'WCAG 2.5.3 Label in Name failure on accordion buttons'), "
         "angle (one sentence about the point of view), hook (the first line of the post).\n"
+        "If the operator brief lists must-cover topics, ensure those appear in the topics you choose.\n"
         "Return strict JSON: a list of objects with those four keys. No prose, no code fences."
     )
 
@@ -128,8 +139,12 @@ def generate_calendar(
     channel_cadence: dict[str, int] | None = None,
     period_days: int = DEFAULT_STRATEGY_PERIOD_DAYS,
     start_date: datetime | None = None,
+    user_brief: str = "",
 ) -> dict[str, Any]:
     """Build a draft strategy for a brand.
+
+    `user_brief` is free-form operator guidance (must-cover topics, events,
+    tone). Passed to the LLM enrichment so the calendar respects it.
 
     Returns the shape stored on `ContentStrategy.calendar_json` (list of slots)
     + the sibling fields the router uses to populate the row.
@@ -139,7 +154,7 @@ def generate_calendar(
     theme_weights = brand_seed.get("theme_weights") or {}
 
     slots = _default_calendar(period_days, cadence, theme_weights, start)
-    slots = _enrich_with_llm(slots, brand_seed)
+    slots = _enrich_with_llm(slots, brand_seed, user_brief=user_brief)
 
     return {
         "title": f"{brand_seed.get('name', 'Brand')} — {period_days}-day calendar",

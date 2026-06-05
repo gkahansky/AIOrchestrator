@@ -46,19 +46,80 @@ def generate_image(
     """
     Route to the best active image generation tool for the given tier.
     Tool selection logic lives in platform/registry/tool_router.py.
+
+    Resilience: if the standard-tier tool raises a transient/quota error
+    (RESOURCE_EXHAUSTED, HTTP 429, "quota", "rate limit"), retry once
+    through the `fallback` tier and stamp `failover_from` on the result
+    so the caller can surface that something degraded.
     """
     from aiplatform.registry.tool_router import get_tool_function
 
     fn, tool_meta = get_tool_function("image-generation", tier=quality_tier)
-    result = fn(
-        prompt=prompt,
-        aspect_ratio=aspect_ratio,
-        output_dir=output_dir,
-        filename=filename,
-    )
+    try:
+        result = fn(
+            prompt=prompt,
+            aspect_ratio=aspect_ratio,
+            output_dir=output_dir,
+            filename=filename,
+        )
+    except Exception as exc:
+        # Only auto-failover when we were running at standard tier and the
+        # error looks like a quota / rate-limit problem. Hard errors (auth,
+        # bad prompt) bubble up unchanged.
+        if quality_tier != "standard" or not _is_quota_error(exc):
+            raise
+
+        try:
+            fallback_fn, fallback_meta = get_tool_function(
+                "image-generation", tier="fallback",
+            )
+        except Exception:
+            raise exc  # no fallback registered — re-raise the original
+
+        result = fallback_fn(
+            prompt=prompt,
+            aspect_ratio=aspect_ratio,
+            output_dir=output_dir,
+            filename=filename,
+        )
+        result["tool_used"] = fallback_meta["id"]
+        result["cost"]      = fallback_meta.get("cost_per_call", 0.0)
+        result["failover_from"]   = tool_meta["id"]
+        result["failover_reason"] = str(exc)[:300]
+        return result
+
     result["tool_used"] = tool_meta["id"]
     result["cost"] = tool_meta.get("cost_per_call", 0.0)
     return result
+
+
+_QUOTA_MARKERS = (
+    "resource_exhausted",
+    "resource exhausted",
+    "rate_limit",
+    "rate limit",
+    "quota",
+    "429",
+    "too many requests",
+)
+
+
+def _is_quota_error(exc: Exception) -> bool:
+    """Best-effort detection of transient quota / rate-limit errors.
+
+    Different SDKs surface 429s in different shapes (status_code attribute,
+    formatted message string, dict payload). We match on a lowercased
+    string of the exception text so we catch all of them.
+    """
+    text = (str(exc) or repr(exc) or "").lower()
+    if any(m in text for m in _QUOTA_MARKERS):
+        return True
+    # Some HTTP-y SDKs expose .status_code or .code directly.
+    for attr in ("status_code", "code", "http_status"):
+        v = getattr(exc, attr, None)
+        if v == 429 or str(v) == "429" or str(v).upper() == "RESOURCE_EXHAUSTED":
+            return True
+    return False
 
 
 # ─── DALL-E 3 ────────────────────────────────────────────────────────────────

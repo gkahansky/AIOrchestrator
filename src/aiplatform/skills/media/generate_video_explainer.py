@@ -96,19 +96,46 @@ def generate_video_explainer(
                     components=components, cost=cost_total)
 
     # 2. Resolve visuals to local files -----------------------------------
+    # Per-cue resolution is wrapped in try/except so one failed slide (e.g.
+    # Imagen quota error on a `kind=generated` cue) doesn't kill the whole
+    # video. If a generated cue fails we attempt a derived Pexels stock_query
+    # last-resort fallback so the video still ships with valid b-roll.
     width, height = _DIM[aspect_ratio]
     local_visuals: list[dict] = []
-    for i, cue in enumerate(visuals):
-        local, cost = _resolve_visual_to_local(cue, i, out_dir, width, height,
-                                               aspect_ratio)
-        if not local:
-            return _err(f"could not resolve visual #{i} (kind={cue.get('kind')})",
-                        components=components, cost=cost_total)
-        cost_total += cost
-        local_visuals.append({**cue, "local_path": local})
+    visual_failures: list[dict] = []
 
-    components["visuals"] = [{"kind": v["kind"], "local_path": v["local_path"]}
+    for i, cue in enumerate(visuals):
+        local, cost, used_kind, note = _resolve_visual_with_fallback(
+            cue, i, out_dir, width, height, aspect_ratio,
+        )
+        cost_total += cost
+        if local:
+            local_visuals.append({
+                **cue,
+                "local_path":  local,
+                "resolved_as": used_kind,
+            })
+            if note:
+                visual_failures.append({"index": i, "note": note})
+        else:
+            visual_failures.append({
+                "index": i,
+                "kind":  cue.get("kind"),
+                "value": (cue.get("value") or "")[:120],
+                "note":  note or "could not resolve",
+            })
+
+    if not local_visuals:
+        return _err(
+            f"could not resolve any visual ({len(visuals)} cues attempted)",
+            components={**components, "visual_failures": visual_failures},
+            cost=cost_total,
+        )
+
+    components["visuals"] = [{"kind": v["resolved_as"], "local_path": v["local_path"]}
                              for v in local_visuals]
+    if visual_failures:
+        components["visual_failures"] = visual_failures
 
     # 3. Build slideshow video (visual-only, no audio) --------------------
     per_visual_seconds = max(2.0, round(narration_duration / len(local_visuals), 2)) \
@@ -153,15 +180,91 @@ def generate_video_explainer(
         shutil.copy2(muxed_path, final_path)
 
     return {
-        "video_path":   str(final_path),
-        "duration_s":   narration_duration or (per_visual_seconds * len(local_visuals)),
-        "aspect_ratio": aspect_ratio,
-        "cost_usd":     round(cost_total, 4),
-        "components":   components,
+        "video_path":      str(final_path),
+        "duration_s":      narration_duration or (per_visual_seconds * len(local_visuals)),
+        "aspect_ratio":    aspect_ratio,
+        "cost_usd":        round(cost_total, 4),
+        "components":      components,
+        "visual_failures": visual_failures,
     }
 
 
 # ── Visual resolution ────────────────────────────────────────────────────────
+
+def _resolve_visual_with_fallback(
+    cue: dict, index: int, out_dir: Path,
+    width: int, height: int, aspect_ratio: str,
+) -> tuple[str, float, str, str]:
+    """Resolve one cue tolerantly.
+
+    Returns (local_path, cost, resolved_as, note).
+    - On generator failure (e.g. Imagen quota), falls through to a Pexels
+      stock_query derived from the prompt so the slide still ships.
+    - On any other exception, swallows + returns ("", 0, original_kind, note)
+      so the caller can drop the slide rather than crashing the whole video.
+    """
+    original_kind = (cue.get("kind") or "").lower()
+    note = ""
+
+    try:
+        local, cost = _resolve_visual_to_local(cue, index, out_dir, width, height, aspect_ratio)
+        if local:
+            return local, cost, original_kind, ""
+        note = f"primary resolver returned no path for kind={original_kind}"
+    except Exception as exc:
+        cost = 0.0
+        note = f"primary resolver raised: {str(exc)[:240]}"
+
+    # Last-resort fallback: derive a Pexels query from whatever the cue
+    # had. Works for kind=generated (the prompt usually mentions concrete
+    # subjects), kind=image with a missing URL, etc. Skips if Pexels has
+    # no key (the search function degrades to empty results in that case).
+    derived = _derive_stock_query(cue)
+    if not derived:
+        return "", cost, original_kind, note
+
+    try:
+        from aiplatform.skills.research.stock_media import (
+            download_pexels_asset, search_pexels,
+        )
+    except ImportError:
+        return "", cost, original_kind, note + "; pexels module unavailable"
+
+    orientation = "portrait" if aspect_ratio in {"9:16", "4:5"} else \
+                  "square"   if aspect_ratio == "1:1" else "landscape"
+    results = (search_pexels(query=derived, media="photo", per_page=3,
+                             orientation=orientation) or {}).get("results", [])
+    if not results:
+        return "", cost, original_kind, note + f"; pexels query '{derived}' returned 0"
+    local = download_pexels_asset(results[0]["url"],
+                                  output_dir=out_dir,
+                                  filename=f"visual_{index}_fallback.jpg")
+    if not local:
+        return "", cost, original_kind, note + "; pexels download failed"
+
+    return local, cost, "stock_query_fallback", note + f"; fell back to pexels '{derived}'"
+
+
+def _derive_stock_query(cue: dict) -> str:
+    """Extract a 2-4 word search query from a cue's value/caption.
+
+    For kind=generated cues the value is a long descriptive prompt; we pick
+    the first comma-separated chunk and strip filler. For other kinds we
+    look at the caption. Returns "" when nothing useful is available.
+    """
+    raw = (cue.get("value") or cue.get("caption") or "").strip()
+    if not raw:
+        return ""
+    # First clause of the sentence — usually the subject.
+    head = raw.split(",")[0].split(".")[0].strip()
+    # Drop generic illustrator-prompt prefixes.
+    for prefix in ("editorial illustration of", "editorial illustration",
+                   "clean modern", "illustration of", "image of", "picture of"):
+        if head.lower().startswith(prefix):
+            head = head[len(prefix):].strip(" :")
+    words = [w for w in head.split() if w.isalpha()]
+    return " ".join(words[:4])
+
 
 def _resolve_visual_to_local(
     cue: dict, index: int, out_dir: Path,

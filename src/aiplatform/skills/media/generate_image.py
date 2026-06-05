@@ -15,7 +15,7 @@ Input:
 Output:
     {
         "image_path": str,   # Local path to the downloaded image
-        "tool_used":  str,   # 'dalle3' | 'gemini-imagen'
+        "tool_used":  str,   # 'gemini-imagen' (standard) | 'gpt-image-1' (fallback) | 'dalle3' (legacy)
         "cost":       float, # Estimated cost in USD
         "width":      int,
         "height":     int,
@@ -198,6 +198,85 @@ def generate_via_dalle3(
         "width": w,
         "height": h,
         "prompt": revised_prompt,
+    }
+
+
+# ─── OpenAI gpt-image-1 ──────────────────────────────────────────────────────
+#
+# OpenAI's current flagship image model (April 2025+). Better instruction
+# following than DALL-E 3, supports portrait / landscape / square natively,
+# returns base64 directly (no signed URL download step). Used as the
+# fallback tier for image-generation under the platform tool router.
+
+# gpt-image-1 size mapping. Three native sizes; we map our aspect ratios
+# to the nearest supported one.
+_GPT_IMAGE_SIZE_MAP = {
+    "1:1":  "1024x1024",
+    "2:3":  "1024x1536",   # portrait
+    "9:16": "1024x1536",
+    "4:5":  "1024x1536",
+    "3:4":  "1024x1536",
+    "3:2":  "1536x1024",   # landscape
+    "16:9": "1536x1024",
+    "4:3":  "1536x1024",
+}
+
+
+def generate_via_gpt_image(
+    prompt: str,
+    aspect_ratio: str = "1:1",
+    output_dir: str | Path = "./output",
+    filename: Optional[str] = None,
+) -> dict:
+    """
+    Generate an image using OpenAI's gpt-image-1 model.
+
+    Requires env var: OPENAI_API_KEY
+    gpt-image-1 returns base64-encoded PNG bytes directly (no URL download).
+    Supports 1024x1024, 1024x1536 (portrait), 1536x1024 (landscape).
+    """
+    import base64
+
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise EnvironmentError("OPENAI_API_KEY is not set.")
+
+    size = _GPT_IMAGE_SIZE_MAP.get(aspect_ratio, "1024x1024")
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    resp = requests.post(
+        "https://api.openai.com/v1/images/generations",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type":  "application/json",
+        },
+        json={
+            "model":   "gpt-image-1",
+            "prompt":  prompt,
+            "n":       1,
+            "size":    size,
+            "quality": os.environ.get("OPENAI_IMAGE_QUALITY", "high"),
+        },
+        timeout=120,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+
+    b64 = data["data"][0].get("b64_json")
+    if not b64:
+        raise RuntimeError("gpt-image-1 response missing b64_json payload")
+
+    stem = filename or f"gptimg-{uuid.uuid4().hex[:8]}"
+    local_path = output_dir / f"{stem}.png"
+    local_path.write_bytes(base64.b64decode(b64))
+
+    w, h = _parse_size(size)
+    return {
+        "image_path": str(local_path),
+        "width":      w,
+        "height":     h,
+        "prompt":     prompt,
     }
 
 

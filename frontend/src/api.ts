@@ -994,6 +994,10 @@ export async function createContentStrategy(body: {
   period_days?: number
   title?: string
   channel_cadence?: Record<string, number>
+  user_brief?: string
+  must_cover_topics?: string[]
+  upcoming_events?: string[]
+  tone_notes?: string
 }): Promise<ContentStrategy> {
   const res = await fetch(`${CE_BASE}/strategies`, {
     method: "POST",
@@ -1001,6 +1005,44 @@ export async function createContentStrategy(body: {
     body: JSON.stringify(body),
   })
   return handleResponse<ContentStrategy>(res)
+}
+
+export async function patchContentStrategy(
+  strategyId: string,
+  patch: Partial<{
+    title: string
+    notes: string
+    calendar: ContentStrategy["calendar"]
+    pillars: string[]
+    channel_cadence: Record<string, number>
+    status: string
+  }>,
+): Promise<ContentStrategy> {
+  const res = await fetch(`${CE_BASE}/strategies/${strategyId}`, {
+    method: "PATCH",
+    headers: getHeaders(),
+    body: JSON.stringify(patch),
+  })
+  return handleResponse<ContentStrategy>(res)
+}
+
+export interface CostDigest {
+  brand_id: string
+  brand_name: string
+  window_start: string
+  window_end: string
+  items_published: number
+  publish_events: number
+  total_cost_usd: number
+  cost_per_post_usd: number
+}
+
+export async function fetchCostDigest(brandId?: string, days = 7): Promise<CostDigest[]> {
+  const url = new URL(`${CE_BASE}/cost-digest`)
+  if (brandId) url.searchParams.set("brand_id", brandId)
+  url.searchParams.set("days", String(days))
+  const res = await fetch(url.toString(), { headers: getHeaders() })
+  return handleResponse<CostDigest[]>(res)
 }
 
 export async function approveContentStrategy(strategyId: string): Promise<ContentStrategy> {

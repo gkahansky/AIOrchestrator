@@ -90,6 +90,10 @@ class StrategyIn(BaseModel):
     title: str | None = None
     period_days: int = 30
     channel_cadence: dict[str, int] | None = None
+    user_brief: str | None = None       # free-form operator brief
+    must_cover_topics: list[str] | None = None
+    upcoming_events: list[str] | None = None
+    tone_notes: str | None = None
 
 
 class StrategyOut(BaseModel):
@@ -502,10 +506,23 @@ def create_strategy(
         "theme_weights":   brand.theme_weights or {},
         "channel_cadence": brand.channel_cadence or {},
     }
+    # Compose the operator brief from free-form text + structured fields.
+    brief_parts: list[str] = []
+    if req.user_brief:
+        brief_parts.append(req.user_brief.strip())
+    if req.must_cover_topics:
+        brief_parts.append("Must-cover topics: " + "; ".join(req.must_cover_topics))
+    if req.upcoming_events:
+        brief_parts.append("Upcoming events to weave in: " + "; ".join(req.upcoming_events))
+    if req.tone_notes:
+        brief_parts.append("Tone notes: " + req.tone_notes.strip())
+    user_brief = "\n".join(brief_parts)
+
     cal = generate_calendar(
         brand_seed=brand_seed,
         channel_cadence=req.channel_cadence,
         period_days=req.period_days,
+        user_brief=user_brief,
     )
 
     strategy = ContentStrategy(
@@ -870,6 +887,80 @@ def confirm_publish_sent(
         created_at=_iso(pj.created_at) or "",
         published_at=_iso(pj.published_at),
     )
+
+
+# ── Cost digest ────────────────────────────────────────────────────────────────
+
+class CostDigestOut(BaseModel):
+    brand_id: str
+    brand_name: str
+    window_start: str
+    window_end: str
+    items_published: int
+    publish_events: int
+    total_cost_usd: float
+    cost_per_post_usd: float
+
+
+@router.get("/cost-digest", response_model=list[CostDigestOut])
+def cost_digest(
+    brand_id: str | None = None,
+    days: int = 7,
+    _: str = Depends(require_auth),
+    db: Session = Depends(get_db),
+) -> list[CostDigestOut]:
+    """Same payload the `content.run_weekly_cost_digest` beat computes.
+
+    On-demand version so the UI can render the cost panel without waiting
+    for the next beat fire. Optional brand_id to narrow; default 7-day window.
+    """
+    from datetime import timedelta
+    from decimal import Decimal
+    from sqlalchemy import func
+    from aiplatform.database.models import ContentAsset
+
+    now = datetime.now(timezone.utc)
+    since = now - timedelta(days=max(1, min(90, days)))
+
+    q = db.query(ContentBrand)
+    if brand_id:
+        q = q.filter(ContentBrand.id == uuid.UUID(brand_id))
+    brands = q.all()
+
+    out: list[CostDigestOut] = []
+    for brand in brands:
+        published_items = db.query(ContentItem).filter(
+            ContentItem.brand_id == brand.id,
+            ContentItem.published_at.is_not(None),
+            ContentItem.published_at >= since,
+        ).all()
+
+        publish_events = db.query(PublishJob).join(
+            ContentItem, PublishJob.item_id == ContentItem.id,
+        ).filter(
+            ContentItem.brand_id == brand.id,
+            PublishJob.status == "success",
+            PublishJob.published_at >= since,
+        ).count()
+
+        cost_total = Decimal("0")
+        for item in published_items:
+            asset_cost = db.query(
+                func.coalesce(func.sum(ContentAsset.cost_usd), 0)
+            ).filter(ContentAsset.item_id == item.id).scalar() or 0
+            cost_total += Decimal(str(asset_cost))
+
+        out.append(CostDigestOut(
+            brand_id=str(brand.id),
+            brand_name=brand.name,
+            window_start=since.isoformat(),
+            window_end=now.isoformat(),
+            items_published=len(published_items),
+            publish_events=publish_events,
+            total_cost_usd=float(cost_total),
+            cost_per_post_usd=round(float(cost_total) / publish_events, 4) if publish_events else 0.0,
+        ))
+    return out
 
 
 # ── Social accounts ────────────────────────────────────────────────────────────

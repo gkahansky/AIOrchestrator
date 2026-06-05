@@ -256,13 +256,20 @@ def _generate_static_visuals(item, brand, db) -> None:
     )
     try:
         result = generate_image(prompt=prompt, aspect_ratio="1:1", quality_tier="standard")
+        if result.get("failover_from"):
+            item.error_message = (
+                f"image generation fell over from {result['failover_from']} to "
+                f"{result.get('tool_used')} — {result.get('failover_reason', '')[:200]}"
+            )
         db.add(ContentAsset(
             item_id=item.id, kind="image", role="primary", channel=None,
             local_path=result.get("image_path"),
             meta_json={
-                "width":     result.get("width"),
-                "height":    result.get("height"),
-                "tool_used": result.get("tool_used"),
+                "width":           result.get("width"),
+                "height":          result.get("height"),
+                "tool_used":       result.get("tool_used"),
+                "failover_from":   result.get("failover_from"),
+                "failover_reason": result.get("failover_reason"),
             },
             cost_usd=result.get("cost"),
         ))
@@ -526,6 +533,17 @@ def _generate_video_asset(item, brand, db) -> None:
         db.commit()
         return
 
+    # If any per-slide failover happened, surface it as a non-fatal warning
+    # so the human reviewer sees that one or more cues came from stock instead
+    # of the requested generator (Imagen / DALL-E).
+    visual_failures = result.get("visual_failures") or []
+    if visual_failures:
+        summary = "; ".join(
+            f"slide {f.get('index')}: {f.get('note', '')[:120]}"
+            for f in visual_failures[:5]
+        )
+        item.error_message = f"video produced with {len(visual_failures)} cue fallback(s) — {summary}"
+
     asset = ContentAsset(
         item_id=item.id,
         kind="video",
@@ -533,11 +551,12 @@ def _generate_video_asset(item, brand, db) -> None:
         channel=None,
         local_path=result["video_path"],
         meta_json={
-            "aspect_ratio": result.get("aspect_ratio"),
-            "duration_s":   result.get("duration_s"),
-            "components":   result.get("components"),
-            "topic":        topic,
-            "pillar":       pillar,
+            "aspect_ratio":    result.get("aspect_ratio"),
+            "duration_s":      result.get("duration_s"),
+            "components":      result.get("components"),
+            "visual_failures": visual_failures,
+            "topic":           topic,
+            "pillar":          pillar,
         },
         cost_usd=result.get("cost_usd"),
     )

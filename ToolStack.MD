@@ -9,7 +9,7 @@ Complete inventory of every third-party tool, service, API, and library used acr
 | Tool | Purpose | Use Cases |
 |---|---|---|
 | **Anthropic Claude API** (`anthropic>=0.40.0`) | Primary LLM for all agent intelligence | Marketing audit report generation, Etsy listing copy, podcast show notes, theme research, SEO metadata, content scoring, market research decomposer/package-merge/stitch/critic |
-| **OpenAI API** (`openai>=1.30.0`) | Audio transcription + image generation + embeddings | Whisper for podcast audio → transcript; DALL-E 3 as primary image generator; `text-embedding-3-small` for RAG embeddings in market research |
+| **OpenAI API** (`openai>=1.30.0`) | Audio transcription + image generation + embeddings | Whisper for podcast audio → transcript; **gpt-image-1** as the active image-gen fallback (auto-routed when Gemini Imagen returns 429); `text-embedding-3-small` for RAG embeddings in market research. DALL-E 3 kept registered but inactive. |
 | **Google Gemini / Generative AI** (`google-genai`, `google-generativeai`) | Image generation + multimodal + research | `imagen-4.0-generate-001` for Content Repurposing thumbnail backgrounds (9:16 portrait, per-clip AI-generated scene) + Market Research PDF charts (4:3, business quality); `gemini-2.0-flash-001` as research committee member in Market Research |
 | **xAI Grok API** (OpenAI-compatible at `https://api.x.ai/v1`) | LLM research + critic | `grok-3-mini` participates in Market Research committee and as default critic/reflection model. Key aliases: `XAI_API_KEY`, `GROK_API_KEY`, `X_AI_API_KEY` |
 
@@ -197,10 +197,13 @@ The Tool Router (`src/aiplatform/registry/tool_router.py`) picks image tools at 
 
 | Priority | Tool | Status | Cost/call | Notes |
 |---|---|---|---|---|
-| 1 | DALL-E 3 (OpenAI) | Active (standard) | $0.04 | Current primary |
-| 2 | Gemini Imagen 3 (Google) | Inactive (premium) | $0.03 | Activate when billing approved |
+| 1 | Gemini Imagen 4 (Google) | Active (standard) | $0.04 | Primary — `imagen-4.0-generate-001` via `google-genai` SDK |
+| 2 | OpenAI gpt-image-1 | Active (fallback) | ~$0.04 | Auto-routed when Imagen returns 429/RESOURCE_EXHAUSTED. Native portrait/landscape, base64 response. |
+| 3 | DALL-E 3 (OpenAI) | Inactive (fallback) | $0.04 | Legacy. Flip `active=true` in `skills.json` if gpt-image-1 is unavailable in your OpenAI account. |
 
-No code changes required to swap — set `active: true` in `skills.json`.
+No code changes required to swap — set `active: true` in `skills.json`. The
+auto-failover logic in `generate_image()` catches 429/RESOURCE_EXHAUSTED on
+the standard tier and reruns through whichever fallback tool is active.
 
 ---
 

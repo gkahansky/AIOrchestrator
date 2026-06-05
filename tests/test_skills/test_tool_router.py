@@ -10,20 +10,20 @@ from aiplatform.registry.tool_router import select_tool, list_active_tools
 def test_select_default_image_generation():
     tool = select_tool("image-generation")
     assert tool["active"] is True
-    # Gemini Imagen is the standard-tier primary; dalle3 is the fallback.
+    # Gemini Imagen is the standard-tier primary; gpt-image-1 is the active fallback.
     assert tool["id"] == "gemini-imagen"
 
 
 def test_explicit_override():
-    tool = select_tool("image-generation", tool_id="dalle3")
-    assert tool["id"] == "dalle3"
+    tool = select_tool("image-generation", tool_id="gpt-image-1")
+    assert tool["id"] == "gpt-image-1"
 
 
 def test_inactive_tool_override_raises():
-    # `runway` is a reserved tier slot under video-synthesis and stays
-    # inactive in skills.json until billing is approved.
+    # `dalle3` is kept as a legacy slot under image-generation but inactive;
+    # explicit override on an inactive tool must raise.
     with pytest.raises(ValueError, match="not active"):
-        select_tool("video-synthesis", tool_id="runway")
+        select_tool("image-generation", tool_id="dalle3")
 
 
 def test_unknown_capability_raises():

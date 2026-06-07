@@ -89,7 +89,15 @@ def run_item_generation(item_id: str, db) -> dict[str, Any]:
             try:
                 _generate_video_asset(item, brand, db)
             except Exception as exc:
-                item.error_message = f"video generation skipped: {exc}"
+                # Capture the stack so we can diagnose where exactly the
+                # exception originated — without this we can't tell which
+                # internal call slipped past the per-cue / per-tool catches.
+                import traceback
+                tb = traceback.format_exc()
+                item.error_message = (
+                    f"video generation skipped: {exc}\n\n"
+                    f"--- traceback (top 1000 chars) ---\n{tb[-1000:]}"
+                )
                 db.commit()
 
         return {"ok": True, "item_id": item_id, "variants_count": len(variants)}
@@ -522,12 +530,32 @@ def _generate_video_asset(item, brand, db) -> None:
     if not script:
         return
 
-    result = generate_video_explainer(
-        script=script,
-        visuals=visuals,
-        aspect_ratio=aspect,
-        caption_style="word_pop",
-    )
+    # Hard safety net: even though `generate_video_explainer` wraps each cue
+    # and `generate_image` auto-falls-back on quota errors, there are paths
+    # (TTS provider 5xx, unexpected Gemini SDK exceptions, etc) that could
+    # still surface as a raised exception. Catch them here so the item gets
+    # `error_message` set but never crashes through to the outer except — the
+    # text variants are already saved and the item still lands at
+    # `review_pending` for the operator to ship as a text/image post or
+    # regenerate later.
+    try:
+        result = generate_video_explainer(
+            script=script,
+            visuals=visuals,
+            aspect_ratio=aspect,
+            caption_style="word_pop",
+        )
+    except Exception as exc:
+        import traceback
+        from aiplatform.skills.media.generate_image import _is_quota_error
+        kind = "quota/capacity error" if _is_quota_error(exc) else "internal error"
+        item.error_message = (
+            f"video assembly raised ({kind}): {exc}\n\n"
+            f"--- traceback (top 800 chars) ---\n{traceback.format_exc()[-800:]}"
+        )
+        db.commit()
+        return
+
     if not result.get("video_path"):
         item.error_message = f"video assembly failed: {result.get('error', 'unknown')}"
         db.commit()

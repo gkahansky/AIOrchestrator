@@ -70,11 +70,17 @@ def run_item_generation(item_id: str, db) -> dict[str, Any]:
 
         # Generate per-channel text via the existing caption-pack skill where
         # supported, with a brand-voice block prepended into context.
-        variants = _generate_text_variants(item, brand, per_channel_briefs)
+        variants, text_failures = _generate_text_variants(item, brand, per_channel_briefs)
 
         item.variants_json = variants
         item.brief_json    = {"per_channel": per_channel_briefs, **slot}
         item.status        = "review_pending"  # will be re-set by quality_check
+        if text_failures:
+            # Surface per-channel fallback reasons so the operator stops seeing
+            # silent `[DRAFT — auto-generation unavailable]` skeletons without
+            # knowing why. Truncated to avoid blowing up the column.
+            joined = "; ".join(text_failures)[:1500]
+            item.error_message = f"caption-pack fallback: {joined}"
         db.commit()
 
         # Per-format media generation. Skipped cleanly when credentials are
@@ -109,30 +115,43 @@ def run_item_generation(item_id: str, db) -> dict[str, Any]:
         return {"ok": False, "error": str(exc)}
 
 
-def _generate_text_variants(item, brand, per_channel_briefs: dict[str, dict]) -> dict[str, dict]:
+def _generate_text_variants(
+    item, brand, per_channel_briefs: dict[str, dict],
+) -> tuple[dict[str, dict], list[str]]:
     """Call the existing platform skills to produce per-channel post bodies.
 
     Uses generate_caption_pack as the workhorse and synthesises the input
     transcript-shape from the brief. Falls back to a templated body if the
-    skill can't run (no API key / import failure) so the item still moves
-    forward and the human reviewer sees the gap.
+    skill can't run so the item still moves forward and the human reviewer
+    sees the gap.
+
+    Returns (variants_by_channel, failures) — `failures` is a list of human
+    readable strings explaining why any channel fell back. Caller persists
+    them on `item.error_message` so silent fallbacks are no longer hidden.
     """
     try:
         from aiplatform.skills.media.generate_caption_pack import generate_caption_pack
-    except ImportError:
+    except ImportError as exc:
         generate_caption_pack = None  # type: ignore[assignment]
+        import_error = repr(exc)
+    else:
+        import_error = ""
 
     from ventures.content_engine.prompts import render_voice_block
 
     variants: dict[str, dict] = {}
+    failures: list[str] = []
     voice_profile = brand.voice_profile_json or {}
     voice_block   = render_voice_block(voice_profile)
 
     for channel, brief in per_channel_briefs.items():
         platform_key = _channel_to_platform_key(channel)
         body = ""
+        why = ""
 
-        if generate_caption_pack is not None:
+        if generate_caption_pack is None:
+            why = f"generate_caption_pack import failed: {import_error}"
+        else:
             try:
                 context = {
                     "show_name": brand.name,
@@ -150,11 +169,19 @@ def _generate_text_variants(item, brand, per_channel_briefs: dict[str, dict]) ->
                 )
                 captions = (result or {}).get("captions", {}).get(platform_key, [])
                 body = captions[0] if captions else ""
-            except Exception:
+                if not body:
+                    why = (
+                        f"generate_caption_pack returned no caption for "
+                        f"platform_key='{platform_key}' "
+                        f"(parsed keys: {list((result or {}).get('captions', {}).keys())})"
+                    )
+            except Exception as exc:
                 body = ""
+                why = f"generate_caption_pack raised {type(exc).__name__}: {str(exc)[:300]}"
 
         if not body:
             body = _fallback_body(brief, voice_profile)
+            failures.append(f"{channel} -> {why or 'unknown'}")
 
         variants[channel] = {
             "body":     body,
@@ -163,7 +190,7 @@ def _generate_text_variants(item, brand, per_channel_briefs: dict[str, dict]) ->
             "format":   brief.get("format"),
         }
 
-    return variants
+    return variants, failures
 
 
 def _channel_to_platform_key(channel: str) -> str:

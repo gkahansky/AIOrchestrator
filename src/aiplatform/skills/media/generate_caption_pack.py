@@ -27,6 +27,15 @@ _PLATFORM_SPECS = {
             "No emoji overload — 0–2 tasteful emojis max."
         ),
     },
+    "facebook": {
+        "label": "Facebook",
+        "instruction": (
+            "Conversational, approachable tone aimed at small-to-mid business owners. "
+            "80–180 words. Open with a relatable hook (a question or a small observation). "
+            "2–4 short paragraphs with concrete examples. End with a CTA that links to "
+            "the most relevant landing page. 0–3 hashtags only. 1–2 emojis allowed if natural."
+        ),
+    },
     "instagram": {
         "label": "Instagram",
         "instruction": (

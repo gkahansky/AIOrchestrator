@@ -4,9 +4,17 @@ Platform skill: generate_caption_pack
 Generates per-platform social media captions from a transcript + episode context.
 Each platform has its own tone, format, and length constraints.
 Venture-agnostic — never references any specific venture.
+
+Response format: JSON. The model returns
+    {"linkedin": ["...", "..."], "instagram": ["..."], ...}
+and we fall back to the legacy `===PLATFORM:` text parser when JSON is malformed,
+so existing callers see the same `{"captions": {...}}` shape regardless of which
+path produced it.
 """
 
+import json
 import os
+import re
 
 import anthropic
 
@@ -137,15 +145,11 @@ def generate_caption_pack(
         else f"TRANSCRIPT:\n{transcript[:6000]}"
     )
 
-    platform_blocks = ""
+    platform_specs_block = ""
     for platform in platforms:
         spec = _PLATFORM_SPECS[platform]
-        platform_blocks += (
-            f"\n===PLATFORM: {platform.upper()}===\n"
-            f"({spec['label']} — {captions_per_platform} variant(s))\n"
-            f"{spec['instruction']}\n"
-            f"Write {captions_per_platform} distinct caption variant(s), "
-            f"each preceded by 'VARIANT N:' on its own line.\n"
+        platform_specs_block += (
+            f'\n- "{platform}" ({spec["label"]}): {spec["instruction"]}'
         )
 
     prompt = f"""\
@@ -161,11 +165,18 @@ AUDIENCE: {context.get("audience", "general audience")}
 {content_block}
 
 ---
-Generate captions for each platform below. Each platform section starts with its \
-===PLATFORM: NAME=== marker. Write exactly {captions_per_platform} variant(s) per platform.
+PLATFORM SPECS (write {captions_per_platform} distinct caption variant(s) for each):
+{platform_specs_block}
 
-{platform_blocks}
-"""
+OUTPUT FORMAT — strict JSON only, no markdown fences, no prose before or after:
+
+{{
+{','.join(f'  "{p}": [string, ...]' for p in platforms)}
+}}
+
+Each key MUST match the lowercase platform id exactly. Each value MUST be an \
+array of {captions_per_platform} caption string(s). The caption strings are the \
+final copy — no preamble, no headers, no labels."""
 
     response = client.messages.create(
         model=model,
@@ -175,16 +186,92 @@ Generate captions for each platform below. Each platform section starts with its
     )
 
     raw = response.content[0].text
-    captions = _parse_response(raw, platforms, captions_per_platform)
+    captions, parse_note = _parse_response(raw, platforms, captions_per_platform)
 
     cost_usd = round(
         response.usage.input_tokens * 0.000003 + response.usage.output_tokens * 0.000015,
         4,
     )
-    return {"captions": captions, "cost_usd": cost_usd}
+    return {
+        "captions":   captions,
+        "cost_usd":   cost_usd,
+        "raw":        raw,         # always returned so the caller can persist on parse failure
+        "parse_note": parse_note,  # "json" | "text_fallback" | "neither" — describes which path won
+    }
 
 
-def _parse_response(text: str, platforms: list[str], count: int) -> dict[str, list[str]]:
+def _parse_response(
+    text: str, platforms: list[str], count: int,
+) -> tuple[dict[str, list[str]], str]:
+    """Parse Claude's response. Returns (captions_by_platform, parse_note).
+
+    parse_note ∈ {"json", "text_fallback", "neither"} — describes which path
+    produced the result. Callers can persist this for debugging when the
+    captions list is empty.
+
+    Tries JSON first (current prompt asks for JSON). Falls back to the
+    legacy `===PLATFORM:` text parser for resilience if the model wraps the
+    JSON in markdown fences or omits a platform key.
+    """
+    json_result = _parse_json(text, platforms, count)
+    if json_result and any(json_result.get(p) for p in platforms):
+        # JSON parse populated at least one platform — trust it.
+        return json_result, "json"
+
+    text_result = _parse_text(text, platforms, count)
+    if any(text_result.get(p) for p in platforms):
+        return text_result, "text_fallback"
+
+    # Both parsers came up empty — return the JSON result shape so the caller
+    # has the expected keys, plus a parse_note the caller can surface in
+    # error_message alongside the raw response snippet.
+    empty: dict[str, list[str]] = {p: [] for p in platforms}
+    return empty, "neither"
+
+
+# ── JSON path ────────────────────────────────────────────────────────────────
+
+_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL | re.IGNORECASE)
+
+
+def _parse_json(text: str, platforms: list[str], count: int) -> dict[str, list[str]] | None:
+    """Try to extract a JSON object mapping platform → list[str]."""
+    candidate = text.strip()
+    # If the model wrapped it in markdown, strip the fence first.
+    m = _JSON_FENCE_RE.search(candidate)
+    if m:
+        candidate = m.group(1).strip()
+
+    # Find the first { ... } block in the candidate.
+    start = candidate.find("{")
+    end = candidate.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        return None
+    candidate = candidate[start:end + 1]
+
+    try:
+        data = json.loads(candidate)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    result: dict[str, list[str]] = {p: [] for p in platforms}
+    for key, value in data.items():
+        normalized = (key or "").strip().lower()
+        if normalized not in result:
+            continue
+        if isinstance(value, str):
+            result[normalized] = [value.strip()] if value.strip() else []
+        elif isinstance(value, list):
+            result[normalized] = [str(v).strip() for v in value if str(v).strip()]
+    return result
+
+
+# ── Legacy text path ─────────────────────────────────────────────────────────
+
+def _parse_text(text: str, platforms: list[str], count: int) -> dict[str, list[str]]:
     result: dict[str, list[str]] = {p: [] for p in platforms}
     current_platform: str | None = None
     current_variant_lines: list[str] = []
@@ -204,17 +291,17 @@ def _parse_response(text: str, platforms: list[str], count: int) -> dict[str, li
     for line in text.split("\n"):
         stripped = line.strip()
 
-        # Platform marker
-        if stripped.startswith("===PLATFORM:") and stripped.endswith("==="):
+        # Platform marker — accept several variants the model may produce.
+        marker_name = _extract_platform_marker(stripped)
+        if marker_name is not None:
             flush_platform()
             current_variant_lines.clear()
             current_variants.clear()
-            name = stripped[len("===PLATFORM:"):].rstrip("=").strip().lower()
-            current_platform = name if name in platforms else None
+            current_platform = marker_name if marker_name in platforms else None
             continue
 
-        # Variant marker
-        if current_platform and stripped.startswith("VARIANT ") and stripped.endswith(":"):
+        # Variant marker — accept "VARIANT 1:", "Variant 1.", "1.", "1)".
+        if current_platform and _is_variant_marker(stripped):
             flush_variant()
             current_variant_lines.clear()
             continue
@@ -224,3 +311,27 @@ def _parse_response(text: str, platforms: list[str], count: int) -> dict[str, li
 
     flush_platform()
     return result
+
+
+_VARIANT_LINE_RE = re.compile(r"^(?:variant\s*\d+\s*[:.\-)]|\d+\s*[.)])\s*$", re.IGNORECASE)
+
+
+def _is_variant_marker(stripped: str) -> bool:
+    return bool(_VARIANT_LINE_RE.match(stripped))
+
+
+def _extract_platform_marker(stripped: str) -> str | None:
+    """Return the lowercase platform name if `stripped` looks like a marker."""
+    # Strip leading markdown emphasis / heading / fences.
+    cleaned = stripped.lstrip("#*_>` ").rstrip("*_`")
+    if not cleaned:
+        return None
+    # `===PLATFORM: FACEBOOK===` (original spec)
+    if cleaned.upper().startswith("===PLATFORM:") and cleaned.endswith("==="):
+        name = cleaned[len("===PLATFORM:"):].rstrip("=").strip().lower()
+        return name or None
+    # `PLATFORM: facebook`
+    if cleaned.upper().startswith("PLATFORM:"):
+        name = cleaned.split(":", 1)[1].strip().lower()
+        return name or None
+    return None

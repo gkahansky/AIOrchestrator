@@ -170,10 +170,15 @@ def _generate_text_variants(
                 captions = (result or {}).get("captions", {}).get(platform_key, [])
                 body = captions[0] if captions else ""
                 if not body:
+                    # Surface BOTH the parser path that ran AND a snippet of
+                    # the raw Claude response so we can diagnose without
+                    # needing another deploy cycle.
+                    parse_note = (result or {}).get("parse_note", "?")
+                    raw = ((result or {}).get("raw") or "")[:600].replace("\n", " ⏎ ")
                     why = (
                         f"generate_caption_pack returned no caption for "
                         f"platform_key='{platform_key}' "
-                        f"(parsed keys: {list((result or {}).get('captions', {}).keys())})"
+                        f"(parse_note={parse_note}, raw[:600]={raw!r})"
                     )
             except Exception as exc:
                 body = ""

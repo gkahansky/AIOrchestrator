@@ -12,6 +12,7 @@ Multi-channel content creation + publishing for EchoForge Accessibility
 """
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -135,6 +136,19 @@ class ItemPatch(BaseModel):
     status: str | None = None
 
 
+class AssetOut(BaseModel):
+    id: int
+    kind: str             # image | video | audio | doc | thumbnail
+    role: str | None      # primary / carousel_slide_N / thumbnail / ...
+    channel: str | None
+    drive_id: str | None
+    url: str | None       # external URL (e.g. Drive web view)
+    file_url: str         # public content-engine file endpoint
+    meta_json: dict[str, Any]
+    cost_usd: float | None
+    created_at: str
+
+
 class ItemOut(BaseModel):
     id: str
     brand_id: str
@@ -157,6 +171,7 @@ class ItemOut(BaseModel):
     published_at: str | None
     asset_count: int
     publish_job_count: int
+    assets: list[AssetOut] = []
 
 
 class SocialAccountIn(BaseModel):
@@ -240,7 +255,40 @@ def _strategy_to_out(s: ContentStrategy) -> StrategyOut:
     )
 
 
+def _asset_file_url(asset_id: int) -> str:
+    """Build the public content-engine file URL for an asset.
+
+    The `/assets/{id}/file` endpoint is unauthenticated and serves the local
+    file (or redirects to a stored URL). Used by the operator UI to embed
+    `<video>` / `<img>` previews directly.
+    """
+    base = os.environ.get("OAUTH_REDIRECT_BASE_URL", "https://api.planbadmin.com").rstrip("/")
+    return f"{base}/api/ventures/content-engine/assets/{asset_id}/file"
+
+
+def _asset_to_out(a) -> AssetOut:
+    cost = None
+    if a.cost_usd is not None:
+        try:
+            cost = float(a.cost_usd)
+        except (TypeError, ValueError):
+            cost = None
+    return AssetOut(
+        id=a.id,
+        kind=a.kind,
+        role=a.role,
+        channel=a.channel,
+        drive_id=a.drive_id,
+        url=a.url,
+        file_url=_asset_file_url(a.id),
+        meta_json=a.meta_json or {},
+        cost_usd=cost,
+        created_at=_iso(a.created_at) or "",
+    )
+
+
 def _item_to_out(i: ContentItem) -> ItemOut:
+    sorted_assets = sorted((i.assets or []), key=lambda a: a.id)
     return ItemOut(
         id=str(i.id),
         brand_id=str(i.brand_id),
@@ -261,8 +309,9 @@ def _item_to_out(i: ContentItem) -> ItemOut:
         updated_at=_iso(i.updated_at) or "",
         approved_at=_iso(i.approved_at),
         published_at=_iso(i.published_at),
-        asset_count=len(i.assets or []),
+        asset_count=len(sorted_assets),
         publish_job_count=len(i.publish_jobs or []),
+        assets=[_asset_to_out(a) for a in sorted_assets],
     )
 
 

@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
+  ContentAsset,
   ContentBrand,
   ContentItem,
   ContentStrategy,
@@ -1125,10 +1126,13 @@ function ItemRow({ item }: { item: ContentItem }) {
       {expanded && (
         <div className="mt-3 pt-3 border-t border-outline-variant/15 space-y-3">
           {item.error_message && (
-            <div className="text-xs font-body text-error bg-error-container/30 px-2 py-1 rounded">
+            <div className="text-xs font-body text-error bg-error-container/30 px-2 py-1 rounded whitespace-pre-wrap">
               {item.error_message}
             </div>
           )}
+
+          <AssetsPanel assets={item.assets ?? []} />
+
           {variants.length === 0 ? (
             <p className="text-xs font-body text-on-surface-variant">No generated variants yet.</p>
           ) : (
@@ -1148,6 +1152,67 @@ function ItemRow({ item }: { item: ContentItem }) {
               AI-tell score: {String(item.quality_report_json.ai_tell_score)} / 100
             </div>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+function AssetsPanel({ assets }: { assets: ContentAsset[] }) {
+  if (assets.length === 0) {
+    return (
+      <p className="text-xs font-body text-on-surface-variant italic">
+        No media assets yet — text-only item, or generation hasn't produced media (check error_message).
+      </p>
+    )
+  }
+  return (
+    <div className="space-y-2">
+      <div className="text-xs font-label font-semibold uppercase tracking-wider text-on-surface-variant">
+        Generated media ({assets.length})
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {assets.map((a) => <AssetCard key={a.id} asset={a} />)}
+      </div>
+    </div>
+  )
+}
+
+
+function AssetCard({ asset }: { asset: ContentAsset }) {
+  const isVideo = asset.kind === "video"
+  const isImage = asset.kind === "image" || asset.kind === "thumbnail"
+  return (
+    <div className="bg-surface-container-low/40 rounded-lg p-2 space-y-1.5">
+      <div className="flex items-center justify-between text-[11px] font-label text-on-surface-variant">
+        <span className="font-semibold uppercase">
+          {asset.kind} {asset.role && <span className="opacity-70">· {asset.role}</span>}
+        </span>
+        <a href={asset.file_url} target="_blank" rel="noreferrer"
+           className="text-primary hover:underline">
+          Open ↗
+        </a>
+      </div>
+      {isVideo && (
+        <video src={asset.file_url} controls preload="metadata"
+               className="w-full rounded-md bg-black" />
+      )}
+      {isImage && (
+        <a href={asset.file_url} target="_blank" rel="noreferrer">
+          <img src={asset.file_url} alt={asset.role || asset.kind}
+               className="w-full rounded-md object-cover max-h-64" />
+        </a>
+      )}
+      {!isVideo && !isImage && (
+        <a href={asset.file_url} target="_blank" rel="noreferrer"
+           className="block px-2 py-1.5 rounded-md bg-surface-container-high text-xs font-label text-center">
+          Download {asset.kind}
+        </a>
+      )}
+      {asset.cost_usd != null && asset.cost_usd > 0 && (
+        <div className="text-[10px] font-label text-on-surface-variant text-right">
+          ${asset.cost_usd.toFixed(4)}
         </div>
       )}
     </div>

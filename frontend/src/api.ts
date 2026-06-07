@@ -882,6 +882,19 @@ export interface ContentStrategy {
   approved_at: string | null
 }
 
+export interface ContentAsset {
+  id: number
+  kind: "image" | "video" | "audio" | "doc" | "thumbnail" | string
+  role: string | null
+  channel: string | null
+  drive_id: string | null
+  url: string | null
+  file_url: string                       // public content-engine file URL
+  meta_json: Record<string, unknown>
+  cost_usd: number | null
+  created_at: string
+}
+
 export interface ContentItem {
   id: string
   brand_id: string
@@ -904,6 +917,7 @@ export interface ContentItem {
   published_at: string | null
   asset_count: number
   publish_job_count: number
+  assets: ContentAsset[]
 }
 
 export interface SocialAccount {

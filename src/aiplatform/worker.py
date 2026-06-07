@@ -1627,7 +1627,7 @@ def run_scheduled_searches() -> dict:
     from aiplatform.database.models import OutreachCampaign, CampaignSource
     from aiplatform.database.session import SessionLocal
     from aiplatform.webapp.routers.outreach import _campaign_personas
-    from datetime import timedelta
+    from datetime import datetime, timedelta, timezone
 
     db = SessionLocal()
     try:

@@ -152,6 +152,15 @@ def generate_caption_pack(
             f'\n- "{platform}" ({spec["label"]}): {spec["instruction"]}'
         )
 
+    # Concrete example so the model cannot misinterpret "[string, ...]" as a
+    # literal it should echo back. Each platform key maps to an array of N
+    # actual caption strings.
+    example_payload = {
+        p: [f"<your caption {i+1} for {p}>" for i in range(captions_per_platform)]
+        for p in platforms
+    }
+    example_block = json.dumps(example_payload, indent=2)
+
     prompt = f"""\
 Create social media caption packs for the content below.
 
@@ -168,15 +177,18 @@ AUDIENCE: {context.get("audience", "general audience")}
 PLATFORM SPECS (write {captions_per_platform} distinct caption variant(s) for each):
 {platform_specs_block}
 
-OUTPUT FORMAT — strict JSON only, no markdown fences, no prose before or after:
+OUTPUT FORMAT — return strict JSON ONLY. No markdown fences. No prose before \
+or after the JSON. No top-level wrapper key. The response MUST start with `{{` \
+and end with `}}`.
 
-{{
-{','.join(f'  "{p}": [string, ...]' for p in platforms)}
-}}
+Shape (replace the placeholder strings with the actual caption copy):
+{example_block}
 
-Each key MUST match the lowercase platform id exactly. Each value MUST be an \
-array of {captions_per_platform} caption string(s). The caption strings are the \
-final copy — no preamble, no headers, no labels."""
+Rules:
+  - Keys MUST be exactly: {platforms}.
+  - Each key's value MUST be a JSON array of exactly {captions_per_platform} non-empty string(s).
+  - Each string is the final caption copy — no labels, headers, or "Variant 1:" prefixes inside the string.
+  - Escape any inner double-quotes correctly so the JSON parses on first try."""
 
     response = client.messages.create(
         model=model,

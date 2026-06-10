@@ -44,6 +44,10 @@ def run_item_generation(item_id: str, db) -> dict[str, Any]:
         return {"ok": False, "error": "brand not found"}
 
     item.status = "generating"
+    # Clear any stale error_message from a prior failing run. Each later step
+    # (caption fallback, image gen, video gen) overwrites this if it actually
+    # fails — so a successful run no longer surfaces a stale error.
+    item.error_message = None
     db.commit()
 
     try:

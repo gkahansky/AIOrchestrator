@@ -1061,13 +1061,34 @@ function ItemRow({ item }: { item: ContentItem }) {
     <div className="bg-surface-container-lowest rounded-xl p-4 shadow-float">
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className={`text-[10px] font-label font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${STATUS_COLOR[item.status] ?? ""}`}>
               {item.status}
             </span>
             <span className="text-xs font-label text-on-surface-variant">
               {item.format} · {item.channels.join(", ")}
             </span>
+            <span
+              className={[
+                "text-[10px] font-label font-bold uppercase px-1.5 py-0.5 rounded",
+                item.asset_count > 0
+                  ? "bg-primary-fixed text-primary"
+                  : "bg-surface-container-high text-on-surface-variant",
+              ].join(" ")}
+              title={`${item.asset_count} media asset(s) — image / video files attached to this item`}
+            >
+              {item.asset_count} media
+            </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                navigator.clipboard.writeText(item.id)
+              }}
+              className="text-[10px] font-mono text-on-surface-variant hover:text-primary cursor-pointer"
+              title="Click to copy item ID"
+            >
+              id:{item.id.slice(0, 8)}
+            </button>
           </div>
           <div className="font-body text-sm text-on-surface line-clamp-2">
             {item.title || item.topic || "(no title)"}

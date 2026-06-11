@@ -971,6 +971,8 @@ export async function patchContentBrand(
     banned_phrases: string[]
     auto_strategy_enabled: boolean
     target_personas: { name?: string; description?: string }[]
+    theme_weights: Record<string, number>
+    channel_cadence: Record<string, number>
   }>,
 ): Promise<ContentBrand> {
   // PATCH /brands/{id} expects the full BrandIn shape minus slug; the router

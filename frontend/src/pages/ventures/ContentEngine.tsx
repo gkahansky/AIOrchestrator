@@ -137,7 +137,7 @@ export default function ContentEngine() {
       {tab === "brands"     && <BrandsTab brands={brands} />}
       {tab === "accounts"   && <AccountsTab brands={brands} brandFilter={brandFilter} />}
       {tab === "publishes"  && <PublishesTab />}
-      {tab === "cost"       && <CostTab brands={brands} brandFilter={brandFilter} />}
+      {tab === "cost"       && <CostTab brandFilter={brandFilter} />}
     </div>
   )
 }
@@ -1519,7 +1519,7 @@ function PublishesTab() {
 
 // ── Cost tab ───────────────────────────────────────────────────────────────────
 
-function CostTab({ brands, brandFilter }: { brands: ContentBrand[]; brandFilter: string | undefined }) {
+function CostTab({ brandFilter }: { brandFilter: string | undefined }) {
   const [days, setDays] = useState(7)
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ["ce", "cost-digest", brandFilter ?? "all", days],

@@ -558,12 +558,18 @@ def _generate_video_asset(item, brand, db) -> None:
     pillar = brief.get("pillar") or item.pillar or ""
     topic  = brief.get("topic")  or item.topic  or brand.name
 
-    script, visuals = _draft_video_script_and_visuals(
+    char_budget = _VIDEO_SCRIPT_BUDGET.get(item.format, (350, 700))
+    script, visuals, draft_reason = _draft_video_script_and_visuals(
         brand=brand,
         brief=brief,
-        char_budget=_VIDEO_SCRIPT_BUDGET.get(item.format, (350, 700)),
+        char_budget=char_budget,
     )
     if not script:
+        item.error_message = (
+            f"video skipped: script generation returned no usable script "
+            f"(format={item.format}, char_budget={char_budget}, reason={draft_reason})"
+        )
+        db.commit()
         return
 
     # Hard safety net: even though `generate_video_explainer` wraps each cue
@@ -630,11 +636,13 @@ def _generate_video_asset(item, brand, db) -> None:
 
 def _draft_video_script_and_visuals(
     *, brand, brief: dict, char_budget: tuple[int, int],
-) -> tuple[str, list[dict]]:
+) -> tuple[str, list[dict], str]:
     """Ask Claude to draft a script + visual cues. Degrades cleanly when no key.
 
-    Returns (script, [visuals]) where each visual is a dict the
-    generate_video_explainer skill accepts.
+    Returns (script, [visuals], reason) where each visual is a dict the
+    generate_video_explainer skill accepts. `reason` describes why we returned
+    an empty/fallback script — surfaced via `item.error_message` so the operator
+    knows whether to regenerate or ship without video.
     """
     import os
     api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -649,12 +657,12 @@ def _draft_video_script_and_visuals(
             "Open with the example, then the rule. "
             "Action you can take today: audit one component, one criterion."
         )
-        return script, _default_visuals(brand, brief)
+        return script, _default_visuals(brand, brief), "no_api_key_fallback"
 
     try:
         from anthropic import Anthropic
     except ImportError:
-        return "", _default_visuals(brand, brief)
+        return "", _default_visuals(brand, brief), "anthropic_sdk_missing"
 
     from ventures.content_engine.prompts import render_voice_block
     voice_block = render_voice_block(brand.voice_profile_json or {})
@@ -684,26 +692,38 @@ def _draft_video_script_and_visuals(
         "value for stock_query is a 2-4 word Pexels query."
     )
 
+    # Scale max_tokens with char_budget so the JSON envelope (script +
+    # 4–6 visual cues + keys) doesn't truncate mid-string. Rough budget:
+    # ~1 token / 3 chars script + ~600 chars of cue metadata.
+    max_tokens = min(8192, max(2048, (char_budget[1] // 3) + 1500))
+
+    raw = ""
     try:
         client = Anthropic(api_key=api_key)
         resp = client.messages.create(
             model=os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6"),
-            max_tokens=2048,
+            max_tokens=max_tokens,
             messages=[{"role": "user", "content": user_prompt}],
         )
         import json, re
         raw = "".join(b.text for b in resp.content if hasattr(b, "text")).strip()
+        stop_reason = getattr(resp, "stop_reason", None)
         if raw.startswith("```"):
             raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.DOTALL)
         data = json.loads(raw)
         script = (data.get("script") or "").strip()
         visuals = [v for v in (data.get("visuals") or []) if v.get("value")]
         if script and visuals:
-            return script, visuals
-    except Exception:
-        pass
-
-    return "", _default_visuals(brand, brief)
+            return script, visuals, "ok"
+        return "", _default_visuals(brand, brief), (
+            f"empty_payload (stop_reason={stop_reason}, script_len={len(script)}, "
+            f"visuals_len={len(visuals)})"
+        )
+    except Exception as exc:
+        return "", _default_visuals(brand, brief), (
+            f"{type(exc).__name__}: {str(exc)[:200]} | "
+            f"raw_head={raw[:200]!r}"
+        )
 
 
 def _default_visuals(brand, brief: dict) -> list[dict]:

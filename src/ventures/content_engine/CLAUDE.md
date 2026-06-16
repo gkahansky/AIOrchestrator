@@ -123,6 +123,7 @@ Mounted at `/api/ventures/content-engine`.
 | `ELEVENLABS_API_KEY` | M3 scripted explainer (TTS narration) | Live (since M3) |
 | `PEXELS_API_KEY` | M3 scripted explainer (stock b-roll) | Live (since M3) |
 | `CONTENT_ENGINE_DIGEST_TO` | Weekly cost digest recipient | Falls back to `ALLOWED_EMAIL` |
+| `DRIVE_CONTENT_ENGINE_ID` | Drive folder ID for generated images / videos | Required for cross-container access; without it generated files stay on worker `/tmp` and the web service returns "Asset not found" |
 
 ## Pipeline Status
 
@@ -152,3 +153,4 @@ Mounted at `/api/ventures/content-engine`.
 | CE-22 | Cost tab — on-demand digest viewer | ✅ done | New 6th tab. `GET /api/ventures/content-engine/cost-digest?brand_id=&days=` returns same payload as the weekly beat. Window picker (7/14/30/60/90). | 2026-06-03 |
 | CE-23 | Image-gen quota failover (Imagen 429 → OpenAI gpt-image-1) | ✅ done | `generate_image` auto-retries through the `fallback` tier on RESOURCE_EXHAUSTED / 429 / rate-limit detected via shared `_is_quota_error`. Result carries `failover_from` + `failover_reason`; pipeline surfaces it in `item.error_message` so the operator sees the degradation. **Active fallback is now `gpt-image-1`** (DALL-E 3 successor, native portrait/landscape, base64 PNG). DALL-E 3 remains registered as inactive for emergency use. | 2026-06-03 |
 | CE-24 | Video pipeline tolerant per-cue resolution | ✅ done | `generate_video_explainer` wraps every cue in try/except. On Imagen failure for a `kind=generated` cue, falls through to a derived Pexels stock query so the video still ships. Failed cues collected in `visual_failures` and persisted on `ContentAsset.meta_json` + the item's `error_message` as a non-fatal warning. | 2026-06-03 |
+| CE-25 | Drive upload for generated images + videos | ✅ done | `_upload_asset_to_drive` runs after every static-image / carousel-slide / video asset row is created. Uses `DRIVE_CONTENT_ENGINE_ID` env var; shares anyone-with-link; sets `drive_id` + `url` (direct-download form). Fixes the cross-container "Asset not found" from `/assets/{id}/file` (worker `/tmp` was invisible to web service). Falls back to `local_path` when env var absent and surfaces a gate-time warning on the item. | 2026-06-16 |

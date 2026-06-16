@@ -110,6 +110,21 @@ def run_item_generation(item_id: str, db) -> dict[str, Any]:
                 )
                 db.commit()
 
+        # Drive-upload health check. If the env var is missing every generated
+        # asset stays on the worker's /tmp and the web service returns
+        # "Asset not found" from /assets/{id}/file. Flag it once at the gate.
+        import os as _os
+        if not _os.environ.get("DRIVE_CONTENT_ENGINE_ID"):
+            assets_no_drive = [a for a in (item.assets or []) if not a.drive_id and a.local_path]
+            if assets_no_drive:
+                prev = (item.error_message or "").strip()
+                note = (
+                    f"DRIVE_CONTENT_ENGINE_ID not set — {len(assets_no_drive)} asset(s) "
+                    "are on the worker's local disk and not browsable from the web service."
+                )
+                item.error_message = (prev + "\n" + note).strip()[:1500]
+                db.commit()
+
         return {"ok": True, "item_id": item_id, "variants_count": len(variants)}
 
     except Exception as exc:
@@ -238,6 +253,82 @@ def _fallback_body(brief: dict, voice_profile: dict) -> str:
     return f"[DRAFT — auto-generation unavailable]\n\n{hook}\n\n{cta}".strip()
 
 
+# ── Drive upload for generated assets ────────────────────────────────────────
+#
+# Worker and web run in separate containers; their `/tmp` filesystems are not
+# shared. If we only record `local_path`, the web service returns 404 from
+# `/assets/{id}/file` because the file lives on a different host. Solve it the
+# same way podcast audio did: upload to Drive in the worker, store `drive_id`
+# + a publicly fetchable `url` on the asset row so the file endpoint can
+# 302-redirect to it.
+
+def _upload_asset_to_drive(asset, item, brand, db, filename_hint: str = "") -> None:
+    """Upload the asset's local file to the content-engine Drive folder.
+
+    Best-effort: any failure leaves `local_path` intact and logs to
+    `item.error_message`. The asset row is committed either way so the
+    download endpoint can still try `local_path` (which works only for
+    web-served items, but is fine when worker = web in dev).
+    """
+    import os
+    from pathlib import Path
+
+    folder_id = os.environ.get("DRIVE_CONTENT_ENGINE_ID")
+    if not folder_id:
+        return  # No drive folder configured — leave local_path; surfaced once at gate.
+    if not asset.local_path:
+        return
+    if not Path(asset.local_path).exists():
+        return
+
+    try:
+        from aiplatform.skills.storage.drive_write import drive_write
+    except ImportError:
+        return
+
+    # Compose a readable filename: <brand>__<format>__<role>__<itemid8>.<ext>
+    src = Path(asset.local_path)
+    ext = src.suffix or ""
+    role = (asset.role or asset.kind or "asset").replace("/", "_")
+    parts = [
+        (brand.name or "brand").replace(" ", "_")[:40],
+        (item.format or "item"),
+        role,
+        str(item.id)[:8],
+    ]
+    if filename_hint:
+        parts.insert(2, filename_hint[:40])
+    filename = "__".join(parts) + ext
+
+    try:
+        result = drive_write(
+            local_path=str(src),
+            folder_id=folder_id,
+            filename=filename,
+            share_anyone_with_link=True,
+        )
+    except Exception as exc:
+        # Non-fatal — keep local_path, surface so the operator knows why
+        # "Open" still shows Asset not found from a different container.
+        prev = (item.error_message or "").strip()
+        note = f"drive upload failed for asset {asset.id} ({asset.role}): {exc}"
+        item.error_message = (prev + "\n" + note).strip()[:1500]
+        db.commit()
+        return
+
+    file_id = result["file_id"]
+    asset.drive_id = file_id
+    # Use the direct-download URL so the IG/FB Graph API can fetch the binary
+    # AND the operator's `/assets/{id}/file` endpoint can 302-redirect for an
+    # inline preview. Drive serves files <100 MB without an interstitial.
+    asset.url = f"https://drive.google.com/uc?export=download&id={file_id}"
+    meta = dict(asset.meta_json or {})
+    meta["drive_web_view_link"] = result.get("web_view_link", "")
+    meta["drive_filename"] = result.get("filename", filename)
+    asset.meta_json = meta
+    db.commit()
+
+
 def _generate_static_visuals(item, brand, db) -> None:
     """Generate a primary image (and slide images for carousel).
 
@@ -288,6 +379,11 @@ def _generate_static_visuals(item, brand, db) -> None:
                     cost_usd=result.get("cost"),
                 )
                 db.add(asset)
+                db.flush()  # populate asset.id before Drive upload
+                _upload_asset_to_drive(
+                    asset, item, brand, db,
+                    filename_hint=f"slide{slide['slide_index']}",
+                )
             except Exception:
                 continue
         db.commit()
@@ -305,7 +401,7 @@ def _generate_static_visuals(item, brand, db) -> None:
                 f"image generation fell over from {result['failover_from']} to "
                 f"{result.get('tool_used')} — {result.get('failover_reason', '')[:200]}"
             )
-        db.add(ContentAsset(
+        asset = ContentAsset(
             item_id=item.id, kind="image", role="primary", channel=None,
             local_path=result.get("image_path"),
             meta_json={
@@ -316,7 +412,10 @@ def _generate_static_visuals(item, brand, db) -> None:
                 "failover_reason": result.get("failover_reason"),
             },
             cost_usd=result.get("cost"),
-        ))
+        )
+        db.add(asset)
+        db.flush()  # populate asset.id before Drive upload
+        _upload_asset_to_drive(asset, item, brand, db)
         db.commit()
     except Exception:
         return
@@ -631,6 +730,8 @@ def _generate_video_asset(item, brand, db) -> None:
         cost_usd=result.get("cost_usd"),
     )
     db.add(asset)
+    db.flush()  # populate asset.id before Drive upload
+    _upload_asset_to_drive(asset, item, brand, db)
     db.commit()
 
 
